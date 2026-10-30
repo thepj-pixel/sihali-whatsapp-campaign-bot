@@ -464,6 +464,47 @@ app.get('/update', (req, res) => {
     });
 });
 
+// Clean Reset / Re-link Session (removes corrupted Signal keys and regenerates QR)
+app.get('/reset/:id', async (req, res) => {
+    const session = SESSIONS.find(s => s.id === req.params.id);
+    if (!session) return res.status(404).send('Session not found');
+
+    console.log(`[Reset] Resetting session auth for ${session.id}...`);
+    try {
+        if (session.sock) {
+            session.sock.end(undefined);
+            session.sock = null;
+        }
+    } catch (e) {}
+
+    const authPath = path.join(sessionsDir, session.id);
+    if (fs.existsSync(authPath)) {
+        try {
+            fs.rmSync(authPath, { recursive: true, force: true });
+        } catch (e) {
+            console.error('Error removing auth path:', e);
+        }
+    }
+
+    session.status = 'DISCONNECTED';
+    session.qr = null;
+
+    setTimeout(() => {
+        startSession(session);
+    }, 1500);
+
+    res.send(`
+        <body style="font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #f8fafc;">
+            <h2>🔄 Session Reset for ${session.name}!</h2>
+            <p>Corrupted encryption keys cleared. Generating fresh QR code now...</p>
+            <p>Please open WhatsApp -> <b>Linked Devices</b>, tap any existing session to log out, and scan the new QR code.</p>
+            <br>
+            <a href="/scan/${session.id}" style="display:inline-block; padding:10px 20px; background:#2563eb; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">📲 Scan New QR Code Now</a>
+            <script>setTimeout(() => window.location.href = '/scan/${session.id}', 3000);</script>
+        </body>
+    `);
+});
+
 // QR Scan Page
 app.get('/scan/:id', (req, res) => {
     const session = SESSIONS.find(s => s.id === req.params.id);
@@ -518,8 +559,8 @@ app.get('/', (req, res) => {
         let isConn = s.status === 'CONNECTED';
         let color = isConn ? '#16a34a' : (s.status === 'QR_READY' ? '#eab308' : '#dc2626');
         let scanLink = isConn 
-            ? `<span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span>`
-            : `<a href="/scan/${s.id}" style="background:#2563eb; color:white; padding:4px 10px; border-radius:6px; font-size:11px; text-decoration:none; font-weight:700;">📲 SCAN QR</a>`;
+            ? `<div style="text-align:right;"><span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span><br><a href="/reset/${s.id}" onclick="return confirm('Clean reset and re-link ${s.name}?')" style="color:#64748b; font-size:11px; text-decoration:underline;">Re-link</a></div>`
+            : `<a href="/scan/${s.id}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:6px; font-size:11px; text-decoration:none; font-weight:700;">📲 SCAN QR</a>`;
 
         return `
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; min-width: 260px; flex: 1;">
