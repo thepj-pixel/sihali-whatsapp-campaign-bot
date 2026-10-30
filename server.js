@@ -15,26 +15,19 @@ const {
 const voterEngine = require('./voter_engine.js');
 const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
+const posterEngine = require('./poster_engine.js');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '60mb' }));
+app.use(express.urlencoded({ limit: '60mb', extended: true }));
 app.use('/media', express.static(path.join(__dirname, 'media')));
 
 const PORT = process.env.PORT || 3000;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
-
-// Configured WhatsApp Sessions
-const SESSIONS = [
-    { id: 'sim_636', name: 'Primary Line (6367810227)', status: 'DISCONNECTED', qr: null, sock: null },
-    { id: 'baba_aux', name: 'Baba Aux Line (Secondary)', status: 'DISCONNECTED', qr: null, sock: null },
-    { id: 'canada', name: 'Canada Line (+1 Rented)', status: 'DISCONNECTED', qr: null, sock: null }
-];
-
 const CAMPAIGN_PIN = process.env.CAMPAIGN_PIN || '2026';
 
-// Persistent Live Message Feed (survives restarts)
+// Persistent Live Message Feed Store (survives restarts)
 const FEED_FILE = path.join(__dirname, 'messages_feed.json');
 let LIVE_FEED = [];
 try {
@@ -120,6 +113,13 @@ app.use((req, res, next) => {
         </html>
     `);
 });
+
+// Configured WhatsApp Sessions
+const SESSIONS = [
+    { id: 'sim_636', name: 'Primary Line (6367810227)', status: 'DISCONNECTED', qr: null, sock: null },
+    { id: 'baba_aux', name: 'Baba Aux Line (Secondary)', status: 'DISCONNECTED', qr: null, sock: null },
+    { id: 'canada', name: 'Canada Line (+1 Rented)', status: 'DISCONNECTED', qr: null, sock: null }
+];
 
 const sessionsDir = path.join(__dirname, 'sessions_auth');
 if (!fs.existsSync(sessionsDir)) {
@@ -238,13 +238,37 @@ async function startSession(sessionObj) {
                     const isParchiQuery = lower.includes('parchi') || lower.includes('voter') || lower.includes('पर्ची') || lower.includes('नाम') || lower.includes('epic') || lower.includes('ward') || lower.includes('वार्ड');
                     const isPhotoQuery = lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
                     const isVideoQuery = lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
+                    const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
                     const posterPath = path.join(__dirname, 'media', 'poster.jpg');
                     const videoPath = path.join(__dirname, 'media', 'campaign_reel.mp4');
 
                     const matches = voterEngine.searchVoters(body);
 
-                    if (isVideoQuery && fs.existsSync(videoPath)) {
+                    if (isPosterGenQuery) {
+                        // On-the-fly personalized status poster generation
+                        let voterName = (matches && matches.length > 0) ? matches[0].name : (userMemory.getUser(senderPhone).name || 'समर्थक');
+                        // Clean query to see if voter gave an explicit name e.g. "mera poster banao Ramesh"
+                        const cleanExtracted = body.replace(/.*?(poster|status|फोटो|पोस्टर).*?(banao|bana|बनाओ|बना)?/i, '').replace(/mere naam ka|mera|naam|hai|mera naam/gi, '').trim();
+                        if (cleanExtracted.length >= 2 && cleanExtracted.length <= 25) {
+                            voterName = cleanExtracted;
+                        }
+
+                        const statusPosterBuffer = await posterEngine.generatePoster({
+                            name: voterName,
+                            aspect: '9:16'
+                        });
+
+                        replyText = `राम राम ${voterName} जी! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर जरूर लगाएं! 🚩`;
+
+                        await sock.sendMessage(remoteJid, {
+                            image: statusPosterBuffer,
+                            caption: replyText
+                        }, { quoted: msg });
+
+                        mediaTypeSent = 'customPoster';
+                        console.log(`[${sessionObj.id}] ✅ Sent personalized poster to ${senderPhone} (${voterName})`);
+                    } else if (isVideoQuery && fs.existsSync(videoPath)) {
                         const alreadySent = userMemory.hasSentMedia(senderPhone, 'video');
                         replyText = alreadySent
                             ? "भाई जी, ये 3D वीडियो पहले भी भेजी थी, एक बार फिर देख लो और आगे शेयर जरूर करना! 😊🚩\n16 नवम्बर 2026 — बाबा अभय सिंह"
@@ -366,6 +390,15 @@ app.post('/api/send-message', async (req, res) => {
             } else {
                 await sock.sendMessage(jid, { text: messageText });
             }
+        } else if (template === 'custom_poster') {
+            // Generate on the fly poster with voter name
+            const buf = await posterEngine.generatePoster({ name: name || 'ग्रामवासी', aspect: '9:16' });
+            messageText = `राम राम${name ? ' ' + name + ' जी' : ' भाई जी'}! 🙏\nआपके नाम का सिहाली खुर्द 2026 स्टेटस पोस्टर तैयार है।\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩`;
+            await sock.sendMessage(jid, {
+                image: buf,
+                caption: messageText
+            });
+            mediaType = 'customPoster';
         } else if (template === 'video') {
             messageText = `सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!`;
             if (fs.existsSync(videoPath)) {
@@ -382,16 +415,13 @@ app.post('/api/send-message', async (req, res) => {
             messageText = `राम राम भाई जी! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
             await sock.sendMessage(jid, { text: messageText });
         } else {
-            // Custom text
             messageText = customText || 'राम राम भाई जी! 🙏';
             await sock.sendMessage(jid, { text: messageText });
         }
 
-        // Record in user memory
         userMemory.getUser(cleanedPhone, name);
         userMemory.recordMessage(cleanedPhone, 'bot', messageText, mediaType, sessionName);
 
-        // Record in live feed
         logMessage({
             session: sessionName,
             phone: cleanedPhone,
@@ -409,6 +439,59 @@ app.post('/api/send-message', async (req, res) => {
     } catch (err) {
         console.error('Error in /api/send-message:', err);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Generate Dynamic Poster
+app.post('/api/generate-poster', async (req, res) => {
+    try {
+        const { name, aspect, customSlogan } = req.body;
+        const posterBuffer = await posterEngine.generatePoster({
+            name: name || 'ग्रामवासी',
+            aspect: aspect || '1:1',
+            customSlogan: customSlogan
+        });
+
+        res.type('image/jpeg').send(posterBuffer);
+    } catch (e) {
+        console.error('Error generating poster:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// API: Direct Media Upload from Browser (Photos/Videos)
+app.post('/api/upload-media', (req, res) => {
+    try {
+        const { target, base64Data } = req.body;
+        if (!target || !base64Data) {
+            return res.status(400).json({ error: 'Target filename and file data required' });
+        }
+
+        const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
+        const targetPath = path.join(__dirname, 'media', target);
+        fs.writeFileSync(targetPath, Buffer.from(cleanBase64, 'base64'));
+
+        console.log(`[Upload] Uploaded new media: ${target} (${cleanBase64.length} chars)`);
+        res.json({ success: true, message: `Successfully updated ${target}!` });
+    } catch (e) {
+        console.error('Error in /api/upload-media:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// API: Test AI Directly in Dashboard Playground
+app.post('/api/test-ai', async (req, res) => {
+    try {
+        const { message, history } = req.body;
+        const start = Date.now();
+        const reply = await aiService.getAIResponse(message, NVIDIA_API_KEY, history || []);
+        res.json({
+            reply: reply,
+            timeMs: Date.now() - start,
+            model: 'openai/gpt-oss-20b'
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -434,33 +517,6 @@ app.get('/api/voter/:phone', (req, res) => {
 app.get('/api/debug', (req, res) => {
     exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
         res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
-    });
-});
-
-// API: 1-Click Auto-Deploy / Git Pull & PM2 Reload
-app.get('/update', (req, res) => {
-    console.log('[AutoDeploy] Pulling latest code from GitHub...');
-    exec('git pull && pm2 restart whatsapp-bot', (err, stdout, stderr) => {
-        if (err) {
-            console.error('[AutoDeploy Error]:', stderr);
-            return res.status(500).send(`
-                <body style="font-family: sans-serif; padding: 30px;">
-                    <h2 style="color: #dc2626;">❌ Auto-Update Failed</h2>
-                    <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px;">${stderr || err.message}</pre>
-                    <a href="/">← Return to Dashboard</a>
-                </body>
-            `);
-        }
-        res.send(`
-            <body style="font-family: sans-serif; padding: 30px; text-align: center;">
-                <h2 style="color: #16a34a;">✅ Successfully Updated & Reloaded from GitHub!</h2>
-                <p>Google Cloud VM has pulled all latest changes and restarted the bot.</p>
-                <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px; text-align: left; display: inline-block;">${stdout}</pre>
-                <br><br>
-                <a href="/" style="background: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Return to Live Control Tower</a>
-                <script>setTimeout(() => window.location.href = '/', 3000);</script>
-            </body>
-        `);
     });
 });
 
@@ -602,11 +658,11 @@ app.get('/', (req, res) => {
                 .btn-add:active { transform: scale(0.98); }
 
                 /* Tab Navigation */
-                .tabs { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; overflow-x: auto; }
-                .tab-btn { background: none; border: none; padding: 10px 18px; font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; border-radius: 8px; white-space: nowrap; }
+                .tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; overflow-x: auto; }
+                .tab-btn { background: none; border: none; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer; border-radius: 8px; white-space: nowrap; }
                 .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
 
-                /* Table Styling */
+                /* Cards & Tables */
                 .card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
                 .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
                 .table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
@@ -619,10 +675,11 @@ app.get('/', (req, res) => {
                 .badge-warning { background: #fef3c7; color: #b45309; }
                 .badge-info { background: #e0f2fe; color: #0369a1; }
 
-                /* Voter Chat Inspector */
+                /* Layout Grids */
+                .studio-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
                 .chat-view-container { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
-                @media (max-width: 768px) {
-                    .chat-view-container { grid-template-columns: 1fr; }
+                @media (max-width: 850px) {
+                    .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
                     .header-bar { flex-direction: column; align-items: flex-start; }
                 }
                 .voter-list { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -641,11 +698,11 @@ app.get('/', (req, res) => {
                 <div class="header-bar">
                     <div class="brand">
                         <h1>🏛️ सिहाली खुर्द चुनाव 2026 — बाबा अभय सिंह</h1>
-                        <p>24/7 Multi-Session WhatsApp Campaign & Field Connect Tower</p>
+                        <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
                     </div>
                     <div class="top-actions">
                         <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
-                        <a href="/update" onclick="return confirm('Pull latest code from GitHub and reload PM2?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub & Reload</a>
+                        <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
                     </div>
                 </div>
 
@@ -686,6 +743,7 @@ app.get('/', (req, res) => {
                                 <label>Action Template</label>
                                 <select id="v-template" class="input-field" onchange="toggleCustomText(this.value)">
                                     <option value="welcome">Instant Connect ("Aapko jod liya h...")</option>
+                                    <option value="custom_poster">Personalized Name Poster 🎨</option>
                                     <option value="poster">Official Campaign Poster 📸</option>
                                     <option value="video">3D Campaign Video Reel 📹</option>
                                     <option value="slogan">Rotating Campaign Slogan 🚩</option>
@@ -707,15 +765,17 @@ app.get('/', (req, res) => {
                 <!-- Tabbed Navigation -->
                 <div class="tabs">
                     <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Chat Stream</button>
-                    <button class="tab-btn" onclick="switchTab('voters')">👤 Voter Memory & History (<span id="voter-count">0</span>)</button>
-                    <button class="tab-btn" onclick="switchTab('media')">📸 Media Assets & Links</button>
+                    <button class="tab-btn" onclick="switchTab('studio')">🎨 Live Poster Studio</button>
+                    <button class="tab-btn" onclick="switchTab('playground')">🤖 AI Playground & Lab</button>
+                    <button class="tab-btn" onclick="switchTab('voters')">👤 Voter Memory (<span id="voter-count">0</span>)</button>
+                    <button class="tab-btn" onclick="switchTab('media')">📸 Media Bank & Uploader</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream -->
                 <div id="tab-feed" class="card tab-content">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0; font-size: 16px;">Real-Time Incoming & Outgoing Chats</h3>
-                        <span style="color: #64748b; font-size: 12px;">Auto-refreshing every 4s</span>
+                        <span style="color: #64748b; font-size: 12px;">Auto-refreshing every 4s • Permanent Storage</span>
                     </div>
                     <div class="table-responsive">
                         <table class="table">
@@ -736,7 +796,90 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- TAB 2: Voter Memory & Chat History Inspector -->
+                <!-- TAB 2: Live Poster Studio (Personalized Status Posters) -->
+                <div id="tab-studio" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🎨 Dynamic Voter Status Poster Studio</h3>
+                    <p style="color: #64748b; font-size: 14px;">Generate personalized high-resolution campaign posters with voter names on the fly. Ready for WhatsApp DP and Status stories!</p>
+                    
+                    <div class="studio-grid" style="margin-top: 20px;">
+                        <div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label style="color:#334155;">Voter / Supporter Name</label>
+                                    <input type="text" id="p-name" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सत्यनारायण शर्मा" placeholder="Enter voter name">
+                                </div>
+                                <div class="form-group">
+                                    <label style="color:#334155;">Poster Aspect Ratio</label>
+                                    <select id="p-aspect" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;">
+                                        <option value="9:16">9:16 (WhatsApp Status Story - 1080x1920)</option>
+                                        <option value="1:1" selected>1:1 (WhatsApp Profile DP - 1080x1080)</option>
+                                        <option value="3:4">3:4 (Portrait Feed Card - 1080x1440)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 15px;">
+                                <label style="color:#334155;">Slogan</label>
+                                <input type="text" id="p-slogan" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सच्चा विकास, ईमानदार नेतृत्व 🚩">
+                            </div>
+                            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                <button onclick="generatePosterPreview()" style="background:#2563eb; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:700; cursor:pointer;">
+                                    ✨ Generate & Preview Poster
+                                </button>
+                                <button onclick="downloadPoster()" id="btn-download" style="background:#0f172a; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:700; cursor:pointer; display:none;">
+                                    ⬇️ Download High-Res
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Live Preview Box -->
+                        <div style="text-align: center; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; background: #f8fafc;">
+                            <div style="font-weight: 700; font-size: 13px; color: #64748b; margin-bottom: 10px;">Live Preview</div>
+                            <img id="poster-preview-img" src="/media/poster.jpg" style="max-height: 380px; width: auto; max-width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: AI Playground & Testing Lab -->
+                <div id="tab-playground" class="card tab-content" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px;">
+                        <div>
+                            <h3 style="margin-top:0;">🤖 AI Assistant Testing Lab</h3>
+                            <p style="color: #64748b; font-size: 14px;">Test conversations with Baba Abhay Singh's AI assistant in real-time before sending to voters.</p>
+                            
+                            <div style="border: 1px solid #e2e8f0; border-radius: 10px; height: 350px; display: flex; flex-direction: column; background: #fafafa; margin-top: 15px;">
+                                <div id="ai-chat-ui" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:10px;">
+                                    <div class="bubble bubble-bot">
+                                        राम राम भाई जी! 🙏 मैं बाबा अभय सिंह सेवा केंद्र का डिजिटल सहायक हूँ। बताइए, कैसे सेवा करूँ?
+                                    </div>
+                                </div>
+                                <div style="padding: 10px; background: white; border-top: 1px solid #e2e8f0; display:flex; gap:8px;">
+                                    <input type="text" id="ai-test-input" placeholder="Type query e.g. 'kon ho bhai tum' or 'daaru baatega kya'..." class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" onkeydown="if(event.key==='Enter') sendAITest()">
+                                    <button onclick="sendAITest()" style="background:#2563eb; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Send</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Knowledge & Rules Fact Sheet -->
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; background: #f8fafc; font-size: 13px;">
+                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">🧠 Active Persona & Rules:</div>
+                            <ul style="padding-left: 18px; margin: 0 0 15px 0; color: #334155; line-height: 1.5;">
+                                <li><b>Identity:</b> Baba Abhay Singh Seva Kendra digital assistant.</li>
+                                <li><b>Opposition Policy:</b> Never name opposite candidates directly. Slay bribing & liquor with sweet village satire.</li>
+                                <li><b>Budget Rule:</b> Zero rupees / tender amounts mentioned.</li>
+                                <li><b>Length:</b> 2-3 punchy, charming lines max.</li>
+                            </ul>
+                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">💡 Quick Test Buttons:</div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                <button onclick="quickTestQuery('kon ho bhai tum')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">"kon ho bhai tum"</button>
+                                <button onclick="quickTestQuery('virodhi bol raha h daaru aur paise baatega')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"virodhi daaru baatega"</button>
+                                <button onclick="quickTestQuery('baba ne pichle 5 saal me kya kaam kiya')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"baba ne kya kaam kiya"</button>
+                                <button onclick="quickTestQuery('ek badhiya slogan sunao')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"ek slogan sunao"</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: Voter Memory & Chat History Inspector -->
                 <div id="tab-voters" class="card tab-content" style="display: none;">
                     <div class="chat-view-container">
                         <div>
@@ -762,13 +905,30 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- TAB 3: Media Bank -->
+                <!-- TAB 5: Media Bank & Direct Uploader -->
                 <div id="tab-media" class="card tab-content" style="display: none;">
-                    <h3 style="margin-top:0;">📸 Campaign Media Assets Bank</h3>
-                    <p style="color: #64748b; font-size: 14px;">These files are loaded in memory and sent automatically when voters request them on WhatsApp:</p>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 20px;">
+                    <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
+                    <p style="color: #64748b; font-size: 14px;">Upload new campaign photos or videos directly from your mobile gallery or PC. Updates the bot instantly!</p>
+                    
+                    <!-- Direct Uploader Box -->
+                    <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center;">
+                        <h4 style="margin: 0 0 10px 0;">📤 Upload Media from Device</h4>
+                        <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <input type="file" id="media-file-input" accept="image/*,video/mp4" style="font-size: 14px;">
+                            <select id="media-target-select" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                                <option value="poster.jpg">Campaign Poster (poster.jpg)</option>
+                                <option value="campaign_reel.mp4">Campaign Video Reel (campaign_reel.mp4)</option>
+                            </select>
+                            <button onclick="uploadMediaFile()" style="background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                                ⬆️ Upload to Cloud
+                            </button>
+                        </div>
+                        <div id="upload-status" style="margin-top: 10px; font-weight: 600; font-size: 13px;"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
                         <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; text-align: center;">
-                            <img src="/media/poster.jpg" style="max-height: 200px; border-radius: 8px; margin-bottom: 10px;" />
+                            <img src="/media/poster.jpg?t=${Date.now()}" id="poster-asset-img" style="max-height: 200px; border-radius: 8px; margin-bottom: 10px;" />
                             <div style="font-weight: 700;">Official Campaign Poster</div>
                             <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "photo", "poster", "tasveer"</div>
                             <a href="/media/poster.jpg" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Open High-Res Poster →</a>
@@ -789,6 +949,8 @@ app.get('/', (req, res) => {
             <script>
                 let allVoters = [];
                 let selectedVoterPhone = null;
+                let currentPosterBlob = null;
+                let aiHistory = [];
 
                 function switchTab(tabId) {
                     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -843,6 +1005,120 @@ app.get('/', (req, res) => {
                         btn.disabled = false;
                         btn.innerText = '📲 Jod Lo & Send WhatsApp Instantly';
                     }
+                }
+
+                // Poster Studio Generator
+                async function generatePosterPreview() {
+                    const name = document.getElementById('p-name').value;
+                    const aspect = document.getElementById('p-aspect').value;
+                    const slogan = document.getElementById('p-slogan').value;
+
+                    try {
+                        const res = await fetch('/api/generate-poster', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, aspect, customSlogan: slogan })
+                        });
+                        const blob = await res.blob();
+                        currentPosterBlob = blob;
+                        const url = URL.createObjectURL(blob);
+                        document.getElementById('poster-preview-img').src = url;
+                        document.getElementById('btn-download').style.display = 'inline-block';
+                    } catch (e) {
+                        alert('Error generating poster: ' + e.message);
+                    }
+                }
+
+                function downloadPoster() {
+                    if (!currentPosterBlob) return;
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(currentPosterBlob);
+                    a.download = 'Sihali_Khurd_Poster_' + Date.now() + '.jpg';
+                    a.click();
+                }
+
+                // Upload Media from Device
+                async function uploadMediaFile() {
+                    const fileInput = document.getElementById('media-file-input');
+                    const targetSelect = document.getElementById('media-target-select');
+                    const statusEl = document.getElementById('upload-status');
+
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        alert('Please select a file to upload!');
+                        return;
+                    }
+
+                    const file = fileInput.files[0];
+                    statusEl.innerText = '⏳ Uploading ' + file.name + '... Please wait.';
+                    statusEl.style.color = '#2563eb';
+
+                    const reader = new FileReader();
+                    reader.onload = async function() {
+                        try {
+                            const res = await fetch('/api/upload-media', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    target: targetSelect.value,
+                                    base64Data: reader.result
+                                })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                                statusEl.innerText = '✅ ' + data.message;
+                                statusEl.style.color = '#16a34a';
+                                if (targetSelect.value === 'poster.jpg') {
+                                    document.getElementById('poster-asset-img').src = '/media/poster.jpg?t=' + Date.now();
+                                }
+                            } else {
+                                statusEl.innerText = '❌ Error: ' + data.error;
+                                statusEl.style.color = '#dc2626';
+                            }
+                        } catch (err) {
+                            statusEl.innerText = '❌ Upload failed: ' + err.message;
+                            statusEl.style.color = '#dc2626';
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+
+                // AI Playground
+                async function sendAITest() {
+                    const input = document.getElementById('ai-test-input');
+                    const text = input.value.trim();
+                    if (!text) return;
+
+                    input.value = '';
+                    const chatUi = document.getElementById('ai-chat-ui');
+                    chatUi.innerHTML += \`<div class="bubble bubble-user">\${text}</div>\`;
+                    chatUi.scrollTop = chatUi.scrollHeight;
+
+                    aiHistory.push({ role: 'user', content: text });
+
+                    try {
+                        const res = await fetch('/api/test-ai', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: text, history: aiHistory })
+                        });
+                        const data = await res.json();
+                        aiHistory.push({ role: 'assistant', content: data.reply });
+
+                        chatUi.innerHTML += \`
+                            <div class="bubble bubble-bot">
+                                \${data.reply}
+                                <div style="font-size:10px; color:#64748b; margin-top:4px;">⏱️ \${data.timeMs}ms | \${data.model}</div>
+                            </div>
+                        \`;
+                        chatUi.scrollTop = chatUi.scrollHeight;
+                    } catch (e) {
+                        chatUi.innerHTML += \`<div class="bubble bubble-bot" style="color:red;">Error: \${e.message}</div>\`;
+                    }
+                }
+
+                function quickTestQuery(q) {
+                    document.getElementById('ai-test-input').value = q;
+                    sendAITest();
                 }
 
                 // Update Live Chat Feed
