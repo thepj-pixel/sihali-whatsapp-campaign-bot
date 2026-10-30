@@ -216,6 +216,60 @@ function saveLidMapping(lid, pn) {
     }
 }
 
+function findLidForPhone(phone) {
+    if (!phone) return null;
+    const cleanPn = phone.replace(/[^0-9]/g, '');
+    for (const [lid, pn] of Object.entries(LID_MAP)) {
+        if (pn === cleanPn || pn.endsWith(cleanPn) || cleanPn.endsWith(pn)) {
+            return lid + '@lid';
+        }
+    }
+    return null;
+}
+
+// Auto-Heal: remove corrupted Signal session ratchet files for a specific contact without logging out
+function healContactSession(sessionId, jid) {
+    if (!jid) return;
+    try {
+        const authDir = path.join(sessionsDir, sessionId);
+        if (!fs.existsSync(authDir)) return;
+        const cleanId = jid.split('@')[0].replace(/[^0-9]/g, '');
+        const files = fs.readdirSync(authDir);
+        let cleaned = 0;
+        for (const file of files) {
+            if (file.startsWith('session-') && (file.includes(cleanId) || file.includes(jid.split('@')[0]))) {
+                try {
+                    fs.unlinkSync(path.join(authDir, file));
+                    cleaned++;
+                } catch (e) {}
+            }
+        }
+        if (cleaned > 0) {
+            console.log(`[AutoHeal] Removed ${cleaned} stale session files for ${cleanId} from ${sessionId}`);
+        }
+    } catch (e) {
+        console.error('[AutoHeal Error]:', e.message);
+    }
+}
+
+// Wrapper for sock.sendMessage that caches outgoing messages for WhatsApp retries
+async function sendSafeMessage(sock, jid, content, options = {}) {
+    try {
+        const sent = await sock.sendMessage(jid, content, options);
+        if (sent?.key?.id && sent?.message) {
+            MSG_STORE.set(sent.key.id, sent.message);
+            if (MSG_STORE.size > 1000) {
+                const firstKey = MSG_STORE.keys().next().value;
+                MSG_STORE.delete(firstKey);
+            }
+        }
+        return sent;
+    } catch (err) {
+        console.error(`[sendSafeMessage Error to ${jid}]:`, err?.message || err);
+        throw err;
+    }
+}
+
 async function resolveTargetJid(sock, key) {
     if (!key) return '';
     let jid = key.remoteJid || '';
@@ -356,6 +410,8 @@ async function startSession(sessionObj) {
                 // Resolve real target JID & phone number (maps @lid to real phone number!)
                 const targetJid = await resolveTargetJid(sock, msg.key);
                 const senderPhone = targetJid.split('@')[0].replace(/[^0-9]/g, '');
+                // For direct replies, maintain the conversation's native thread identity (essential for @lid chats!)
+                const replyJid = rawJid || targetJid;
 
                 // If message is from me, log strictly to Diagnostics tab to keep main voter chat clean
                 if (msg.key && msg.key.fromMe) {
@@ -378,19 +434,21 @@ async function startSession(sessionObj) {
                 // If body is empty (e.g. Meta Cloud encryption Bad MAC or initial handshake)
                 if (!body) {
                     console.log(`[${sessionObj.id}] Decryption empty or Bad MAC for ${targetJid} (raw: ${rawJid})`);
+                    healContactSession(sessionObj.id, rawJid);
+                    healContactSession(sessionObj.id, targetJid);
                     logDiagnostic({
                         session: sessionObj.name,
                         phone: senderPhone,
                         incoming: '[Encrypted Packet / Bad MAC Decryption Error]',
-                        reply: 'Sent auto-handshake welcome to ' + targetJid + ' to repair Signal ratchet.',
+                        reply: 'Purged stale contact session and sent auto-handshake to ' + replyJid + '.',
                         status: 'BAD_MAC'
                     });
 
                     // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
                     try {
                         const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
-                        await sock.sendMessage(targetJid, { text: handshakeText });
-                        console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${targetJid} to restore Signal ratchet`);
+                        await sendSafeMessage(sock, replyJid, { text: handshakeText });
+                        console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${replyJid}`);
                         userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
                         logMessage({
                             session: sessionObj.name,
@@ -400,12 +458,12 @@ async function startSession(sessionObj) {
                             status: 'HANDSHAKE_SENT'
                         });
                     } catch (handshakeErr) {
-                        console.error(`[${sessionObj.id}] Handshake reply error to ${targetJid}:`, handshakeErr?.message);
+                        console.error(`[${sessionObj.id}] Handshake reply error to ${replyJid}:`, handshakeErr?.message);
                     }
                     continue;
                 }
 
-                console.log(`[${sessionObj.id}] Received from ${senderPhone} (${targetJid}): "${body}"`);
+                console.log(`[${sessionObj.id}] Received from ${senderPhone} (${replyJid}): "${body}"`);
 
                 // Record user message in memory
                 userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name);
@@ -441,7 +499,7 @@ async function startSession(sessionObj) {
 
                         replyText = `राम राम ${voterName} जी! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर जरूर लगाएं! 🚩`;
 
-                        await sock.sendMessage(targetJid, {
+                        await sendSafeMessage(sock, replyJid, {
                             image: statusPosterBuffer,
                             caption: replyText
                         });
@@ -454,7 +512,7 @@ async function startSession(sessionObj) {
                             ? "भाई जी, ये 3D वीडियो पहले भी भेजी थी, एक बार फिर देख लो और आगे शेयर जरूर करना! 😊🚩\n16 नवम्बर 2026 — बाबा अभय सिंह"
                             : "सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!";
 
-                        await sock.sendMessage(targetJid, {
+                        await sendSafeMessage(sock, replyJid, {
                             video: fs.readFileSync(videoPath),
                             caption: replyText
                         });
@@ -464,7 +522,7 @@ async function startSession(sessionObj) {
                     } else if (isPhotoQuery && fs.existsSync(posterPath)) {
                         replyText = "बाबा अभय सिंह (मोटी आंगली वाले बाबा) - ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें!";
 
-                        await sock.sendMessage(targetJid, {
+                        await sendSafeMessage(sock, replyJid, {
                             image: fs.readFileSync(posterPath),
                             caption: replyText
                         });
@@ -473,7 +531,7 @@ async function startSession(sessionObj) {
                         console.log(`[${sessionObj.id}] ✅ Sent poster image to ${senderPhone}`);
                     } else if (matches && matches.length > 0 && isParchiQuery) {
                         replyText = voterEngine.formatSlipResponse(matches[0]);
-                        await sock.sendMessage(targetJid, { text: replyText });
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
                         mediaTypeSent = 'voterSlip';
                         console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone}`);
                     } else {
@@ -487,13 +545,13 @@ async function startSession(sessionObj) {
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getFastLocalAnswer(body, senderPhone);
                         }
-                        await sock.sendMessage(targetJid, { text: replyText });
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Replied via AI/local to ${senderPhone}`);
                     }
                 } catch (err) {
                     console.error(`[${sessionObj.id}] Error resolving reply:`, err);
                     replyText = aiService.getFastLocalAnswer(body, senderPhone);
-                    await sock.sendMessage(targetJid, { text: replyText }).catch(e => console.error('Fallback send failed:', e));
+                    await sendSafeMessage(sock, replyJid, { text: replyText }).catch(e => console.error('Fallback send failed:', e));
                 }
 
                 // Record bot reply in memory
@@ -831,6 +889,61 @@ app.get('/update', (req, res) => {
     });
 });
 
+// Quick Repair: Purges corrupted contact sessions and prekeys while keeping creds.json (NO QR SCAN NEEDED!)
+app.get('/repair/:id', async (req, res) => {
+    const session = SESSIONS.find(s => s.id === req.params.id);
+    if (!session) return res.status(404).send('Session not found');
+
+    console.log(`[Repair] Repairing session ${session.id} (purging stale keys, keeping creds.json)...`);
+    try {
+        if (session.sock) {
+            session.sock.ev.removeAllListeners();
+            session.sock.end(undefined);
+            session.sock = null;
+        }
+    } catch (e) {}
+
+    const authPath = path.join(sessionsDir, session.id);
+    let deletedCount = 0;
+    if (fs.existsSync(authPath)) {
+        try {
+            const files = fs.readdirSync(authPath);
+            for (const file of files) {
+                if (file !== 'creds.json') {
+                    try {
+                        fs.unlinkSync(path.join(authPath, file));
+                        deletedCount++;
+                    } catch (e) {}
+                }
+            }
+        } catch (e) {
+            console.error('Error during session repair:', e);
+        }
+    }
+
+    session.status = 'CONNECTING';
+
+    setTimeout(() => {
+        startSession(session);
+    }, 1500);
+
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>Repairing Session</title></head>
+        <body style="font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #0f172a; color: white;">
+            <h2 style="color: #38bdf8;">⚡ Encryption Keys Repaired for ${session.name}!</h2>
+            <p>Purged <b>${deletedCount}</b> stale Signal cryptographic ratchets & Bad MAC keys.</p>
+            <p style="color: #4ade80; font-weight: bold; font-size: 16px;">✅ Login credentials preserved — NO QR scan needed!</p>
+            <p style="color: #94a3b8;">WhatsApp is re-synchronizing fresh pre-keys right now...</p>
+            <br>
+            <a href="/?pin=${CAMPAIGN_PIN}" style="display:inline-block; padding:12px 24px; background:#2563eb; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">← Return to Dashboard</a>
+            <script>setTimeout(() => window.location.href = '/?pin=${CAMPAIGN_PIN}', 3500);</script>
+        </body>
+        </html>
+    `);
+});
+
 // Clean Reset / Re-link Session (removes corrupted Signal keys and regenerates QR)
 app.get('/reset/:id', async (req, res) => {
     const session = SESSIONS.find(s => s.id === req.params.id);
@@ -926,7 +1039,7 @@ app.get('/', (req, res) => {
         let isConn = s.status === 'CONNECTED';
         let color = isConn ? '#16a34a' : (s.status === 'QR_READY' ? '#eab308' : '#dc2626');
         let scanLink = isConn 
-            ? `<div style="text-align:right;"><span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span><br><a href="/reset/${s.id}" onclick="return confirm('Clean reset and re-link ${s.name}?')" style="color:#64748b; font-size:11px; text-decoration:underline;">Re-link</a></div>`
+            ? `<div style="text-align:right;"><span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span><br><a href="/repair/${s.id}" style="color:#0284c7; font-size:11px; text-decoration:none; font-weight:700; margin-right:8px;">⚡ Repair</a><a href="/reset/${s.id}" onclick="return confirm('Clean reset and re-link ${s.name}?')" style="color:#64748b; font-size:11px; text-decoration:underline;">Re-link</a></div>`
             : `<a href="/scan/${s.id}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:6px; font-size:11px; text-decoration:none; font-weight:700;">📲 SCAN QR</a>`;
 
         return `
@@ -1141,7 +1254,8 @@ app.get('/', (req, res) => {
                             </div>
                             <div style="display: flex; gap: 8px;">
                                 <a href="/scan/sim_636" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/reset/sim_636" onclick="return confirm('Reset and generate fresh QR for Primary Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset & Re-pair</a>
+                                <a href="/repair/sim_636" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair (No QR)</a>
+                                <a href="/reset/sim_636" onclick="return confirm('Reset and generate fresh QR for Primary Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
                             </div>
                         </div>
 
@@ -1158,7 +1272,8 @@ app.get('/', (req, res) => {
                             </div>
                             <div style="display: flex; gap: 8px;">
                                 <a href="/scan/baba_aux" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/reset/baba_aux" onclick="return confirm('Reset Baba Aux Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset</a>
+                                <a href="/repair/baba_aux" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
+                                <a href="/reset/baba_aux" onclick="return confirm('Reset Baba Aux Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
                             </div>
                         </div>
 
@@ -1175,7 +1290,8 @@ app.get('/', (req, res) => {
                             </div>
                             <div style="display: flex; gap: 8px;">
                                 <a href="/scan/canada" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/reset/canada" onclick="return confirm('Reset Canada Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset</a>
+                                <a href="/repair/canada" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
+                                <a href="/reset/canada" onclick="return confirm('Reset Canada Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
                             </div>
                         </div>
                     </div>
