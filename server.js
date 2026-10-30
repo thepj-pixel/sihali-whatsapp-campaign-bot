@@ -128,6 +128,19 @@ if (!fs.existsSync(sessionsDir)) {
 
 // Start a WhatsApp Session
 async function startSession(sessionObj) {
+    if (sessionObj.reconnectTimer) {
+        clearTimeout(sessionObj.reconnectTimer);
+        sessionObj.reconnectTimer = null;
+    }
+
+    if (sessionObj.sock) {
+        try {
+            sessionObj.sock.ev.removeAllListeners();
+            sessionObj.sock.end(undefined);
+        } catch (e) {}
+        sessionObj.sock = null;
+    }
+
     const sessionAuthPath = path.join(sessionsDir, sessionObj.id);
     const { state, saveCreds } = await useMultiFileAuthState(sessionAuthPath);
     const { version } = await fetchLatestBaileysVersion();
@@ -139,10 +152,14 @@ async function startSession(sessionObj) {
         version,
         logger,
         auth: state,
-        browser: ['Sihali Campaign Assistant', 'Chrome', '1.0.0'],
+        browser: ['Ubuntu', 'Chrome', '20.0.04'],
         connectTimeoutMs: 60000,
         keepAliveIntervalMs: 25000,
-        syncFullHistory: false
+        syncFullHistory: false,
+        defaultQueryTimeoutMs: 60000,
+        getMessage: async (key) => {
+            return { conversation: '' };
+        }
     });
 
     sessionObj.sock = sock;
@@ -166,25 +183,32 @@ async function startSession(sessionObj) {
             sessionObj.status = 'DISCONNECTED';
             sessionObj.qr = null;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`[${sessionObj.id}] Closed. Reconnecting: ${shouldReconnect}`);
+            const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+            console.log(`[${sessionObj.id}] Connection closed. StatusCode: ${statusCode}. LoggedOut: ${isLoggedOut}`);
 
-            if (shouldReconnect) {
-                setTimeout(() => startSession(sessionObj), 5000);
+            if (isLoggedOut) {
+                console.log(`[${sessionObj.id}] Logged out. Wiping stale keys and generating fresh QR...`);
+                const authPath = path.join(sessionsDir, sessionObj.id);
+                try { fs.rmSync(authPath, { recursive: true, force: true }); } catch (e) {}
+                sessionObj.reconnectTimer = setTimeout(() => startSession(sessionObj), 2000);
+            } else {
+                sessionObj.reconnectTimer = setTimeout(() => startSession(sessionObj), 5000);
             }
         } else if (connection === 'open') {
             sessionObj.status = 'CONNECTED';
             sessionObj.qr = null;
-            console.log(`[${sessionObj.id}] ✅ WhatsApp Connected!`);
+            console.log(`[${sessionObj.id}] ✅ WhatsApp Connected & Healthy!`);
         }
     });
 
     // Handle Incoming Messages
     sock.ev.on('messages.upsert', async (m) => {
         try {
+            console.log(`[${sessionObj.id}] Incoming messages.upsert: type=${m.type}, count=${m.messages?.length}`);
             if (!m.messages || m.messages.length === 0) return;
 
             for (const msg of m.messages) {
+                console.log(`[${sessionObj.id}] Processing message: jid=${msg.key?.remoteJid}, fromMe=${msg.key?.fromMe}`);
                 // If message is from me, handle or ignore
                 if (msg.key && msg.key.fromMe) {
                     const selfBody = (
@@ -1107,7 +1131,6 @@ app.get('/', (req, res) => {
                         chatUi.innerHTML += \`
                             <div class="bubble bubble-bot">
                                 \${data.reply}
-                                <div style="font-size:10px; color:#64748b; margin-top:4px;">⏱️ \${data.timeMs}ms | \${data.model}</div>
                             </div>
                         \`;
                         chatUi.scrollTop = chatUi.scrollHeight;
