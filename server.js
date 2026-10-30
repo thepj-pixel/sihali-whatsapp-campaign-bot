@@ -557,6 +557,33 @@ app.get('/api/debug', (req, res) => {
     });
 });
 
+// Auto-Update Endpoint: Pulls latest code from GitHub and reloads PM2
+app.get('/update', (req, res) => {
+    console.log('[AutoDeploy] Pulling latest code from GitHub...');
+    exec('git pull origin main && pm2 restart whatsapp-bot', (err, stdout, stderr) => {
+        if (err) {
+            console.error('[AutoDeploy Error]:', stderr);
+            return res.status(500).send(`
+                <body style="font-family: sans-serif; padding: 30px;">
+                    <h2 style="color: #dc2626;">❌ Auto-Update Failed</h2>
+                    <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px;">${stderr || err.message}</pre>
+                    <a href="/?pin=${CAMPAIGN_PIN}">← Return to Dashboard</a>
+                </body>
+            `);
+        }
+        res.send(`
+            <body style="font-family: sans-serif; padding: 30px; text-align: center;">
+                <h2 style="color: #16a34a;">✅ Successfully Updated & Reloaded from GitHub!</h2>
+                <p>Google Cloud VM has pulled all latest changes and restarted the bot.</p>
+                <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px; text-align: left; display: inline-block;">${stdout}</pre>
+                <br><br>
+                <a href="/?pin=${CAMPAIGN_PIN}" style="background: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Return to Dashboard</a>
+                <script>setTimeout(() => window.location.href = '/?pin=${CAMPAIGN_PIN}', 3000);</script>
+            </body>
+        `);
+    });
+});
+
 // Clean Reset / Re-link Session (removes corrupted Signal keys and regenerates QR)
 app.get('/reset/:id', async (req, res) => {
     const session = SESSIONS.find(s => s.id === req.params.id);
