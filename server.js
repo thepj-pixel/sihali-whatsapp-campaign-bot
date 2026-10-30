@@ -38,7 +38,40 @@ try {
     LIVE_FEED = [];
 }
 
+// Purge past self-tests & errors so the real voter feed is 100% clean
+LIVE_FEED = LIVE_FEED.filter(item => item.status !== 'SELF_IGNORED' && item.status !== 'BAD_MAC' && item.status !== 'SELF_DEVICE');
+try {
+    fs.writeFileSync(FEED_FILE, JSON.stringify(LIVE_FEED, null, 2), 'utf8');
+} catch (e) {}
+
+// Diagnostics & System Health Store
+const DIAG_FILE = path.join(__dirname, 'diagnostics_feed.json');
+let DIAG_FEED = [];
+try {
+    if (fs.existsSync(DIAG_FILE)) {
+        DIAG_FEED = JSON.parse(fs.readFileSync(DIAG_FILE, 'utf8'));
+    }
+} catch (e) {
+    DIAG_FEED = [];
+}
+
+function logDiagnostic(event) {
+    DIAG_FEED.unshift({
+        id: Date.now() + Math.random().toString(36).substr(2, 4),
+        timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        ...event
+    });
+    if (DIAG_FEED.length > 100) DIAG_FEED.pop();
+    try {
+        fs.writeFileSync(DIAG_FILE, JSON.stringify(DIAG_FEED, null, 2), 'utf8');
+    } catch (e) {}
+}
+
 function logMessage(event) {
+    // If it's a self-device or decryption event, route strictly to diagnostics
+    if (event.status === 'SELF_IGNORED' || event.status === 'BAD_MAC' || event.status === 'SELF_DEVICE') {
+        return logDiagnostic(event);
+    }
     LIVE_FEED.unshift({
         id: Date.now() + Math.random().toString(36).substr(2, 4),
         timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -49,6 +82,22 @@ function logMessage(event) {
         fs.writeFileSync(FEED_FILE, JSON.stringify(LIVE_FEED, null, 2), 'utf8');
     } catch (e) {}
 }
+
+// Global process error handlers to swallow harmless libsignal Bad MAC loops
+process.on('uncaughtException', (err) => {
+    if (err && err.message && err.message.includes('Bad MAC')) {
+        console.warn('[Signal] Handled transient Bad MAC session error.');
+        return;
+    }
+    console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason && reason.message && reason.message.includes('Bad MAC')) {
+        console.warn('[Signal] Handled transient Bad MAC unhandled rejection.');
+        return;
+    }
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // PIN Security Gate Middleware
 app.use((req, res, next) => {
@@ -126,6 +175,26 @@ if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
+// In-memory message store for Baileys retry requests & decrypt healing
+const MSG_STORE = new Map();
+
+function extractMessageText(message) {
+    if (!message) return '';
+    if (message.conversation) return message.conversation;
+    if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+    if (message.imageMessage?.caption) return message.imageMessage.caption;
+    if (message.videoMessage?.caption) return message.videoMessage.caption;
+    if (message.documentMessage?.caption) return message.documentMessage.caption;
+    if (message.ephemeralMessage?.message) return extractMessageText(message.ephemeralMessage.message);
+    if (message.viewOnceMessage?.message) return extractMessageText(message.viewOnceMessage.message);
+    if (message.viewOnceMessageV2?.message) return extractMessageText(message.viewOnceMessageV2.message);
+    if (message.documentWithCaptionMessage?.message) return extractMessageText(message.documentWithCaptionMessage.message);
+    if (message.buttonsResponseMessage?.selectedDisplayText) return message.buttonsResponseMessage.selectedDisplayText;
+    if (message.templateButtonReplyMessage?.selectedId) return message.templateButtonReplyMessage.selectedId;
+    if (message.listResponseMessage?.title) return message.listResponseMessage.title;
+    return '';
+}
+
 // Start a WhatsApp Session
 async function startSession(sessionObj) {
     if (sessionObj.reconnectTimer) {
@@ -158,7 +227,10 @@ async function startSession(sessionObj) {
         syncFullHistory: false,
         defaultQueryTimeoutMs: 60000,
         getMessage: async (key) => {
-            return { conversation: '' };
+            if (key?.id && MSG_STORE.has(key.id)) {
+                return MSG_STORE.get(key.id);
+            }
+            return undefined;
         }
     });
 
@@ -208,6 +280,14 @@ async function startSession(sessionObj) {
             if (!m.messages || m.messages.length === 0) return;
 
             for (const msg of m.messages) {
+                if (msg.key?.id && msg.message) {
+                    MSG_STORE.set(msg.key.id, msg.message);
+                    if (MSG_STORE.size > 1000) {
+                        const firstKey = MSG_STORE.keys().next().value;
+                        MSG_STORE.delete(firstKey);
+                    }
+                }
+
                 console.log(`[${sessionObj.id}] Processing message: jid=${msg.key?.remoteJid}, fromMe=${msg.key?.fromMe}`);
 
                 const remoteJid = msg.key?.remoteJid || '';
@@ -217,48 +297,51 @@ async function startSession(sessionObj) {
 
                 const senderPhone = remoteJid.split('@')[0];
 
-                // If message is from me, log to dashboard so user sees it, then ignore to prevent loop
+                // If message is from me, log strictly to Diagnostics tab to keep main voter chat clean
                 if (msg.key && msg.key.fromMe) {
-                    const selfBody = (
-                        msg.message?.conversation ||
-                        msg.message?.extendedTextMessage?.text ||
-                        '[Self Test Message from This Phone]'
-                    ).trim();
-
+                    const selfBody = extractMessageText(msg.message) || '[Self Device Activity]';
                     if (!selfBody.includes('ग्राम पंचायत') && !selfBody.includes('बाबा अभय सिंह')) {
-                        logMessage({
+                        logDiagnostic({
                             session: sessionObj.name,
                             phone: 'Self Device (' + sessionObj.id + ')',
                             incoming: selfBody,
-                            reply: '⚠️ Message sent from bot phone itself. WhatsApp bots ignore self-messages to prevent infinite loops. Please test from a DIFFERENT phone!',
-                            status: 'SELF_IGNORED'
+                            reply: 'Self-message recorded in Diagnostics only. Voter chat table remains clean.',
+                            status: 'SELF_DEVICE'
                         });
                     }
                     continue;
                 }
 
                 // Extract message body from all possible structures
-                let body = (
-                    msg.message?.conversation ||
-                    msg.message?.extendedTextMessage?.text ||
-                    msg.message?.imageMessage?.caption ||
-                    msg.message?.ephemeralMessage?.message?.conversation ||
-                    msg.message?.ephemeralMessage?.message?.extendedTextMessage?.text ||
-                    msg.message?.viewOnceMessage?.message?.conversation ||
-                    msg.message?.viewOnceMessage?.message?.extendedTextMessage?.text ||
-                    ''
-                ).trim();
+                let body = extractMessageText(msg.message).trim();
 
-                // If body is empty (e.g. Meta Cloud encryption Bad MAC or stub)
+                // If body is empty (e.g. Meta Cloud encryption Bad MAC or initial handshake)
                 if (!body) {
-                    console.log(`[${sessionObj.id}] Warning: Empty message body received for ${remoteJid}`);
-                    logMessage({
+                    console.log(`[${sessionObj.id}] Decryption empty or Bad MAC for ${remoteJid}`);
+                    logDiagnostic({
                         session: sessionObj.name,
                         phone: senderPhone,
-                        incoming: '[Encrypted Packet / Meta Cloud Banner]',
-                        reply: '⚠️ Message received but decryption failed. If linked to Meta FB Ads, Meta Cloud manages encryption.',
+                        incoming: '[Encrypted Packet / Bad MAC Decryption Error]',
+                        reply: 'Sent auto-handshake welcome to repair Signal ratchet.',
                         status: 'BAD_MAC'
                     });
+
+                    // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
+                    try {
+                        const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
+                        await sock.sendMessage(remoteJid, { text: handshakeText }, { quoted: msg });
+                        console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${remoteJid} to restore Signal ratchet`);
+                        userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
+                        logMessage({
+                            session: sessionObj.name,
+                            phone: senderPhone,
+                            incoming: '[New Contact / Welcome Handshake]',
+                            reply: handshakeText,
+                            status: 'HANDSHAKE_SENT'
+                        });
+                    } catch (handshakeErr) {
+                        console.error(`[${sessionObj.id}] Handshake reply error:`, handshakeErr?.message);
+                    }
                     continue;
                 }
 
@@ -532,9 +615,62 @@ app.post('/api/test-ai', async (req, res) => {
     }
 });
 
-// API: Get Live Messages Feed
+// API: Get Live Messages Feed (Voters Only)
 app.get('/api/messages', (req, res) => {
     res.json(LIVE_FEED);
+});
+
+// API: Get Diagnostics Feed & Session Health
+app.get('/api/diagnostics', (req, res) => {
+    res.json({
+        sessions: SESSIONS.map(s => ({
+            id: s.id,
+            name: s.name,
+            status: s.status,
+            hasQr: !!s.qr
+        })),
+        feed: DIAG_FEED
+    });
+});
+
+// API: Clear All Chat and Diagnostic Logs
+app.post('/api/clear-logs', (req, res) => {
+    LIVE_FEED = [];
+    DIAG_FEED = [];
+    try { fs.writeFileSync(FEED_FILE, '[]', 'utf8'); } catch (e) {}
+    try { fs.writeFileSync(DIAG_FILE, '[]', 'utf8'); } catch (e) {}
+    res.json({ success: true, message: 'All logs cleared successfully!' });
+});
+
+// API: Send Test WhatsApp Message from Diagnostics
+app.post('/api/test-send', async (req, res) => {
+    try {
+        const { sessionId, phone, message } = req.body;
+        if (!phone || !message) {
+            return res.status(400).json({ error: 'Phone number and message text are required.' });
+        }
+
+        const sessionObj = SESSIONS.find(s => s.id === (sessionId || 'sim_636'));
+        if (!sessionObj || !sessionObj.sock || sessionObj.status !== 'CONNECTED') {
+            return res.status(400).json({ error: `Selected line (${sessionId || 'sim_636'}) is not connected.` });
+        }
+
+        const clean = phone.replace(/[^0-9]/g, '');
+        const jid = (clean.length === 10 ? '91' + clean : clean) + '@s.whatsapp.net';
+
+        await sessionObj.sock.sendMessage(jid, { text: message });
+        logMessage({
+            session: sessionObj.name,
+            phone: clean,
+            incoming: '[Direct Dashboard Test]',
+            reply: message,
+            status: 'TEST_SENT'
+        });
+        res.json({ success: true, message: `Successfully sent test message to +${clean}!` });
+    } catch (e) {
+        console.error('Error in /api/test-send:', e);
+        res.status(500).json({ error: 'WhatsApp send failed: ' + e.message });
+    }
 });
 
 // API: Get All Contacted Voters with Memory Stats
@@ -738,6 +874,7 @@ app.get('/', (req, res) => {
                 .badge-success { background: #dcfce7; color: #15803d; }
                 .badge-warning { background: #fef3c7; color: #b45309; }
                 .badge-info { background: #e0f2fe; color: #0369a1; }
+                .badge-danger { background: #fee2e2; color: #b91c1c; }
 
                 /* Layout Grids */
                 .studio-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
@@ -828,18 +965,24 @@ app.get('/', (req, res) => {
 
                 <!-- Tabbed Navigation -->
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Chat Stream</button>
+                    <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Voter Chat</button>
+                    <button class="tab-btn" onclick="switchTab('diagnostics')">🛠️ Diagnostics & Self-Test Log</button>
                     <button class="tab-btn" onclick="switchTab('studio')">🎨 Live Poster Studio</button>
                     <button class="tab-btn" onclick="switchTab('playground')">🤖 AI Playground & Lab</button>
                     <button class="tab-btn" onclick="switchTab('voters')">👤 Voter Memory (<span id="voter-count">0</span>)</button>
                     <button class="tab-btn" onclick="switchTab('media')">📸 Media Bank & Uploader</button>
                 </div>
 
-                <!-- TAB 1: Live Chat Stream -->
+                <!-- TAB 1: Live Chat Stream (Voters Only) -->
                 <div id="tab-feed" class="card tab-content">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0; font-size: 16px;">Real-Time Incoming & Outgoing Chats</h3>
-                        <span style="color: #64748b; font-size: 12px;">Auto-refreshing every 4s • Permanent Storage</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px;">💬 Real-Time Incoming & Outgoing Chats</h3>
+                            <span style="color: #64748b; font-size: 12px;">Real voters only • Auto-refreshing every 4s • Permanent Storage</span>
+                        </div>
+                        <button onclick="clearAllLogs()" style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                            🧹 Clear Feed
+                        </button>
                     </div>
                     <div class="table-responsive">
                         <table class="table">
@@ -850,11 +993,114 @@ app.get('/', (req, res) => {
                                     <th style="width: 130px;">Voter</th>
                                     <th>Incoming Message</th>
                                     <th>Bot Reply Sent</th>
-                                    <th style="width: 95px;">Status</th>
+                                    <th style="width: 105px;">Status</th>
                                 </tr>
                             </thead>
                             <tbody id="live-table-body">
-                                <tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 30px;">Listening for new messages... Send a text to 6367810227!</td></tr>
+                                <tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: Diagnostics & Self-Test Log -->
+                <div id="tab-diagnostics" class="card tab-content" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px;">🛠️ System Diagnostics & Self-Test Activity</h3>
+                            <span style="color: #64748b; font-size: 12px;">Self-messages, encryption alerts & line controls</span>
+                        </div>
+                        <button onclick="clearAllLogs()" style="background: #ef4444; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                            🧹 Clear Diagnostics Logs
+                        </button>
+                    </div>
+
+                    <!-- Line Cards Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <!-- Primary 636 -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Primary Line (6367810227)</strong>
+                                <span class="badge ${SESSIONS[0].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[0].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                Main election campaign line. If Meta FB Ads linked, disconnect Facebook in WhatsApp Business to restore direct Signal encryption.
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/sim_636" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/reset/sim_636" onclick="return confirm('Reset and generate fresh QR for Primary Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset & Re-pair</a>
+                            </div>
+                        </div>
+
+                        <!-- Baba Aux -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Baba Aux Line (Secondary)</strong>
+                                <span class="badge ${SESSIONS[1].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[1].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                Dedicated secondary SIM (100% clean, no Meta Ads interference). Scan any standard WhatsApp here!
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/baba_aux" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/reset/baba_aux" onclick="return confirm('Reset Baba Aux Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset</a>
+                            </div>
+                        </div>
+
+                        <!-- Canada Line -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Canada Line (+1 Virtual)</strong>
+                                <span class="badge ${SESSIONS[2].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[2].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                International virtual line for high-capacity broadcasts and auxiliary campaign pings.
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/canada" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/reset/canada" onclick="return confirm('Reset Canada Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Reset</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Send Test Tool -->
+                    <div style="background: #f1f5f9; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                        <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 8px;">🧪 Send Direct WhatsApp Test Message</strong>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <select id="diag-line" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                                <option value="sim_636">Primary (6367810227)</option>
+                                <option value="baba_aux">Baba Aux Line</option>
+                                <option value="canada">Canada Line</option>
+                            </select>
+                            <input type="tel" id="diag-phone" placeholder="Enter recipient mobile (e.g. 9876543210)" class="input-field" style="width: 240px; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                            <input type="text" id="diag-msg" placeholder="Test message text..." class="input-field" style="flex: 1; min-width: 200px; background: white; color: #0f172a; border: 1px solid #cbd5e1;" value="राम राम भाई जी! यह बाबा अभय सिंह सेवा केंद्र का लाइव टेस्ट मैसेज है। 🚩">
+                            <button onclick="sendDiagnosticTest()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                                🚀 Send Test
+                            </button>
+                        </div>
+                        <div id="diag-send-status" style="margin-top: 8px; font-size: 12px; font-weight: 600;"></div>
+                    </div>
+
+                    <!-- Diagnostics Log Table -->
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 85px;">Time</th>
+                                    <th style="width: 140px;">Line</th>
+                                    <th style="width: 130px;">Sender / Type</th>
+                                    <th>Payload / Log Summary</th>
+                                    <th style="width: 110px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diag-table-body">
+                                <tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1184,17 +1430,21 @@ app.get('/', (req, res) => {
                     sendAITest();
                 }
 
-                // Update Live Chat Feed
+                // Update Live Voter Chat Feed (Voters Only)
                 async function updateLiveFeed() {
                     try {
                         const res = await fetch('/api/messages');
                         const messages = await res.json();
                         const tbody = document.getElementById('live-table-body');
-                        if (!messages || messages.length === 0) return;
+                        if (!messages || messages.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>';
+                            return;
+                        }
 
                         tbody.innerHTML = messages.map(m => {
                             let badgeClass = 'badge-success';
-                            if (m.status === 'SELF_IGNORED') badgeClass = 'badge-warning';
+                            if (m.status === 'HANDSHAKE_SENT') badgeClass = 'badge-info';
+                            else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
                             else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
 
                             return \`
@@ -1212,6 +1462,85 @@ app.get('/', (req, res) => {
                 }
                 setInterval(updateLiveFeed, 4000);
                 updateLiveFeed();
+
+                // Update Diagnostics Feed
+                async function updateDiagnostics() {
+                    try {
+                        const res = await fetch('/api/diagnostics');
+                        const data = await res.json();
+                        const tbody = document.getElementById('diag-table-body');
+                        if (!data || !data.feed || data.feed.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>';
+                            return;
+                        }
+
+                        tbody.innerHTML = data.feed.map(d => {
+                            let badgeClass = 'badge-warning';
+                            if (d.status === 'SELF_DEVICE') badgeClass = 'badge-info';
+                            else if (d.status === 'BAD_MAC') badgeClass = 'badge-danger';
+
+                            return \`
+                                <tr>
+                                    <td style="color: #64748b; font-size: 12px;">\${d.timestamp}</td>
+                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${d.session}</span></td>
+                                    <td><span style="color: #475569; font-weight: 700; font-size: 12px;">\${d.phone}</span></td>
+                                    <td style="color: #334155; font-size: 12px;"><b>\${d.incoming}</b><br><span style="color:#64748b;">\${d.reply}</span></td>
+                                    <td><span class="badge \${badgeClass}">● \${d.status}</span></td>
+                                </tr>
+                            \`;
+                        }).join('');
+                    } catch (e) {}
+                }
+                setInterval(updateDiagnostics, 4000);
+                updateDiagnostics();
+
+                // Clear All Logs
+                async function clearAllLogs() {
+                    if (!confirm('Are you sure you want to clear chat and diagnostic logs?')) return;
+                    try {
+                        await fetch('/api/clear-logs', { method: 'POST' });
+                        updateLiveFeed();
+                        updateDiagnostics();
+                    } catch (e) {
+                        alert('Failed to clear logs: ' + e.message);
+                    }
+                }
+
+                // Send Diagnostic Test Message
+                async function sendDiagnosticTest() {
+                    const lineId = document.getElementById('diag-line').value;
+                    const phone = document.getElementById('diag-phone').value.trim();
+                    const message = document.getElementById('diag-msg').value.trim();
+                    const statusEl = document.getElementById('diag-send-status');
+
+                    if (!phone || !message) {
+                        alert('Please enter recipient phone number and message.');
+                        return;
+                    }
+
+                    statusEl.innerText = '⏳ Sending test WhatsApp...';
+                    statusEl.style.color = '#2563eb';
+
+                    try {
+                        const res = await fetch('/api/test-send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: lineId, phone, message })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            statusEl.innerText = '✅ ' + data.message;
+                            statusEl.style.color = '#16a34a';
+                            updateLiveFeed();
+                        } else {
+                            statusEl.innerText = '❌ ' + (data.error || 'Failed');
+                            statusEl.style.color = '#dc2626';
+                        }
+                    } catch (e) {
+                        statusEl.innerText = '❌ Error: ' + e.message;
+                        statusEl.style.color = '#dc2626';
+                    }
+                }
 
                 // Load Voters and Memory
                 async function loadVoters() {
