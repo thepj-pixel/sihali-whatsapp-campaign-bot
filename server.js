@@ -846,6 +846,15 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Background Auto-Sync Watchdog (checks GitHub every 60s for new commits)
+setInterval(() => {
+    exec('git fetch origin main > /dev/null 2>&1 && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] && git pull origin main && pm2 restart whatsapp-bot', (err, stdout, stderr) => {
+        if (!err && stdout && stdout.trim()) {
+            console.log('[AutoSync] Pulled updates from GitHub & reloaded bot:', stdout.trim());
+        }
+    });
+}, 60000);
+
 app.listen(PORT, () => {
     console.log(`[Server] Live on port ${PORT}`);
 });
