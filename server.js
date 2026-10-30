@@ -101,8 +101,8 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // PIN Security Gate Middleware
 app.use((req, res, next) => {
-    // Whitelist static media, health, and debug
-    if (req.path.startsWith('/media') || req.path === '/health' || req.path === '/api/debug') {
+    // Whitelist static media, health, debug, and Meta Ads Webhook
+    if (req.path.startsWith('/media') || req.path === '/health' || req.path === '/api/debug' || req.path.startsWith('/webhook')) {
         return next();
     }
 
@@ -329,7 +329,7 @@ async function startSession(sessionObj) {
                     // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
                     try {
                         const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
-                        await sock.sendMessage(remoteJid, { text: handshakeText }, { quoted: msg });
+                        await sock.sendMessage(remoteJid, { text: handshakeText });
                         console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${remoteJid} to restore Signal ratchet`);
                         userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
                         logMessage({
@@ -691,6 +691,57 @@ app.get('/api/debug', (req, res) => {
     exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
         res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
     });
+});
+
+// Meta Cloud / Facebook Ads Webhook (Verification endpoint for Meta Ads Manager)
+app.get('/webhook/meta-ads', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === 'sihali2026') {
+        console.log('[MetaWebhook] Verification successful!');
+        return res.status(200).send(challenge);
+    }
+    res.sendStatus(403);
+});
+
+// Meta Cloud / Facebook Ads Webhook (Incoming lead dispatcher from FB/IG Click-To-WhatsApp Ads)
+app.post('/webhook/meta-ads', async (req, res) => {
+    try {
+        const body = req.body;
+        console.log('[MetaWebhook] Incoming webhook payload:', JSON.stringify(body));
+
+        if (body.object === 'whatsapp_business_account') {
+            const entry = body.entry?.[0];
+            const change = entry?.changes?.[0]?.value;
+            const message = change?.messages?.[0];
+
+            if (message) {
+                const senderPhone = message.from;
+                const textBody = message.text?.body || message.button?.text || 'Ram Ram';
+                console.log(`[MetaWebhook] Received from +${senderPhone}: "${textBody}"`);
+
+                const sessionObj = SESSIONS.find(s => s.status === 'CONNECTED') || SESSIONS[0];
+                if (sessionObj && sessionObj.sock) {
+                    const jid = (senderPhone.includes('@') ? senderPhone : senderPhone + '@s.whatsapp.net');
+                    const reply = await aiService.getAIResponse(textBody, NVIDIA_API_KEY, [], senderPhone);
+                    await sessionObj.sock.sendMessage(jid, { text: reply });
+                    logMessage({
+                        session: 'Meta Ads Webhook',
+                        phone: senderPhone,
+                        incoming: textBody,
+                        reply: reply,
+                        status: 'FB_AD_LEAD'
+                    });
+                }
+            }
+        }
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('[MetaWebhook Error]:', err);
+        res.sendStatus(500);
+    }
 });
 
 // Auto-Update Endpoint: Pulls latest code from GitHub and reloads PM2
