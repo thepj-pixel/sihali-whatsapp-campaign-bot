@@ -32,16 +32,94 @@ const SESSIONS = [
     { id: 'canada', name: 'Canada Line (+1 Rented)', status: 'DISCONNECTED', qr: null, sock: null }
 ];
 
-// Live Message Feed Store (Last 100 events)
-const LIVE_FEED = [];
+const CAMPAIGN_PIN = process.env.CAMPAIGN_PIN || '2026';
+
+// Persistent Live Message Feed (survives restarts)
+const FEED_FILE = path.join(__dirname, 'messages_feed.json');
+let LIVE_FEED = [];
+try {
+    if (fs.existsSync(FEED_FILE)) {
+        LIVE_FEED = JSON.parse(fs.readFileSync(FEED_FILE, 'utf8'));
+    }
+} catch (e) {
+    LIVE_FEED = [];
+}
+
 function logMessage(event) {
     LIVE_FEED.unshift({
         id: Date.now() + Math.random().toString(36).substr(2, 4),
         timestamp: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         ...event
     });
-    if (LIVE_FEED.length > 100) LIVE_FEED.pop();
+    if (LIVE_FEED.length > 200) LIVE_FEED.pop();
+    try {
+        fs.writeFileSync(FEED_FILE, JSON.stringify(LIVE_FEED, null, 2), 'utf8');
+    } catch (e) {}
 }
+
+// PIN Security Gate Middleware
+app.use((req, res, next) => {
+    // Whitelist static media, health, and debug
+    if (req.path.startsWith('/media') || req.path === '/health' || req.path === '/api/debug') {
+        return next();
+    }
+
+    const cookieHeader = req.headers.cookie || '';
+    const cookies = {};
+    cookieHeader.split(';').forEach(c => {
+        const parts = c.trim().split('=');
+        if (parts[0]) cookies[parts[0]] = parts[1] ? decodeURIComponent(parts[1]) : '';
+    });
+
+    const queryPin = req.query.pin;
+    const headerPin = req.headers['x-campaign-pin'];
+    const activePin = cookies['campaign_pin'] || queryPin || headerPin;
+
+    if (activePin === CAMPAIGN_PIN) {
+        if (queryPin === CAMPAIGN_PIN) {
+            res.setHeader('Set-Cookie', `campaign_pin=${CAMPAIGN_PIN}; Path=/; Max-Age=2592000; SameSite=Lax`);
+        }
+        return next();
+    }
+
+    if (req.path.startsWith('/api')) {
+        return res.status(401).json({ error: 'Unauthorized. Enter PIN 2026 on dashboard.' });
+    }
+
+    // Render Lock Screen
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>🔒 Security Gate - Sihali Khurd 2026</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+                .card { background: #1e293b; padding: 35px 25px; border-radius: 18px; width: 100%; max-width: 380px; text-align: center; box-shadow: 0 20px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
+                .pin-input { width: 100%; padding: 15px; font-size: 26px; text-align: center; letter-spacing: 10px; border-radius: 10px; border: 2px solid #475569; background: #0f172a; color: #38bdf8; margin: 22px 0; outline: none; font-weight: 700; }
+                .pin-input:focus { border-color: #38bdf8; }
+                .btn { width: 100%; padding: 15px; background: #2563eb; color: white; font-size: 16px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
+                .btn:active { transform: scale(0.98); }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div style="font-size: 42px; margin-bottom: 12px;">🔒</div>
+                <h2 style="margin: 0; font-size: 20px; color: #f8fafc;">ग्राम पंचायत सिहाली खुर्द</h2>
+                <p style="color: #94a3b8; font-size: 13px; margin: 6px 0 0 0;">बाबा अभय सिंह चुनाव 2026 — निजी कंट्रोल रूम</p>
+                
+                <form method="GET" action="/">
+                    <input type="password" name="pin" class="pin-input" placeholder="••••" maxlength="8" autofocus required inputmode="numeric">
+                    <button type="submit" class="btn">🚀 Unlock Dashboard</button>
+                </form>
+                <p style="color: #64748b; font-size: 11px; margin-top: 18px;">Private & Confidential • Campaign Team Access Only</p>
+            </div>
+        </body>
+        </html>
+    `);
+});
 
 const sessionsDir = path.join(__dirname, 'sessions_auth');
 if (!fs.existsSync(sessionsDir)) {
@@ -350,6 +428,13 @@ app.get('/api/voter/:phone', (req, res) => {
     const user = userMemory.getUser(phone);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
+});
+
+// API: PM2 Debug Logs
+app.get('/api/debug', (req, res) => {
+    exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
+        res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
+    });
 });
 
 // API: 1-Click Auto-Deploy / Git Pull & PM2 Reload
