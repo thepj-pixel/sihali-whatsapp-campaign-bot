@@ -209,24 +209,6 @@ async function startSession(sessionObj) {
 
             for (const msg of m.messages) {
                 console.log(`[${sessionObj.id}] Processing message: jid=${msg.key?.remoteJid}, fromMe=${msg.key?.fromMe}`);
-                // If message is from me, handle or ignore
-                if (msg.key && msg.key.fromMe) {
-                    const selfBody = (
-                        msg.message?.conversation ||
-                        msg.message?.extendedTextMessage?.text ||
-                        ''
-                    ).trim();
-                    if (selfBody && !selfBody.includes('ग्राम पंचायत') && !selfBody.includes('बाबा अभय सिंह')) {
-                        logMessage({
-                            session: sessionObj.name,
-                            phone: 'Self Device',
-                            incoming: selfBody,
-                            reply: '⚠️ Self-messages ignored to prevent loop. Please test from a DIFFERENT phone!',
-                            status: 'SELF_IGNORED'
-                        });
-                    }
-                    continue;
-                }
 
                 const remoteJid = msg.key?.remoteJid || '';
                 if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('status@broadcast')) {
@@ -235,8 +217,28 @@ async function startSession(sessionObj) {
 
                 const senderPhone = remoteJid.split('@')[0];
 
+                // If message is from me, log to dashboard so user sees it, then ignore to prevent loop
+                if (msg.key && msg.key.fromMe) {
+                    const selfBody = (
+                        msg.message?.conversation ||
+                        msg.message?.extendedTextMessage?.text ||
+                        '[Self Test Message from This Phone]'
+                    ).trim();
+
+                    if (!selfBody.includes('ग्राम पंचायत') && !selfBody.includes('बाबा अभय सिंह')) {
+                        logMessage({
+                            session: sessionObj.name,
+                            phone: 'Self Device (' + sessionObj.id + ')',
+                            incoming: selfBody,
+                            reply: '⚠️ Message sent from bot phone itself. WhatsApp bots ignore self-messages to prevent infinite loops. Please test from a DIFFERENT phone!',
+                            status: 'SELF_IGNORED'
+                        });
+                    }
+                    continue;
+                }
+
                 // Extract message body from all possible structures
-                const body = (
+                let body = (
                     msg.message?.conversation ||
                     msg.message?.extendedTextMessage?.text ||
                     msg.message?.imageMessage?.caption ||
@@ -247,7 +249,18 @@ async function startSession(sessionObj) {
                     ''
                 ).trim();
 
-                if (!body) continue;
+                // If body is empty (e.g. Meta Cloud encryption Bad MAC or stub)
+                if (!body) {
+                    console.log(`[${sessionObj.id}] Warning: Empty message body received for ${remoteJid}`);
+                    logMessage({
+                        session: sessionObj.name,
+                        phone: senderPhone,
+                        incoming: '[Encrypted Packet / Meta Cloud Banner]',
+                        reply: '⚠️ Message received but decryption failed. If linked to Meta FB Ads, Meta Cloud manages encryption.',
+                        status: 'BAD_MAC'
+                    });
+                    continue;
+                }
 
                 console.log(`[${sessionObj.id}] Received from ${senderPhone}: "${body}"`);
 
