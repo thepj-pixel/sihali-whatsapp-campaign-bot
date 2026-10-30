@@ -1863,7 +1863,11 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         uptime: process.uptime(),
-        sessions: SESSIONS.map(s => ({ id: s.id, status: s.status }))
+        sessions: SESSIONS.map(s => ({
+            id: s.id,
+            status: s.status,
+            user: s.sock?.user
+        }))
     });
 });
 
