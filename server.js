@@ -195,6 +195,64 @@ function extractMessageText(message) {
     return '';
 }
 
+// Persistent LID to Phone Number Mapping Store
+const LID_MAP_FILE = path.join(__dirname, 'lid_mappings.json');
+let LID_MAP = {
+    '90959605924011': '918764870431' // Pre-mapped from verified chat
+};
+try {
+    if (fs.existsSync(LID_MAP_FILE)) {
+        LID_MAP = Object.assign(LID_MAP, JSON.parse(fs.readFileSync(LID_MAP_FILE, 'utf8')));
+    }
+} catch (e) {}
+
+function saveLidMapping(lid, pn) {
+    if (!lid || !pn) return;
+    const cleanLid = lid.split('@')[0].replace(/[^0-9]/g, '');
+    const cleanPn = pn.split('@')[0].replace(/[^0-9]/g, '');
+    if (cleanLid && cleanPn && cleanLid !== cleanPn) {
+        LID_MAP[cleanLid] = cleanPn;
+        try { fs.writeFileSync(LID_MAP_FILE, JSON.stringify(LID_MAP, null, 2), 'utf8'); } catch (e) {}
+    }
+}
+
+async function resolveTargetJid(sock, key) {
+    if (!key) return '';
+    let jid = key.remoteJid || '';
+
+    // 1. If key already has remoteJidAlt (canonical Phone JID), use it!
+    if (key.remoteJidAlt && key.remoteJidAlt.includes('@s.whatsapp.net')) {
+        saveLidMapping(jid, key.remoteJidAlt);
+        return key.remoteJidAlt;
+    }
+
+    // 2. If key has senderPn or participantAlt
+    if (key.senderPn) {
+        const pnJid = key.senderPn.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+        saveLidMapping(jid, pnJid);
+        return pnJid;
+    }
+
+    // 3. Check persistent LID map
+    const cleanLid = jid.split('@')[0].replace(/[^0-9]/g, '');
+    if (LID_MAP[cleanLid]) {
+        return LID_MAP[cleanLid] + '@s.whatsapp.net';
+    }
+
+    // 4. Try resolving from Baileys signalRepository lidMapping
+    if (jid.endsWith('@lid') && sock?.signalRepository?.lidMapping?.getPNForLID) {
+        try {
+            const mappedPn = await sock.signalRepository.lidMapping.getPNForLID(jid);
+            if (mappedPn && mappedPn.includes('@s.whatsapp.net')) {
+                saveLidMapping(jid, mappedPn);
+                return mappedPn;
+            }
+        } catch (e) {}
+    }
+
+    return jid;
+}
+
 // Start a WhatsApp Session
 async function startSession(sessionObj) {
     if (sessionObj.reconnectTimer) {
@@ -290,12 +348,14 @@ async function startSession(sessionObj) {
 
                 console.log(`[${sessionObj.id}] Processing message: jid=${msg.key?.remoteJid}, fromMe=${msg.key?.fromMe}`);
 
-                const remoteJid = msg.key?.remoteJid || '';
-                if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('status@broadcast')) {
+                const rawJid = msg.key?.remoteJid || '';
+                if (!rawJid || rawJid.includes('@g.us') || rawJid.includes('status@broadcast')) {
                     continue; // Skip group chats & status
                 }
 
-                const senderPhone = remoteJid.split('@')[0];
+                // Resolve real target JID & phone number (maps @lid to real phone number!)
+                const targetJid = await resolveTargetJid(sock, msg.key);
+                const senderPhone = targetJid.split('@')[0].replace(/[^0-9]/g, '');
 
                 // If message is from me, log strictly to Diagnostics tab to keep main voter chat clean
                 if (msg.key && msg.key.fromMe) {
@@ -317,20 +377,20 @@ async function startSession(sessionObj) {
 
                 // If body is empty (e.g. Meta Cloud encryption Bad MAC or initial handshake)
                 if (!body) {
-                    console.log(`[${sessionObj.id}] Decryption empty or Bad MAC for ${remoteJid}`);
+                    console.log(`[${sessionObj.id}] Decryption empty or Bad MAC for ${targetJid} (raw: ${rawJid})`);
                     logDiagnostic({
                         session: sessionObj.name,
                         phone: senderPhone,
                         incoming: '[Encrypted Packet / Bad MAC Decryption Error]',
-                        reply: 'Sent auto-handshake welcome to repair Signal ratchet.',
+                        reply: 'Sent auto-handshake welcome to ' + targetJid + ' to repair Signal ratchet.',
                         status: 'BAD_MAC'
                     });
 
                     // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
                     try {
                         const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
-                        await sock.sendMessage(remoteJid, { text: handshakeText });
-                        console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${remoteJid} to restore Signal ratchet`);
+                        await sock.sendMessage(targetJid, { text: handshakeText });
+                        console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${targetJid} to restore Signal ratchet`);
                         userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
                         logMessage({
                             session: sessionObj.name,
@@ -340,12 +400,12 @@ async function startSession(sessionObj) {
                             status: 'HANDSHAKE_SENT'
                         });
                     } catch (handshakeErr) {
-                        console.error(`[${sessionObj.id}] Handshake reply error:`, handshakeErr?.message);
+                        console.error(`[${sessionObj.id}] Handshake reply error to ${targetJid}:`, handshakeErr?.message);
                     }
                     continue;
                 }
 
-                console.log(`[${sessionObj.id}] Received from ${senderPhone}: "${body}"`);
+                console.log(`[${sessionObj.id}] Received from ${senderPhone} (${targetJid}): "${body}"`);
 
                 // Record user message in memory
                 userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name);
@@ -381,10 +441,10 @@ async function startSession(sessionObj) {
 
                         replyText = `राम राम ${voterName} जी! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर जरूर लगाएं! 🚩`;
 
-                        await sock.sendMessage(remoteJid, {
+                        await sock.sendMessage(targetJid, {
                             image: statusPosterBuffer,
                             caption: replyText
-                        }, { quoted: msg });
+                        });
 
                         mediaTypeSent = 'customPoster';
                         console.log(`[${sessionObj.id}] ✅ Sent personalized poster to ${senderPhone} (${voterName})`);
@@ -394,26 +454,26 @@ async function startSession(sessionObj) {
                             ? "भाई जी, ये 3D वीडियो पहले भी भेजी थी, एक बार फिर देख लो और आगे शेयर जरूर करना! 😊🚩\n16 नवम्बर 2026 — बाबा अभय सिंह"
                             : "सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!";
 
-                        await sock.sendMessage(remoteJid, {
+                        await sock.sendMessage(targetJid, {
                             video: fs.readFileSync(videoPath),
                             caption: replyText
-                        }, { quoted: msg });
+                        });
 
                         mediaTypeSent = 'video';
                         console.log(`[${sessionObj.id}] ✅ Sent video reel to ${senderPhone}`);
                     } else if (isPhotoQuery && fs.existsSync(posterPath)) {
                         replyText = "बाबा अभय सिंह (मोटी आंगली वाले बाबा) - ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें!";
 
-                        await sock.sendMessage(remoteJid, {
+                        await sock.sendMessage(targetJid, {
                             image: fs.readFileSync(posterPath),
                             caption: replyText
-                        }, { quoted: msg });
+                        });
 
                         mediaTypeSent = 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster image to ${senderPhone}`);
                     } else if (matches && matches.length > 0 && isParchiQuery) {
                         replyText = voterEngine.formatSlipResponse(matches[0]);
-                        await sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
+                        await sock.sendMessage(targetJid, { text: replyText });
                         mediaTypeSent = 'voterSlip';
                         console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone}`);
                     } else {
@@ -427,13 +487,13 @@ async function startSession(sessionObj) {
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getFastLocalAnswer(body, senderPhone);
                         }
-                        await sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg });
+                        await sock.sendMessage(targetJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Replied via AI/local to ${senderPhone}`);
                     }
                 } catch (err) {
                     console.error(`[${sessionObj.id}] Error resolving reply:`, err);
                     replyText = aiService.getFastLocalAnswer(body, senderPhone);
-                    await sock.sendMessage(remoteJid, { text: replyText }, { quoted: msg }).catch(e => console.error('Fallback send failed:', e));
+                    await sock.sendMessage(targetJid, { text: replyText }).catch(e => console.error('Fallback send failed:', e));
                 }
 
                 // Record bot reply in memory
@@ -686,9 +746,9 @@ app.get('/api/voter/:phone', (req, res) => {
     res.json(user);
 });
 
-// API: PM2 Debug Logs
+// API: PM2 Debug Logs (Tunnel + Bot)
 app.get('/api/debug', (req, res) => {
-    exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
+    exec('pm2 logs tunnel --lines 25 --nostream 2>/dev/null; pm2 logs whatsapp-bot --lines 60 --nostream', (err, stdout, stderr) => {
         res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
     });
 });
