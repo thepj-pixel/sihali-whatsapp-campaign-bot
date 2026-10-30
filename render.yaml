@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sihali-whatsapp-campaign-bot
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.10.0
