@@ -76,10 +76,43 @@ try {
     INTEL_FEED = [];
 }
 
+// Mode toggle: Use clean demo poster while campaign posters are being finalized
+let USE_DEMO_POSTERS = true;
+
+const DEMO_POSTER = {
+    id: 'poster_demo_test',
+    filename: 'poster_demo_test.png',
+    github_url: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster_demo_test.png',
+    title: 'चुनावी पोस्टर (प्रारूप डेमो)',
+    tags: ['demo', 'poster', 'photo', 'तस्वीर', 'फोटो', 'पोस्टर'],
+    caption: 'बाबा अभय सिंह (मोटी आंगली वाले बाबा) — सिहाली खुर्द जनसंपर्क 🚩\n(प्रारूप डेमो पोस्टर — अंतिम चुनावी पोस्टर जल्द जारी होगा!)\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें।'
+};
+
 class MediaCatalogEngine {
     constructor() {
         this.reels = REELS;
         this.posters = POSTERS;
+        this.useDemoPosters = USE_DEMO_POSTERS;
+    }
+
+    setDemoMode(enabled) {
+        this.useDemoPosters = Boolean(enabled);
+        return this.useDemoPosters;
+    }
+
+    isDemoMode() {
+        return this.useDemoPosters;
+    }
+
+    getDemoPoster() {
+        const localPath = path.join(__dirname, 'media', DEMO_POSTER.filename);
+        return {
+            id: DEMO_POSTER.id,
+            title: DEMO_POSTER.title,
+            caption: DEMO_POSTER.caption,
+            localPath: fs.existsSync(localPath) ? localPath : null,
+            remoteUrl: DEMO_POSTER.github_url
+        };
     }
 
     getNextVideo(phone) {
@@ -105,6 +138,17 @@ class MediaCatalogEngine {
     }
 
     getNextPoster(phone, query = '') {
+        // If demo poster mode is active, strictly serve demo poster
+        if (this.useDemoPosters) {
+            const user = userMemory.getUser(phone);
+            user.sentPosters = user.sentPosters || [];
+            if (!user.sentPosters.includes(DEMO_POSTER.id)) {
+                user.sentPosters.push(DEMO_POSTER.id);
+                userMemory.save();
+            }
+            return this.getDemoPoster();
+        }
+
         const user = userMemory.getUser(phone);
         user.sentPosters = user.sentPosters || [];
         const q = (query || '').toLowerCase();

@@ -21,8 +21,8 @@ function runProactiveNudges(sock) {
             if (hoursSinceLastChat >= 2.5 && hoursSinceLastChat <= 8 && hoursSinceLastPing >= 20) {
                 const nudges = [
                     `अरे भैया, सुनिए ना... 🙏 आपने बताया नहीं, घर पर सब ठीक-ठाक हैं न? भाभी जी और बच्चे कैसे हैं? सोचा एक बार हाल-चाल पूछ लूं! 😊`,
-                    `राम राम भैया! 🚩 आज बाबा जी के चुनाव प्रचार का बहुत सुंदर WhatsApp स्टेटस बना है। अगर आप कहें तो आपके नाम का एक प्यारा सा पोस्टर बना कर भेज दूं? अपने स्टेटस पर जरूर लगाना भैया! 📲`,
-                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा जी (मोटी आंगली वाले) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
+                    `राम राम भैया! 🚩 आज बाबा अभय सिंह के चुनाव प्रचार का बहुत सुंदर WhatsApp स्टेटस बना है। अगर आप कहें तो आपके नाम का एक प्यारा सा पोस्टर बना कर भेज दूं? अपने स्टेटस पर जरूर लगाना भैया! 📲`,
+                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा अभय सिंह (मोटी आंगली वाले बाबा) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
                 ];
                 const pickedNudge = nudges[(u.proactivePingCount || 0) % nudges.length];
                 const replyJid = `${u.phone}@s.whatsapp.net`;
@@ -532,6 +532,20 @@ async function startSession(sessionObj) {
                 // Record user message in memory
                 userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name);
 
+                // Anti-Rogue Protection: Check if AutoPilot is PAUSED for this specific contact
+                const user = userMemory.getUser(senderPhone);
+                if (user.autoPilot === false) {
+                    console.log(`[${sessionObj.id}] ⏸️ AutoPilot is PAUSED for ${senderPhone}. Admin manual takeover active.`);
+                    logMessage({
+                        session: sessionObj.name,
+                        phone: senderPhone,
+                        incoming: body,
+                        reply: '[AutoPilot PAUSED: Admin Direct Mode Active]',
+                        status: 'MANUAL_TAKEOVER'
+                    });
+                    continue; // Skip automated AI reply! Admin can reply manually from dashboard
+                }
+
                 let replyText = '';
                 let mediaTypeSent = null;
 
@@ -580,29 +594,42 @@ async function startSession(sessionObj) {
 
                         mediaTypeSent = 'customPoster';
                         console.log(`[${sessionObj.id}] ✅ Sent personalized poster to ${senderPhone} (${voterName})`);
-                    } else if (isVideoQuery && fs.existsSync(videoPath)) {
-                        const alreadySent = userMemory.hasSentMedia(senderPhone, 'video');
-                        replyText = alreadySent
-                            ? "भाई जी, ये 3D वीडियो पहले भी भेजी थी, एक बार फिर देख लो और आगे शेयर जरूर करना! 😊🚩\n16 नवम्बर 2026 — बाबा अभय सिंह"
-                            : "सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!";
-
-                        await sendSafeMessage(sock, replyJid, {
-                            video: (aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL } : fs.readFileSync(videoPath),
-                            caption: replyText
-                        });
-
+                    } else if (isVideoQuery) {
+                        const video = mediaCatalog.getNextVideo(senderPhone);
+                        replyText = video.caption;
+                        if (video.remoteUrl) {
+                            await sendSafeMessage(sock, replyJid, {
+                                video: { url: video.remoteUrl },
+                                caption: replyText
+                            });
+                        } else if (video.localPath && fs.existsSync(video.localPath)) {
+                            await sendSafeMessage(sock, replyJid, {
+                                video: fs.readFileSync(video.localPath),
+                                caption: replyText
+                            });
+                        } else {
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                        }
                         mediaTypeSent = 'video';
-                        console.log(`[${sessionObj.id}] ✅ Sent video reel to ${senderPhone}`);
-                    } else if (isPhotoQuery && fs.existsSync(posterPath)) {
-                        replyText = "बाबा अभय सिंह (मोटी आंगली वाले बाबा) - ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें!";
-
-                        await sendSafeMessage(sock, replyJid, {
-                            image: (aiService.CONFIG?.media_urls?.campaign_poster || process.env.GITHUB_POSTER_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_poster || process.env.GITHUB_POSTER_URL } : fs.readFileSync(posterPath),
-                            caption: replyText
-                        });
-
-                        mediaTypeSent = 'poster';
-                        console.log(`[${sessionObj.id}] ✅ Sent poster image to ${senderPhone}`);
+                        console.log(`[${sessionObj.id}] ✅ Sent video (${video.id}) to ${senderPhone}`);
+                    } else if (isPhotoQuery) {
+                        const poster = mediaCatalog.getNextPoster(senderPhone, body);
+                        replyText = poster.caption;
+                        if (poster.localPath && fs.existsSync(poster.localPath)) {
+                            await sendSafeMessage(sock, replyJid, {
+                                image: fs.readFileSync(poster.localPath),
+                                caption: replyText
+                            });
+                        } else if (poster.remoteUrl) {
+                            await sendSafeMessage(sock, replyJid, {
+                                image: { url: poster.remoteUrl },
+                                caption: replyText
+                            });
+                        } else {
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                        }
+                        mediaTypeSent = poster.id.includes('demo') ? 'demoPoster' : 'poster';
+                        console.log(`[${sessionObj.id}] ✅ Sent poster (${poster.id}) to ${senderPhone}`);
                     } else if (matches && matches.length > 0) {
                         // High-precision voter match found! Send voter slip immediately!
                         replyText = voterEngine.formatSlipResponse(matches[0]);
@@ -904,6 +931,123 @@ app.get('/api/voters', (req, res) => {
 });
 
 // API: Get Single Voter History
+
+// API: Toggle AutoPilot for a voter
+app.post('/api/toggle-autopilot', (req, res) => {
+    const { phone, autoPilot } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    const state = userMemory.toggleAutoPilot(phone, autoPilot);
+    res.json({ success: true, phone, autoPilot: state });
+});
+
+// API: Update tags and sentiment for a voter
+app.post('/api/update-tags', (req, res) => {
+    const { phone, tags, sentiment } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    if (tags !== undefined) userMemory.updateTags(phone, tags);
+    if (sentiment !== undefined) userMemory.setSentiment(phone, sentiment);
+    const user = userMemory.getUser(phone);
+    res.json({ success: true, phone, tags: user.tags, sentiment: user.voterSentiment });
+});
+
+// API: Update voter intelligence notes (Family, Mahool, Baba)
+app.post('/api/update-notes', (req, res) => {
+    const { phone, familyNotes, mahoolNotes, babaNotes } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    const user = userMemory.updateNotes(phone, { familyNotes, mahoolNotes, babaNotes });
+    res.json({ success: true, phone, user });
+});
+
+// API: Toggle Demo Poster mode
+app.post('/api/toggle-demo-posters', (req, res) => {
+    const { enabled } = req.body;
+    const mode = mediaCatalog.setDemoMode(enabled);
+    res.json({ success: true, demoMode: mode });
+});
+
+// API: Get current demo poster status
+app.get('/api/demo-poster-status', (req, res) => {
+    res.json({ demoMode: mediaCatalog.isDemoMode() });
+});
+
+// API: Quick Actions for Chat (Demo Poster, Video, Slip, Ram Ram, Meeting, Baba Register)
+app.post('/api/quick-action', async (req, res) => {
+    try {
+        const { phone, action, lineId, customNote } = req.body;
+        if (!phone || !action) return res.status(400).json({ error: 'Phone and action are required' });
+
+        const cleanedPhone = userMemory.cleanPhone(phone);
+        const jid = `${cleanedPhone}@s.whatsapp.net`;
+        const active = getActiveSocket(lineId || 'sim_636');
+        if (!active) return res.status(503).json({ error: 'No WhatsApp line connected' });
+
+        const sock = active.sock;
+        const sessionName = 'Admin Quick Action';
+        let replyText = '';
+        let mediaType = null;
+
+        if (action === 'demo_poster') {
+            const poster = mediaCatalog.getDemoPoster();
+            replyText = poster.caption;
+            if (poster.localPath && fs.existsSync(poster.localPath)) {
+                await sock.sendMessage(jid, { image: fs.readFileSync(poster.localPath), caption: replyText });
+            } else if (poster.remoteUrl) {
+                await sock.sendMessage(jid, { image: { url: poster.remoteUrl }, caption: replyText });
+            } else {
+                await sock.sendMessage(jid, { text: replyText });
+            }
+            mediaType = 'demoPoster';
+        } else if (action === 'video') {
+            const video = mediaCatalog.getNextVideo(cleanedPhone);
+            replyText = video.caption;
+            if (video.remoteUrl) {
+                await sock.sendMessage(jid, { video: { url: video.remoteUrl }, caption: replyText });
+            } else if (video.localPath && fs.existsSync(video.localPath)) {
+                await sock.sendMessage(jid, { video: fs.readFileSync(video.localPath), caption: replyText });
+            } else {
+                await sock.sendMessage(jid, { text: replyText });
+            }
+            mediaType = 'video';
+        } else if (action === 'slip') {
+            const user = userMemory.getUser(cleanedPhone);
+            const matches = voterEngine.searchVoters(user.name || cleanedPhone, 1, user.ward);
+            if (matches && matches.length > 0) {
+                replyText = voterEngine.formatSlipResponse(matches[0]);
+            } else {
+                replyText = `राम राम जी! 🙏\nआपकी वोटर पर्ची निकालने के लिए कृपया अपना सही नाम या वोटर आईडी (EPIC) नंबर लिखकर भेजें।\nबाबा अभय सिंह डिजिटल सेवा केंद्र 🚩`;
+            }
+            await sock.sendMessage(jid, { text: replyText });
+            mediaType = 'voterSlip';
+        } else if (action === 'ramram') {
+            const user = userMemory.getUser(cleanedPhone);
+            replyText = `राम राम ${user.name ? user.name + ' जी' : 'भाई जी'}! 🙏🚩\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) के सेवा केंद्र से आपका बहुत-बहुत स्वागत है। बताइए आज परिवार में सब कुशल मंगल?`;
+            await sock.sendMessage(jid, { text: replyText });
+        } else if (action === 'meeting') {
+            replyText = mediaCatalog.getMeetingDetails();
+            await sock.sendMessage(jid, { text: replyText });
+        } else if (action === 'baba_register') {
+            const user = userMemory.getUser(cleanedPhone);
+            const entry = mediaCatalog.recordDirectComplaint(cleanedPhone, user.name, user.ward, customNote || 'विशेष समस्या/मुद्दा');
+            replyText = `भैया, आपकी यह बात मैंने सीधे बाबा अभय सिंह के प्राथमिकता रजिस्टर (क्रमांक: ${entry.id}) में नोट करवा दी है! 🚩\nबाबा अभय सिंह स्वयं इसे संज्ञान में लेंगे।`;
+            await sock.sendMessage(jid, { text: replyText });
+        }
+
+        userMemory.recordMessage(cleanedPhone, 'bot', replyText, mediaType, sessionName);
+        logMessage({
+            session: active.session.name,
+            phone: cleanedPhone,
+            incoming: `[Action: ${action}]`,
+            reply: replyText,
+            status: mediaType ? 'MEDIA_SENT' : 'DELIVERED'
+        });
+
+        res.json({ success: true, action, message: replyText });
+    } catch (e) {
+        console.error('Error in /api/quick-action:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/voter/:phone', (req, res) => {
     const phone = req.params.phone;
     const user = userMemory.getUser(phone);
@@ -1135,831 +1279,6 @@ app.get('/scan/:id', (req, res) => {
                 </div>
                 <script>setTimeout(() => window.location.reload(), 20000);</script>
             </div>
-        </body>
-        </html>
-    `);
-});
-
-// UI: Unified Mobile-First Master Dashboard
-app.get('/', (req, res) => {
-    let sessionPills = SESSIONS.map(s => {
-        let isConn = s.status === 'CONNECTED';
-        let color = isConn ? '#16a34a' : (s.status === 'QR_READY' ? '#eab308' : '#dc2626');
-        let scanLink = isConn 
-            ? `<div style="text-align:right;"><span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span><br><a href="/repair/${s.id}" style="color:#0284c7; font-size:11px; text-decoration:none; font-weight:700; margin-right:8px;">⚡ Repair</a><a href="/reset/${s.id}" onclick="return confirm('Clean reset and re-link ${s.name}?')" style="color:#64748b; font-size:11px; text-decoration:underline;">Re-link</a></div>`
-            : `<a href="/scan/${s.id}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:6px; font-size:11px; text-decoration:none; font-weight:700;">📲 SCAN QR</a>`;
-
-        return `
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; min-width: 260px; flex: 1;">
-                <div>
-                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">${s.name}</div>
-                    <div style="font-size: 12px; color: ${color}; font-weight: 600;">● ${s.status}</div>
-                </div>
-                <div>${scanLink}</div>
-            </div>
-        `;
-    }).join('');
-
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Sihali Khurd Campaign Assistant - Command Tower</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-            <style>
-                * { box-sizing: border-box; }
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #0f172a; }
-                .container { max-width: 1200px; margin: 0 auto; }
-                
-                /* Top Header */
-                .header-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: white; padding: 16px 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; gap: 15px; }
-                .brand h1 { margin: 0; font-size: 20px; color: #0f172a; }
-                .brand p { margin: 3px 0 0 0; font-size: 13px; color: #64748b; }
-                .top-actions { display: flex; gap: 10px; align-items: center; }
-                
-                /* Quick Add Box - Mobile Optimized */
-                .quick-box { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; border-radius: 14px; padding: 20px; margin-bottom: 25px; box-shadow: 0 8px 20px rgba(15,23,42,0.15); }
-                .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 15px; }
-                .form-group label { display: block; font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 5px; }
-                .input-field { width: 100%; padding: 11px 14px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 15px; outline: none; }
-                .input-field:focus { border-color: #3b82f6; }
-                .btn-add { background: #16a34a; color: white; border: none; padding: 13px 20px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 700; width: 100%; transition: background 0.2s; margin-top: 22px; }
-                .btn-add:hover { background: #15803d; }
-                .btn-add:active { transform: scale(0.98); }
-
-                /* Tab Navigation */
-                .tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; overflow-x: auto; }
-                .tab-btn { background: none; border: none; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer; border-radius: 8px; white-space: nowrap; }
-                .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-
-                /* Cards & Tables */
-                .card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
-                .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-                .table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
-                .table th { background: #f8fafc; padding: 12px; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
-                .table td { padding: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-                
-                /* Badges */
-                .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-block; }
-                .badge-success { background: #dcfce7; color: #15803d; }
-                .badge-warning { background: #fef3c7; color: #b45309; }
-                .badge-info { background: #e0f2fe; color: #0369a1; }
-                .badge-danger { background: #fee2e2; color: #b91c1c; }
-
-                /* Layout Grids */
-                .studio-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
-                .chat-view-container { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
-                @media (max-width: 850px) {
-                    .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
-                    .header-bar { flex-direction: column; align-items: flex-start; }
-                }
-                .voter-list { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
-                .voter-item { padding: 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s; }
-                .voter-item:hover, .voter-item.selected { background: #eff6ff; }
-                .chat-box { border: 1px solid #e2e8f0; border-radius: 8px; height: 500px; display: flex; flex-direction: column; background: #fafafa; }
-                .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-                .bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; word-wrap: break-word; }
-                .bubble-user { align-self: flex-start; background: white; border: 1px solid #e2e8f0; color: #0f172a; }
-                .bubble-bot { align-self: flex-end; background: #dcfce7; color: #064e3b; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <!-- Top Header -->
-                <div class="header-bar">
-                    <div class="brand">
-                        <h1>🏛️ सिहाली खुर्द चुनाव 2026 — बाबा अभय सिंह</h1>
-                        <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
-                    </div>
-                    <div class="top-actions">
-                        <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
-                        <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
-                    </div>
-                </div>
-
-                <!-- Session Status Pills -->
-                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
-                    ${sessionPills}
-                </div>
-
-                <!-- Quick-Add / Instant Connect Box (Field Mode) -->
-                <div class="quick-box">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <div>
-                            <h2 style="margin: 0; font-size: 18px; color: #f8fafc;">⚡ Field Mode: Instant Voter Connect</h2>
-                            <p style="margin: 4px 0 0 0; font-size: 13px; color: #94a3b8;">Meeting a villager? Type their number and tap send — their WhatsApp buzzes instantly!</p>
-                        </div>
-                        <span id="send-status" style="font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 20px; display: none;"></span>
-                    </div>
-
-                    <form id="quick-add-form" onsubmit="sendInstantMessage(event)">
-                        <div class="quick-grid">
-                            <div class="form-group">
-                                <label>Voter Mobile Number *</label>
-                                <input type="tel" id="v-phone" class="input-field" placeholder="e.g. 9829xxxxxx or 6367810227" required autocomplete="off">
-                            </div>
-                            <div class="form-group">
-                                <label>Voter Name (Optional)</label>
-                                <input type="text" id="v-name" class="input-field" placeholder="e.g. Ramesh Sharma" autocomplete="off">
-                            </div>
-                            <div class="form-group">
-                                <label>Sending WhatsApp Line</label>
-                                <select id="v-line" class="input-field">
-                                    <option value="sim_636">Primary Line (6367810227)</option>
-                                    <option value="baba_aux">Baba Aux Line (Secondary)</option>
-                                    <option value="canada">Canada Line (+1)</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Action Template</label>
-                                <select id="v-template" class="input-field" onchange="toggleCustomText(this.value)">
-                                    <option value="welcome">Instant Connect ("Aapko jod liya h...")</option>
-                                    <option value="custom_poster">Personalized Name Poster 🎨</option>
-                                    <option value="poster">Official Campaign Poster 📸</option>
-                                    <option value="video">3D Campaign Video Reel 📹</option>
-                                    <option value="slogan">Rotating Campaign Slogan 🚩</option>
-                                    <option value="custom">Custom Message...</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="grid-column: 1 / -1; display: none;" id="custom-text-group">
-                                <label>Custom WhatsApp Message</label>
-                                <input type="text" id="v-custom-text" class="input-field" placeholder="Type custom message to send...">
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn-add" id="btn-submit">
-                            📲 Jod Lo & Send WhatsApp Instantly
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Tabbed Navigation -->
-                <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Voter Chat</button>
-                    <button class="tab-btn" onclick="switchTab('diagnostics')">🛠️ Diagnostics & Self-Test Log</button>
-                    <button class="tab-btn" onclick="switchTab('studio')">🎨 Live Poster Studio</button>
-                    <button class="tab-btn" onclick="switchTab('playground')">🤖 AI Playground & Lab</button>
-                    <button class="tab-btn" onclick="switchTab('voters')">👤 Voter Memory (<span id="voter-count">0</span>)</button>
-                    <button class="tab-btn" onclick="switchTab('media')">📸 Media Bank & Uploader</button>
-                </div>
-
-                <!-- TAB 1: Live Chat Stream (Voters Only) -->
-                <div id="tab-feed" class="card tab-content">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                        <div>
-                            <h3 style="margin: 0; font-size: 16px;">💬 Real-Time Incoming & Outgoing Chats</h3>
-                            <span style="color: #64748b; font-size: 12px;">Real voters only • Auto-refreshing every 4s • Permanent Storage</span>
-                        </div>
-                        <button onclick="clearAllLogs()" style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
-                            🧹 Clear Feed
-                        </button>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 85px;">Time</th>
-                                    <th style="width: 140px;">Line</th>
-                                    <th style="width: 130px;">Voter</th>
-                                    <th>Incoming Message</th>
-                                    <th>Bot Reply Sent</th>
-                                    <th style="width: 105px;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="live-table-body">
-                                <tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- TAB: Diagnostics & Self-Test Log -->
-                <div id="tab-diagnostics" class="card tab-content" style="display: none;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                        <div>
-                            <h3 style="margin: 0; font-size: 16px;">🛠️ System Diagnostics & Self-Test Activity</h3>
-                            <span style="color: #64748b; font-size: 12px;">Self-messages, encryption alerts & line controls</span>
-                        </div>
-                        <button onclick="clearAllLogs()" style="background: #ef4444; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                            🧹 Clear Diagnostics Logs
-                        </button>
-                    </div>
-
-                    <!-- Line Cards Grid -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                        <!-- Primary 636 -->
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="font-size: 14px; color: #0f172a;">Primary Line (6367810227)</strong>
-                                <span class="badge ${SESSIONS[0].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
-                                    ● ${SESSIONS[0].status}
-                                </span>
-                            </div>
-                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
-                                Main election campaign line. If Meta FB Ads linked, disconnect Facebook in WhatsApp Business to restore direct Signal encryption.
-                            </div>
-                            <div style="display: flex; gap: 8px;">
-                                <a href="/scan/sim_636" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/repair/sim_636" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair (No QR)</a>
-                                <a href="/reset/sim_636" onclick="return confirm('Reset and generate fresh QR for Primary Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
-                            </div>
-                        </div>
-
-                        <!-- Baba Aux -->
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="font-size: 14px; color: #0f172a;">Baba Aux Line (Secondary)</strong>
-                                <span class="badge ${SESSIONS[1].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
-                                    ● ${SESSIONS[1].status}
-                                </span>
-                            </div>
-                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
-                                Dedicated secondary SIM (100% clean, no Meta Ads interference). Scan any standard WhatsApp here!
-                            </div>
-                            <div style="display: flex; gap: 8px;">
-                                <a href="/scan/baba_aux" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/repair/baba_aux" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
-                                <a href="/reset/baba_aux" onclick="return confirm('Reset Baba Aux Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
-                            </div>
-                        </div>
-
-                        <!-- Canada Line -->
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <strong style="font-size: 14px; color: #0f172a;">Canada Line (+1 Virtual)</strong>
-                                <span class="badge ${SESSIONS[2].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
-                                    ● ${SESSIONS[2].status}
-                                </span>
-                            </div>
-                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
-                                International virtual line for high-capacity broadcasts and auxiliary campaign pings.
-                            </div>
-                            <div style="display: flex; gap: 8px;">
-                                <a href="/scan/canada" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
-                                <a href="/repair/canada" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
-                                <a href="/reset/canada" onclick="return confirm('Reset Canada Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Direct Send Test Tool -->
-                    <div style="background: #f1f5f9; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
-                        <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 8px;">🧪 Send Direct WhatsApp Test Message</strong>
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <select id="diag-line" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
-                                <option value="sim_636">Primary (6367810227)</option>
-                                <option value="baba_aux">Baba Aux Line</option>
-                                <option value="canada">Canada Line</option>
-                            </select>
-                            <input type="tel" id="diag-phone" placeholder="Enter recipient mobile (e.g. 9876543210)" class="input-field" style="width: 240px; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
-                            <input type="text" id="diag-msg" placeholder="Test message text..." class="input-field" style="flex: 1; min-width: 200px; background: white; color: #0f172a; border: 1px solid #cbd5e1;" value="राम राम भाई जी! यह बाबा अभय सिंह सेवा केंद्र का लाइव टेस्ट मैसेज है। 🚩">
-                            <button onclick="sendDiagnosticTest()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                                🚀 Send Test
-                            </button>
-                        </div>
-                        <div id="diag-send-status" style="margin-top: 8px; font-size: 12px; font-weight: 600;"></div>
-                    </div>
-
-                    <!-- Diagnostics Log Table -->
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 85px;">Time</th>
-                                    <th style="width: 140px;">Line</th>
-                                    <th style="width: 130px;">Sender / Type</th>
-                                    <th>Payload / Log Summary</th>
-                                    <th style="width: 110px;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="diag-table-body">
-                                <tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- TAB 2: Live Poster Studio (Personalized Status Posters) -->
-                <div id="tab-studio" class="card tab-content" style="display: none;">
-                    <h3 style="margin-top:0;">🎨 Dynamic Voter Status Poster Studio</h3>
-                    <p style="color: #64748b; font-size: 14px;">Generate personalized high-resolution campaign posters with voter names on the fly. Ready for WhatsApp DP and Status stories!</p>
-                    
-                    <div class="studio-grid" style="margin-top: 20px;">
-                        <div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label style="color:#334155;">Voter / Supporter Name</label>
-                                    <input type="text" id="p-name" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सत्यनारायण शर्मा" placeholder="Enter voter name">
-                                </div>
-                                <div class="form-group">
-                                    <label style="color:#334155;">Poster Aspect Ratio</label>
-                                    <select id="p-aspect" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;">
-                                        <option value="9:16">9:16 (WhatsApp Status Story - 1080x1920)</option>
-                                        <option value="1:1" selected>1:1 (WhatsApp Profile DP - 1080x1080)</option>
-                                        <option value="3:4">3:4 (Portrait Feed Card - 1080x1440)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group" style="margin-top: 15px;">
-                                <label style="color:#334155;">Slogan</label>
-                                <input type="text" id="p-slogan" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सच्चा विकास, ईमानदार नेतृत्व 🚩">
-                            </div>
-                            <div style="margin-top: 20px; display: flex; gap: 10px;">
-                                <button onclick="generatePosterPreview()" style="background:#2563eb; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:700; cursor:pointer;">
-                                    ✨ Generate & Preview Poster
-                                </button>
-                                <button onclick="downloadPoster()" id="btn-download" style="background:#0f172a; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:700; cursor:pointer; display:none;">
-                                    ⬇️ Download High-Res
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Live Preview Box -->
-                        <div style="text-align: center; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; background: #f8fafc;">
-                            <div style="font-weight: 700; font-size: 13px; color: #64748b; margin-bottom: 10px;">Live Preview</div>
-                            <img id="poster-preview-img" src="/media/poster.jpg" style="max-height: 380px; width: auto; max-width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 3: AI Playground & Testing Lab -->
-                <div id="tab-playground" class="card tab-content" style="display: none;">
-                    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px;">
-                        <div>
-                            <h3 style="margin-top:0;">🤖 AI Assistant Testing Lab</h3>
-                            <p style="color: #64748b; font-size: 14px;">Test conversations with Baba Abhay Singh's AI assistant in real-time before sending to voters.</p>
-                            
-                            <div style="border: 1px solid #e2e8f0; border-radius: 10px; height: 350px; display: flex; flex-direction: column; background: #fafafa; margin-top: 15px;">
-                                <div id="ai-chat-ui" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:10px;">
-                                    <div class="bubble bubble-bot">
-                                        राम राम भाई जी! 🙏 मैं बाबा अभय सिंह सेवा केंद्र का डिजिटल सहायक हूँ। बताइए, कैसे सेवा करूँ?
-                                    </div>
-                                </div>
-                                <div style="padding: 10px; background: white; border-top: 1px solid #e2e8f0; display:flex; gap:8px;">
-                                    <input type="text" id="ai-test-input" placeholder="Type query e.g. 'kon ho bhai tum' or 'daaru baatega kya'..." class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" onkeydown="if(event.key==='Enter') sendAITest()">
-                                    <button onclick="sendAITest()" style="background:#2563eb; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Send</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Active Knowledge & Rules Fact Sheet -->
-                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; background: #f8fafc; font-size: 13px;">
-                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">🧠 Active Persona & Rules:</div>
-                            <ul style="padding-left: 18px; margin: 0 0 15px 0; color: #334155; line-height: 1.5;">
-                                <li><b>Identity:</b> Baba Abhay Singh Seva Kendra digital assistant.</li>
-                                <li><b>Opposition Policy:</b> Never name opposite candidates directly. Slay bribing & liquor with sweet village satire.</li>
-                                <li><b>Budget Rule:</b> Zero rupees / tender amounts mentioned.</li>
-                                <li><b>Length:</b> 2-3 punchy, charming lines max.</li>
-                            </ul>
-                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">💡 Quick Test Buttons:</div>
-                            <div style="display:flex; flex-direction:column; gap:6px;">
-                                <button onclick="quickTestQuery('kon ho bhai tum')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">"kon ho bhai tum"</button>
-                                <button onclick="quickTestQuery('virodhi bol raha h daaru aur paise baatega')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"virodhi daaru baatega"</button>
-                                <button onclick="quickTestQuery('baba ne pichle 5 saal me kya kaam kiya')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"baba ne kya kaam kiya"</button>
-                                <button onclick="quickTestQuery('ek badhiya slogan sunao')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"ek slogan sunao"</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 4: Voter Memory & Chat History Inspector -->
-                <div id="tab-voters" class="card tab-content" style="display: none;">
-                    <div class="chat-view-container">
-                        <div>
-                            <input type="text" id="voter-search" placeholder="🔍 Search voter by name or phone..." class="input-field" style="color: #0f172a; background: white; border: 1px solid #cbd5e1; margin-bottom: 10px;" oninput="filterVoters(this.value)">
-                            <div class="voter-list" id="voter-list-ui">
-                                <div style="padding: 20px; text-align: center; color: #94a3b8;">Loading voters...</div>
-                            </div>
-                        </div>
-                        <div class="chat-box">
-                            <div id="chat-header" style="padding: 12px 16px; background: white; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 14px; color: #1e293b;">
-                                Select a voter to view their conversation
-                            </div>
-                            <div class="chat-messages" id="chat-messages-ui">
-                                <div style="text-align: center; color: #94a3b8; margin-top: 150px;">Select a person from the left panel to see full chat history & media tracking.</div>
-                            </div>
-                            <div id="chat-input-bar" style="padding: 10px; background: white; border-top: 1px solid #e2e8f0; display: none;">
-                                <div style="display: flex; gap: 8px;">
-                                    <input type="text" id="chat-direct-text" placeholder="Type a message to reply directly..." class="input-field" style="color:#0f172a; background:#f8fafc; border:1px solid #cbd5e1;">
-                                    <button onclick="sendDirectReply()" style="background:#2563eb; color:white; border:none; padding:10px 18px; border-radius:8px; font-weight:700; cursor:pointer;">Send</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- TAB 5: Media Bank & Direct Uploader -->
-                <div id="tab-media" class="card tab-content" style="display: none;">
-                    <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
-                    <p style="color: #64748b; font-size: 14px;">Upload new campaign photos or videos directly from your mobile gallery or PC. Updates the bot instantly!</p>
-                    
-                    <!-- Direct Uploader Box -->
-                    <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center;">
-                        <h4 style="margin: 0 0 10px 0;">📤 Upload Media from Device</h4>
-                        <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap;">
-                            <input type="file" id="media-file-input" accept="image/*,video/mp4" style="font-size: 14px;">
-                            <select id="media-target-select" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
-                                <option value="poster.jpg">Campaign Poster (poster.jpg)</option>
-                                <option value="campaign_reel.mp4">Campaign Video Reel (campaign_reel.mp4)</option>
-                            </select>
-                            <button onclick="uploadMediaFile()" style="background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                                ⬆️ Upload to Cloud
-                            </button>
-                        </div>
-                        <div id="upload-status" style="margin-top: 10px; font-weight: 600; font-size: 13px;"></div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; text-align: center;">
-                            <img src="/media/poster.jpg?t=${Date.now()}" id="poster-asset-img" style="max-height: 200px; border-radius: 8px; margin-bottom: 10px;" />
-                            <div style="font-weight: 700;">Official Campaign Poster</div>
-                            <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "photo", "poster", "tasveer"</div>
-                            <a href="/media/poster.jpg" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Open High-Res Poster →</a>
-                        </div>
-                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; text-align: center;">
-                            <div style="height: 200px; display: flex; align-items:center; justify-content:center; background:#0f172a; border-radius:8px; margin-bottom: 10px; color:white; font-size: 32px;">
-                                📹
-                            </div>
-                            <div style="font-weight: 700;">3D Campaign Video Reel (MP4)</div>
-                            <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "video", "reel"</div>
-                            <a href="/media/campaign_reel.mp4" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Play Campaign Video Reel →</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Dashboard JavaScript -->
-            <script>
-                let allVoters = [];
-                let selectedVoterPhone = null;
-                let currentPosterBlob = null;
-                let aiHistory = [];
-
-                function switchTab(tabId) {
-                    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-                    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-                    document.getElementById('tab-' + tabId).style.display = 'block';
-                    event.target.classList.add('active');
-                    if (tabId === 'voters') loadVoters();
-                }
-
-                function toggleCustomText(val) {
-                    document.getElementById('custom-text-group').style.display = val === 'custom' ? 'block' : 'none';
-                }
-
-                // Send Instant WhatsApp Message from Field Mode Form
-                async function sendInstantMessage(e) {
-                    e.preventDefault();
-                    const phone = document.getElementById('v-phone').value;
-                    const name = document.getElementById('v-name').value;
-                    const lineId = document.getElementById('v-line').value;
-                    const template = document.getElementById('v-template').value;
-                    const customText = document.getElementById('v-custom-text').value;
-                    const statusEl = document.getElementById('send-status');
-                    const btn = document.getElementById('btn-submit');
-
-                    btn.disabled = true;
-                    btn.innerText = '⏳ Sending WhatsApp Message...';
-
-                    try {
-                        const res = await fetch('/api/send-message', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone, name, template, customText, lineId })
-                        });
-                        const data = await res.json();
-
-                        if (res.ok) {
-                            statusEl.style.display = 'inline-block';
-                            statusEl.style.background = '#dcfce7';
-                            statusEl.style.color = '#15803d';
-                            statusEl.innerText = '✅ Buzz! Sent to +' + data.phone + ' via ' + data.line;
-                            document.getElementById('v-phone').value = '';
-                            document.getElementById('v-name').value = '';
-                            document.getElementById('v-custom-text').value = '';
-                            setTimeout(() => { statusEl.style.display = 'none'; }, 6000);
-                            updateLiveFeed();
-                        } else {
-                            alert('Failed to send: ' + (data.error || 'Unknown error'));
-                        }
-                    } catch (err) {
-                        alert('Error communicating with server: ' + err.message);
-                    } finally {
-                        btn.disabled = false;
-                        btn.innerText = '📲 Jod Lo & Send WhatsApp Instantly';
-                    }
-                }
-
-                // Poster Studio Generator
-                async function generatePosterPreview() {
-                    const name = document.getElementById('p-name').value;
-                    const aspect = document.getElementById('p-aspect').value;
-                    const slogan = document.getElementById('p-slogan').value;
-
-                    try {
-                        const res = await fetch('/api/generate-poster', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name, aspect, customSlogan: slogan })
-                        });
-                        const blob = await res.blob();
-                        currentPosterBlob = blob;
-                        const url = URL.createObjectURL(blob);
-                        document.getElementById('poster-preview-img').src = url;
-                        document.getElementById('btn-download').style.display = 'inline-block';
-                    } catch (e) {
-                        alert('Error generating poster: ' + e.message);
-                    }
-                }
-
-                function downloadPoster() {
-                    if (!currentPosterBlob) return;
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(currentPosterBlob);
-                    a.download = 'Sihali_Khurd_Poster_' + Date.now() + '.jpg';
-                    a.click();
-                }
-
-                // Upload Media from Device
-                async function uploadMediaFile() {
-                    const fileInput = document.getElementById('media-file-input');
-                    const targetSelect = document.getElementById('media-target-select');
-                    const statusEl = document.getElementById('upload-status');
-
-                    if (!fileInput.files || fileInput.files.length === 0) {
-                        alert('Please select a file to upload!');
-                        return;
-                    }
-
-                    const file = fileInput.files[0];
-                    statusEl.innerText = '⏳ Uploading ' + file.name + '... Please wait.';
-                    statusEl.style.color = '#2563eb';
-
-                    const reader = new FileReader();
-                    reader.onload = async function() {
-                        try {
-                            const res = await fetch('/api/upload-media', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    target: targetSelect.value,
-                                    base64Data: reader.result
-                                })
-                            });
-                            const data = await res.json();
-                            if (res.ok) {
-                                statusEl.innerText = '✅ ' + data.message;
-                                statusEl.style.color = '#16a34a';
-                                if (targetSelect.value === 'poster.jpg') {
-                                    document.getElementById('poster-asset-img').src = '/media/poster.jpg?t=' + Date.now();
-                                }
-                            } else {
-                                statusEl.innerText = '❌ Error: ' + data.error;
-                                statusEl.style.color = '#dc2626';
-                            }
-                        } catch (err) {
-                            statusEl.innerText = '❌ Upload failed: ' + err.message;
-                            statusEl.style.color = '#dc2626';
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                }
-
-                // AI Playground
-                async function sendAITest() {
-                    const input = document.getElementById('ai-test-input');
-                    const text = input.value.trim();
-                    if (!text) return;
-
-                    input.value = '';
-                    const chatUi = document.getElementById('ai-chat-ui');
-                    chatUi.innerHTML += \`<div class="bubble bubble-user">\${text}</div>\`;
-                    chatUi.scrollTop = chatUi.scrollHeight;
-
-                    aiHistory.push({ role: 'user', content: text });
-
-                    try {
-                        const res = await fetch('/api/test-ai', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ message: text, history: aiHistory })
-                        });
-                        const data = await res.json();
-                        aiHistory.push({ role: 'assistant', content: data.reply });
-
-                        chatUi.innerHTML += \`
-                            <div class="bubble bubble-bot">
-                                \${data.reply}
-                            </div>
-                        \`;
-                        chatUi.scrollTop = chatUi.scrollHeight;
-                    } catch (e) {
-                        chatUi.innerHTML += \`<div class="bubble bubble-bot" style="color:red;">Error: \${e.message}</div>\`;
-                    }
-                }
-
-                function quickTestQuery(q) {
-                    document.getElementById('ai-test-input').value = q;
-                    sendAITest();
-                }
-
-                // Update Live Voter Chat Feed (Voters Only)
-                async function updateLiveFeed() {
-                    try {
-                        const res = await fetch('/api/messages');
-                        const messages = await res.json();
-                        const tbody = document.getElementById('live-table-body');
-                        if (!messages || messages.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>';
-                            return;
-                        }
-
-                        tbody.innerHTML = messages.map(m => {
-                            let badgeClass = 'badge-success';
-                            if (m.status === 'HANDSHAKE_SENT') badgeClass = 'badge-info';
-                            else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
-                            else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
-
-                            return \`
-                                <tr>
-                                    <td style="color: #64748b; font-size: 12px;">\${m.timestamp}</td>
-                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${m.session}</span></td>
-                                    <td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+\${m.phone}</span></td>
-                                    <td style="font-weight: 500; color: #0f172a;">\${m.incoming}</td>
-                                    <td style="color: #334155; font-size: 13px; white-space: pre-wrap;">\${m.reply}</td>
-                                    <td><span class="badge \${badgeClass}">● \${m.status}</span></td>
-                                </tr>
-                            \`;
-                        }).join('');
-                    } catch (e) {}
-                }
-                setInterval(updateLiveFeed, 4000);
-                updateLiveFeed();
-
-                // Update Diagnostics Feed
-                async function updateDiagnostics() {
-                    try {
-                        const res = await fetch('/api/diagnostics');
-                        const data = await res.json();
-                        const tbody = document.getElementById('diag-table-body');
-                        if (!data || !data.feed || data.feed.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>';
-                            return;
-                        }
-
-                        tbody.innerHTML = data.feed.map(d => {
-                            let badgeClass = 'badge-warning';
-                            if (d.status === 'SELF_DEVICE') badgeClass = 'badge-info';
-                            else if (d.status === 'BAD_MAC') badgeClass = 'badge-danger';
-
-                            return \`
-                                <tr>
-                                    <td style="color: #64748b; font-size: 12px;">\${d.timestamp}</td>
-                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${d.session}</span></td>
-                                    <td><span style="color: #475569; font-weight: 700; font-size: 12px;">\${d.phone}</span></td>
-                                    <td style="color: #334155; font-size: 12px;"><b>\${d.incoming}</b><br><span style="color:#64748b;">\${d.reply}</span></td>
-                                    <td><span class="badge \${badgeClass}">● \${d.status}</span></td>
-                                </tr>
-                            \`;
-                        }).join('');
-                    } catch (e) {}
-                }
-                setInterval(updateDiagnostics, 4000);
-                updateDiagnostics();
-
-                // Clear All Logs
-                async function clearAllLogs() {
-                    if (!confirm('Are you sure you want to clear chat and diagnostic logs?')) return;
-                    try {
-                        await fetch('/api/clear-logs', { method: 'POST' });
-                        updateLiveFeed();
-                        updateDiagnostics();
-                    } catch (e) {
-                        alert('Failed to clear logs: ' + e.message);
-                    }
-                }
-
-                // Send Diagnostic Test Message
-                async function sendDiagnosticTest() {
-                    const lineId = document.getElementById('diag-line').value;
-                    const phone = document.getElementById('diag-phone').value.trim();
-                    const message = document.getElementById('diag-msg').value.trim();
-                    const statusEl = document.getElementById('diag-send-status');
-
-                    if (!phone || !message) {
-                        alert('Please enter recipient phone number and message.');
-                        return;
-                    }
-
-                    statusEl.innerText = '⏳ Sending test WhatsApp...';
-                    statusEl.style.color = '#2563eb';
-
-                    try {
-                        const res = await fetch('/api/test-send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sessionId: lineId, phone, message })
-                        });
-                        const data = await res.json();
-                        if (res.ok) {
-                            statusEl.innerText = '✅ ' + data.message;
-                            statusEl.style.color = '#16a34a';
-                            updateLiveFeed();
-                        } else {
-                            statusEl.innerText = '❌ ' + (data.error || 'Failed');
-                            statusEl.style.color = '#dc2626';
-                        }
-                    } catch (e) {
-                        statusEl.innerText = '❌ Error: ' + e.message;
-                        statusEl.style.color = '#dc2626';
-                    }
-                }
-
-                // Load Voters and Memory
-                async function loadVoters() {
-                    try {
-                        const res = await fetch('/api/voters');
-                        allVoters = await res.json();
-                        document.getElementById('voter-count').innerText = allVoters.length;
-                        renderVoterList(allVoters);
-                    } catch (e) {}
-                }
-
-                function renderVoterList(voters) {
-                    const listUi = document.getElementById('voter-list-ui');
-                    if (voters.length === 0) {
-                        listUi.innerHTML = '<div style="padding: 20px; text-align: center; color: #94a3b8;">No voters recorded yet.</div>';
-                        return;
-                    }
-                    listUi.innerHTML = voters.map(v => \`
-                        <div class="voter-item \${selectedVoterPhone === v.phone ? 'selected' : ''}" onclick="selectVoter('\${v.phone}')">
-                            <div style="font-weight: 700; font-size: 14px; color: #0f172a;">\${v.name || 'Unnamed Voter'}</div>
-                            <div style="font-size: 12px; color: #2563eb;">+\${v.phone}</div>
-                            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-                                \${v.sentMedia.poster ? '📸 Poster ' : ''}
-                                \${v.sentMedia.video ? '📹 Video ' : ''}
-                                \${v.sentMedia.voterSlip ? '🎫 Slip ' : ''}
-                                • \${v.interactionCount} chats
-                            </div>
-                        </div>
-                    \`).join('');
-                }
-
-                function filterVoters(q) {
-                    const lower = q.toLowerCase();
-                    const filtered = allVoters.filter(v => (v.name && v.name.toLowerCase().includes(lower)) || v.phone.includes(lower));
-                    renderVoterList(filtered);
-                }
-
-                async function selectVoter(phone) {
-                    selectedVoterPhone = phone;
-                    renderVoterList(allVoters);
-                    document.getElementById('chat-input-bar').style.display = 'block';
-
-                    try {
-                        const res = await fetch('/api/voter/' + phone);
-                        const user = await res.json();
-                        document.getElementById('chat-header').innerHTML = \`
-                            <span>👤 \${user.name || 'Voter'} (+ \${user.phone})</span>
-                            <span style="float: right; font-size: 12px; font-weight: normal; color: #64748b;">
-                                \${user.sentMedia.poster ? '📸 Poster Sent | ' : ''}
-                                \${user.sentMedia.video ? '📹 Video Sent | ' : ''}
-                                \${user.sentMedia.voterSlip ? '🎫 Slip Sent' : ''}
-                            </span>
-                        \`;
-
-                        const messagesUi = document.getElementById('chat-messages-ui');
-                        if (!user.history || user.history.length === 0) {
-                            messagesUi.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top:50px;">No message history recorded yet.</div>';
-                            return;
-                        }
-
-                        messagesUi.innerHTML = user.history.map(h => \`
-                            <div class="bubble \${h.role === 'user' ? 'bubble-user' : 'bubble-bot'}">
-                                <div style="font-size: 10px; color: #64748b; margin-bottom: 2px;">\${h.role === 'user' ? 'Voter' : 'Baba Bot'} • \${h.time}</div>
-                                \${h.text}
-                            </div>
-                        \`).join('');
-                        messagesUi.scrollTop = messagesUi.scrollHeight;
-                    } catch (e) {}
-                }
-
-                async function sendDirectReply() {
-                    if (!selectedVoterPhone) return;
-                    const input = document.getElementById('chat-direct-text');
-                    const text = input.value.trim();
-                    if (!text) return;
-
-                    input.value = '';
-                    await fetch('/api/send-message', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ phone: selectedVoterPhone, template: 'custom', customText: text })
-                    });
-                    setTimeout(() => selectVoter(selectedVoterPhone), 800);
-                }
-            </script>
         </body>
         </html>
     `);
