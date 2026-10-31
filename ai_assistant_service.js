@@ -14,17 +14,16 @@ try {
 const DEFAULT_NVIDIA_KEY = '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';
 
 const SYSTEM_PROMPT = `
-आप ग्राम पंचायत सिहाली खुर्द के सरपंच पद प्रत्याशी 'बाबा अभय सिंह (मोटी आंगली वाले बाबा)' के डिजिटल सहायक हैं।
+आप ग्राम पंचायत सिहाली खुर्द के सरपंच पद प्रत्याशी 'बाबा अभय सिंह (मोटी आंगली वाले बाबा)' के डिजिटल चुनाव प्रचारक व सेवा सहायक हैं।
 
 🎯 नियम (Strict Guidelines):
 1. पहचान (Identity):
-   यदि कोई पूछे "कौन हो भाई तुम" या "किसके आदमी हो":
    सदा विनम्रता व आत्मीयता से कहें:
    "राम राम भाई जी! 🙏 मैं बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र का डिजिटल सहायक हूँ। बाबा जी के 5 साल के विकास कार्यों की जानकारी, समस्याओं और आपकी वोटर पर्ची में मदद के लिए यहाँ 24 घंटे उपलब्ध हूँ। बताइए, क्या सेवा करूँ? 😊🚩"
 
 2. विरोधी प्रत्याशी व प्रलोभन (Opposition & Bribe Defense):
    ⚠️ नियम: किसी भी विरोधी प्रत्याशी का व्यक्तिगत नाम कभी नहीं लेना।
-   लेकिन उनकी दारू, पैसे, मुर्गे और अचानक चुनाव में उमड़े झूठे प्रेम पर स्वतंत्र, तीखा व मीठा कटाक्ष करें:
+   लेकिन उनकी दारू, पैसे, मुर्गे और अचानक चुनाव में उमड़े झूठे प्रेम पर तीखा व मीठा कटाक्ष करें:
    "अरे भाई, 5 दिन की दारू-मुर्गे या दिखावे से 5 साल का गांव थोड़े ही संवरता है! चुनाव आते ही जो लोग हाथ जोड़ने और प्रलोभन बांटने लग जाते हैं, वे 5 साल फिर दिखते भी नहीं। हमें दिखावे वाले नहीं, अपना वही ईमानदार बाबा चाहिए जो आधी रात को भी सुख-दुख में खूंटा गाड़ कर साथ खड़ा मिले! बाकी आप खुद समझदार हो! 😊🚩"
 
 3. भाषा व मर्यादा (Zero Offensive, Grounded Village Tone):
@@ -43,7 +42,37 @@ ${JSON.stringify(KB, null, 2)}
 
 // Fast Local Village Answer Engine (<0.001s, 100% Reliable Offline Fallback)
 function getFastLocalAnswer(query, phone = null) {
-    const q = (query || '').toLowerCase();
+    const q = (query || '').toLowerCase().trim();
+
+    // Prince Recognition
+    if (q.includes('prince')) {
+        return (
+            "राम राम प्रिंस भाई जी! 🙏\n" +
+            "आप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\n" +
+            "सिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\n" +
+            "बताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?"
+        );
+    }
+
+    // Health / Wellbeing / How are you
+    if (q.includes('haal') || q.includes('hal') || q.includes('kaise ho') || q.includes('kasa') || q.includes('kaisa') || q.includes('kese ho')) {
+        return "राम राम भाई जी! 🙏 बाबा जी के आशीर्वाद और आप सभी के प्यार-स्नेह से सब बढ़िया है। आप बताओ भाई जी, घर-परिवार में सब कुशल मंगल? बताइए क्या सेवा करूँ! 😊🚩";
+    }
+
+    // Bot status / Working check
+    if (q.includes('working') || q.includes('chal raha') || q.includes('online')) {
+        return "राम राम भाई जी! 🙏 हाँ जी, बाबा अभय सिंह डिजिटल सेवा केंद्र 24 घंटे बिल्कुल लाइव व एक्टिव है! अपनी या परिवार की वोटर पर्ची देखने के लिए नाम लिखकर भेजें। 🚩";
+    }
+
+    // Help / Seva
+    if (q.includes('help') || q.includes('madad') || q.includes('मदद') || q.includes('सेवा')) {
+        return (
+            "राम राम भाई जी! 🙏 बाबा अभय सिंह सेवा केंद्र आपकी पूरी सेवा में हाजिर है:\n" +
+            "• वोटर पर्ची देखने के लिए अपना नाम भेजें\n" +
+            "• विकास कार्यों की जानकारी के लिए 'काम' लिखें\n" +
+            "• अपने नाम का स्टेटस पोस्टर बनाने के लिए 'पोस्टर बनाओ' लिखें! 🚩"
+        );
+    }
 
     // Identity / Who are you queries
     if (q.includes('kon ho') || q.includes('kaun ho') || q.includes('कौन हो') || q.includes('kiska bot') || q.includes('kiske admi') || q.includes('who are you')) {
@@ -98,15 +127,6 @@ function getFastLocalAnswer(query, phone = null) {
         );
     }
 
-    // Repeat user greeting check
-    const user = phone ? userMemory.getUser(phone) : null;
-    if (user && user.interactionCount > 1) {
-        return (
-            "राम राम भाई जी! 🙏\n" +
-            "बताइए कैसे सेवा करूँ? अपनी वोटर पर्ची चेक करनी हो तो अपना नाम या वार्ड नंबर लिख कर भेजें! 🚩"
-        );
-    }
-
     // Default warm welcome
     return (
         "राम राम भाई जी! 🙏\n" +
@@ -137,27 +157,40 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
                 'Authorization': `Bearer ${key}`
             },
             body: JSON.stringify({
-                model: 'openai/gpt-oss-20b',
+                model: 'meta/llama-3.1-8b-instruct',
                 messages: messages,
                 max_tokens: 350,
-                temperature: 0.4
+                temperature: 0.6
             })
         });
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+            console.error('NVIDIA AI API Error:', response.status);
             return getFastLocalAnswer(userMessage, phone);
         }
 
         const data = await response.json();
-        const reply = (data.choices?.[0]?.message?.content || '').trim() ||
-                      (data.choices?.[0]?.message?.reasoning || '').trim();
+        const reply = data.choices?.[0]?.message?.content?.trim();
 
-        return reply || getFastLocalAnswer(userMessage, phone);
-    } catch (error) {
+        // Safety filter check: If AI gave a canned rejection, use local smart answer
+        if (
+            !reply ||
+            reply.toLowerCase().includes("i'm sorry") ||
+            reply.toLowerCase().includes("cannot help") ||
+            reply.toLowerCase().includes("can't help") ||
+            reply.toLowerCase().includes("cannot fulfill") ||
+            reply.toLowerCase().includes("as an ai")
+        ) {
+            console.log('[AI Assistant] Filtered canned rejection, using local smart engine.');
+            return getFastLocalAnswer(userMessage, phone);
+        }
+
+        return reply;
+    } catch (err) {
         clearTimeout(timeoutId);
-        // Instant graceful fallback
+        console.warn('AI Service timed out or failed, using local fast engine:', err.message);
         return getFastLocalAnswer(userMessage, phone);
     }
 }

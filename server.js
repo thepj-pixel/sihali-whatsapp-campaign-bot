@@ -529,11 +529,25 @@ async function startSession(sessionObj) {
 
                         mediaTypeSent = 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster image to ${senderPhone}`);
-                    } else if (matches && matches.length > 0 && isParchiQuery) {
+                    } else if (matches && matches.length > 0) {
+                        // High-precision voter match found! Send voter slip immediately!
                         replyText = voterEngine.formatSlipResponse(matches[0]);
+                        if (matches.length > 1) {
+                            replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
+                        }
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         mediaTypeSent = 'voterSlip';
-                        console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone}`);
+                        console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
+                    } else if (voterEngine.isLikelyNameOrVoterQuery(body)) {
+                        const qName = voterEngine.extractNameFromQuery(body);
+                        const lowerBody = body.toLowerCase();
+                        if (lowerBody.includes('prince') || (qName && qName.toLowerCase().includes('prince'))) {
+                            replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
+                        } else {
+                            replyText = `राम राम भाई जी! 🙏\nहमने सिहाली खुर्द की 3,435 वोटरों की लिस्ट में "${qName || body}" खोजा, लेकिन इस नाम से पर्ची नहीं मिली।\n\n👉 कृपया अपने पिता/पति का नाम या वार्ड नंबर साथ में लिखकर भेजें, जैसे:\n"रमेश वार्ड 2" या "सुरेश सुपुत्र धर्मपाल"\n\nबाबा अभय सिंह सेवा केंद्र आपकी पूरी सहायता करेगा! 🚩`;
+                        }
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        console.log(`[${sessionObj.id}] ✅ Handled name/voter query for ${senderPhone} (${qName || body})`);
                     } else {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).map(h => ({
