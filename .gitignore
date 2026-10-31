@@ -1,4 +1,5 @@
 node_modules/
 sessions_auth/
 .env
+api_config.json
 *.log

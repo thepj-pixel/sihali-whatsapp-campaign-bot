@@ -325,28 +325,67 @@ function getFamilyMembers(voter) {
     return family;
 }
 
+function getBoothDetails(ward) {
+    const w = parseInt(ward);
+    if (w <= 3) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 95 - कमरा नं 1)';
+    if (w <= 6) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 96 - कमरा नं 2)';
+    if (w <= 8) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 97 - कमरा नं 3)';
+    return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 98 - कमरा नं 4)';
+}
+
+function getVoterById(id) {
+    if (!id) return null;
+    const clean = id.trim().toUpperCase();
+    return VOTERS.find(v => (v.id && v.id.toUpperCase() === clean) || (v.epic && v.epic.toUpperCase() === clean));
+}
+
+function getVoterByWardAndSr(ward, srNo) {
+    return VOTERS.find(v => v.ward === parseInt(ward) && v.sr_no === parseInt(srNo));
+}
+
+function getBoothDetails(ward) {
+    const w = parseInt(ward);
+    if (w <= 3) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 95 - कमरा नं 1)';
+    if (w <= 6) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 96 - कमरा नं 2)';
+    if (w <= 8) return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 97 - कमरा नं 3)';
+    return 'रा.उ.मा.वि. सिहाली खुर्द (बूथ 98 - कमरा नं 4)';
+}
+
+function getVoterById(id) {
+    if (!id) return null;
+    const clean = id.trim().toUpperCase();
+    return VOTERS.find(v => (v.id && v.id.toUpperCase() === clean) || (v.epic && v.epic.toUpperCase() === clean));
+}
+
+function getVoterByWardAndSr(ward, srNo) {
+    return VOTERS.find(v => v.ward === parseInt(ward) && v.sr_no === parseInt(srNo));
+}
+
 function formatSlipResponse(voter) {
     const family = getFamilyMembers(voter);
 
-    const name = voter.name_hi || voter.name_raw || 'मतदाता';
-    const relType = voter.rel_type || 'पिता';
-    const relName = voter.rel_name_hi || '—';
-    const ward = voter.ward || '—';
-    const srNo = voter.sr_no || '—';
-    const epic = voter.epic || 'जल्द जारी होगा';
-    const houseNo = voter.house_no || '—';
-    const age = voter.age || '—';
+    const name = voter.name_hi || voter.name_raw || voter.n || 'मतदाता';
+    const relType = (voter.rel_type === 'H' || voter.rt === 'पति') ? 'पति' : 'पिता';
+    const relName = voter.rel_name_hi || voter.rn || '—';
+    const ward = voter.ward || voter.w || '—';
+    const srNo = voter.sr_no || voter.s || '—';
+    const epic = voter.epic || voter.e || 'जल्द जारी होगा';
+    const houseNo = voter.house_no || voter.h || '—';
+    const age = voter.age || voter.a || '—';
+    const boothName = getBoothDetails(ward);
+    const voterId = voter.id || `W${String(ward).padStart(2, '0')}-${String(srNo).padStart(4, '0')}`;
+    const digitalSlipUrl = `https://abhay-sihali.netlify.app/voter-directory.html?id=${voterId}`;
 
     let slip = `🗳️ *डिजिटल मतदाता पर्ची - सिहाली खुर्द* 🏛️\n`;
     slip += `━━━━━━━━━━━━━━━━━━━\n`;
     slip += `👤 *मतदाता का नाम:* ${name}\n`;
     slip += `👨‍👦 *${relType} का नाम:* ${relName}\n`;
-    slip += `📍 *वार्ड नं:* ${ward}  |  *क्रम संख्या (Sr No):* ${srNo}\n`;
+    slip += `📍 *वार्ड नं:* ${ward}  |  *क्रमांक (Sr No):* [ ${srNo} ]\n`;
     slip += `🆔 *पहचान पत्र (EPIC):* ${epic}\n`;
     slip += `🏠 *मकान नं:* ${houseNo}  |  *आयु:* ${age} वर्ष\n`;
-    slip += `🏫 *मतदान केंद्र:* राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द (बूथ 95 व 96)\n`;
-    slip += `🗓️ *मतदान तिथि:* सोमवार, 16 नवम्बर 2026\n`;
-    slip += `⏰ *समय:* सुबह 8:00 से सायं 5:00 बजे\n`;
+    slip += `🏫 *मतदान केंद्र:* ${boothName}\n`;
+    slip += `🗓️ *मतदान तिथि:* सोमवार, 16 नवम्बर 2026 (प्रातः 8 से सायं 5)\n`;
+    slip += `🔗 *ऑनलाइन पर्ची लिंक:* ${digitalSlipUrl}\n`;
     slip += `━━━━━━━━━━━━━━━━━━━\n`;
 
     if (family.length > 0) {
@@ -376,6 +415,8 @@ function formatFallbackResponse() {
 }
 
 module.exports = {
+    getVoterById,
+    getVoterByWardAndSr,
     searchVoters,
     getFamilyMembers,
     formatSlipResponse,

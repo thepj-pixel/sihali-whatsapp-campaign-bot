@@ -568,7 +568,7 @@ async function startSession(sessionObj) {
                             : "सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!";
 
                         await sendSafeMessage(sock, replyJid, {
-                            video: fs.readFileSync(videoPath),
+                            video: (aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL } : fs.readFileSync(videoPath),
                             caption: replyText
                         });
 
@@ -578,7 +578,7 @@ async function startSession(sessionObj) {
                         replyText = "बाबा अभय सिंह (मोटी आंगली वाले बाबा) - ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें!";
 
                         await sendSafeMessage(sock, replyJid, {
-                            image: fs.readFileSync(posterPath),
+                            image: (aiService.CONFIG?.media_urls?.campaign_poster || process.env.GITHUB_POSTER_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_poster || process.env.GITHUB_POSTER_URL } : fs.readFileSync(posterPath),
                             caption: replyText
                         });
 
@@ -704,7 +704,7 @@ app.post('/api/send-message', async (req, res) => {
             messageText = `सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!`;
             if (fs.existsSync(videoPath)) {
                 await sock.sendMessage(jid, {
-                    video: fs.readFileSync(videoPath),
+                    video: (aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL } : fs.readFileSync(videoPath),
                     caption: messageText
                 });
                 mediaType = 'video';

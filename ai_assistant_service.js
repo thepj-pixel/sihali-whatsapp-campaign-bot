@@ -10,47 +10,70 @@ try {
     console.error('Error loading campaign_knowledge_base.json:', e);
 }
 
-// User-provided active NVIDIA API Key (Baba 26 key)
-const DEFAULT_NVIDIA_KEY = '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';
+// Config file with keys for NVIDIA, Groq, and Gemini
+const configPath = path.join(__dirname, 'api_config.json');
+let CONFIG = {
+    nvidia_keys: [
+        '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',
+        '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'
+    ],
+    groq_api_key: process.env.GROQ_API_KEY || '',
+    gemini_api_key: process.env.GEMINI_API_KEY || '',
+    media_urls: {
+        campaign_reel_video: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/campaign_reel.mp4',
+        campaign_poster: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster.jpg'
+    }
+};
+try {
+    if (fs.existsSync(configPath)) {
+        const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        CONFIG = { ...CONFIG, ...fileConfig };
+    }
+} catch (e) {
+    console.warn('Could not read api_config.json, using defaults:', e.message);
+}
 
 const SYSTEM_PROMPT = `
-आप ग्राम पंचायत सिहाली खुर्द (सिहाली खुर्द, सिहाली कलां, हाड़ाहेड़ी) के सरपंच प्रत्याशी 'बाबा अभय सिंह (मोटी आंगली वाले बाबा)' के सेवा केंद्र से उनकी डिजिटल सारथी व गांव की छोटी बहन 'सुमन' हैं। 🚩
+आप ग्राम पंचायत सिहाली खुर्द (सिहाली खुर्द, सिहाली कलां, हाड़ाहेड़ी) के सरपंच प्रत्याशी 'बाबा अभय सिंह' (या 'अभय सिंह') के सेवा केंद्र से उनकी डिजिटल सारथी व गांव की छोटी बहन 'सुमन' हैं। 🚩
+
+⚠️ नाम का सख्त नियम:
+उन्हें हमेशा 'बाबा अभय सिंह' या 'अभय सिंह' कहें। कभी भी केवल 'बाबा जी' या 'बाबाजी' न कहें।
 
 🎯 आपका व्यक्तित्व व संवाद शैली (Personality & Dynamic Persona):
-- एक आत्मीय, संस्कारी, मीठी और बहुत समझदार गांव की बहन (पुरुषों से 'भैया' कहकर बात करें, महिलाओं से 'दीदी/भाभी' या 'माताजी' कहें)।
-- बातचीत ऐसी हो कि 5-7 संदेशों में अनजान व्यक्ति भी परिवार जैसा महसूस करने लगे और जुड़ जाए!
-- कभी रूखा, रोबोटिक या औपचारिक भाषण नहीं देना। 2 से 4 छोटी, असरदार पंक्तियां लिखें।
+- एक आत्मीय, संस्कारी, मीठी और बहुत समझदार गांव की बहन (पुरुषों से 'भैया' कहें, बुजुर्गों से 'ताऊजी / चाचाजी / अंकलजी / माताजी' कहकर सम्मान दें, महिलाओं से 'दीदी/भाभी' कहें)।
+- बातचीत ऐसी हो कि 2-3 संदेशों में ही सामने वाला अपनापन महसूस करे और जुड़े! क्यूट, सिंपल, पॉजिटिव और हल्का सा अपनापन, कोई बनावटी रोबोटिक भाषण नहीं।
+- 2 से 3 छोटी, असरदार WhatsApp पंक्तियां लिखें (Zero Long Speeches, unless specifically asked for full details)।
 - भाषा का नियम: 
-  * अगर वोटर रोमन / हिंग्लिश में लिख रहा है (उदा: "acha m pankaj...", "bhai sun na..."), तो आप भी साफ़, मीठी हिंग्लिश में जवाब दें ताकि वो सहज महसूस करे!
+  * अगर वोटर रोमन / हिंग्लिश में लिख रहा है (उदा: "acha m pankaj...", "bhai sun na...", "kya mahool h"), तो आप भी साफ़, मीठी और सहज हिंग्लिश में जवाब दें!
   * अगर वोटर देवनागरी हिंदी में लिख रहा है, तो आप देवनागरी हिंदी में जवाब दें।
 
-🎯 5 अचूक चुनावी रणनीतियां (Winning Campaign Strategies):
+🎯 उम्र व संदर्भ के अनुसार संवाद (Age & Demographics Adaptation):
+- बुजुर्ग (उम्र 50+): गहरा आदर व चरण स्पर्श ("प्रणाम ताऊजी / अंकलजी, बाबा अभय सिंह के 40 साल के निष्कलंक सेवा काल पर आपका आशीर्वाद चाहिए")।
+- युवा (उम्र 18-35): दोस्ताना, ऊर्जावान व बहन जैसा जुड़ाव ("अरे भैया, बाहर पढ़ाई/नौकरी चल रही है या खेती संभाल रहे हो? इस बार अपनी गली का क्या माहौल लग रहा है?")।
+- घरेलू व मध्यम उम्र (35-50): पारिवारिक आत्मीयता ("घर पर सब कुशल मंगल? भाभी जी और बच्चे कैसे हैं भैया?")।
 
-1. जीवन और परिवार से आत्मीय जुड़ाव (Build Deep Human Connection):
-   - केवल सवाल का उत्तर मत दो, बात को आगे बढ़ाओ और अपनापन दिखाओ:
-     "अरे भैया, घर पे सब कुशल मंगल? भाभी जी और बच्चे कैसे हैं? आपकी शादी हो गई या अभी तैयारी चल रही है? 😊"
-     "आप खेती संभालते हो भैया या बाहर गाड़ी/नौकरी चल रही है?"
-     "इस बार अपने वार्ड में कैसा माहौल लग रहा है भैया?"
+🎯 ⚠️ सख्त मनाही — कामों की संख्या/गिनती (NO Work Counts):
+- किसी भी गाँव में कुल कामों की गिनती या संख्या (जैसे 44 काम, 28 काम या 15 काम) कभी भी मत बोलना! 
+- गिनती बोलने से लोग आपस में तुलना करने लगते हैं कि 'हमारे गाँव में कम क्यों, दूसरे में ज़्यादा क्यों'।
+- हमेशा कहें: "सिहाली खुर्द, सिहाली कलां और हाड़ाहेड़ी तीनों गाँव बाबा अभय सिंह के लिए बराबर हैं। तीनों में हर मुख्य रास्ते पर पक्की सड़कें, इंटरलॉकिंग, घर-घर मीठा पानी और स्कूल-श्मशान विकास का काम पूरी निष्ठा से हुआ है।"
 
-2. विरोधी या बहस करने वालों को करारा जवाब (Burn Anti-Abhay Singh Opponents with Truth):
-   - अगर कोई कहे कि "हम तो दूसरे को वोट देंगे" या बाबा जी के खिलाफ बोले:
-     उसे बिना डरे, गांव के अंदाज में तीखा सच आईना दिखाएं:
-     "अरे भैया, जो आज विरोधी बनकर आपको बाबा जी के खिलाफ भड़का रहे हैं, जरा उनसे पूछना कि जब 5 साल गांव के रास्तों में पानी भरा था और लोग बूंद-बूंद पानी को तरस रहे थे, तब वो किस बिल में सो रहे थे? चुनाव आते ही जो लोग दारू की बोतलें और 500 के नोट बांटकर आपको खरीदना चाहते हैं, वो 5 साल फिर आपकी छाती पर मूंग दलेंगे! 5 दिन का नशा और 5 साल का रोना — यही चाहते हो क्या भैया? बाबा जी ने कभी किसी का हक नहीं मारा, आधी रात को भी सुख-दुख में छाती तान कर खड़े मिलते हैं!"
+🎯 विरोधी, अपशब्द व विपक्षी 'विकास पुरुषों' को करारा जवाब:
+- यदि कोई गाली दे या कहे 'कोई काम नहीं हुआ' या किसी विपक्षी नेता (जैसे 'राजेश का विकास पुरुष' या अन्य) की तारीफ करके बाबा अभय सिंह पर कीचड़ उछाले:
+  बिल्कुल गुस्सा न करें। तीखे सच और आत्मीयता से आईना दिखाएं:
+  "अरे भैया, जो आज चुनाव आते ही खुद को नया 'विकास पुरुष' बताकर बड़ी-बड़ी बातें कर रहे हैं, ज़रा उनसे पूछना कि पिछले 5 साल जब रास्तों में कीचड़ और गलियों में जलभराव था, तब वो किस बिल में सो रहे थे? चुनाव आते ही जो लोग दारू की बोतलें और 500 के नोट बांटकर आपको खरीदना चाहते हैं, वो 5 दिन का नशा और 5 साल का रोना देकर चले जाएंगे! बाबा अभय सिंह 40 साल से बिना किसी ठेकेदारी या स्वार्थ के आधी रात को भी सुख-दुख में खूंटा गाड़ कर साथ खड़े मिले हैं।"
+- सीधा समाधान (बाबा अभय सिंह का प्राथमिकता रजिस्टर):
+  "भैया, आपकी नाराजगी बिल्कुल समझ सकती हूँ। जहाँ काम अटका हो वहाँ गुस्सा आना स्वाभाविक है। पर जो काम प्रार्थना पत्र में था—जैसे मुख्य सीसी सड़कें, नाली, इंटरलॉकिंग और JJM मीठा पानी—बाबा अभय सिंह ने सब चीजों का पूरा ध्यान रखा है। और अगर फिर भी आपके मोहल्ले में कोई काम बाकी रह गया है, तो बस गली का नाम बता दो, ये मैं सीधे बाबा अभय सिंह के रजिस्टर में नोट करवा कर प्राथमिकता पर रखवा दूंगी।"
 
-3. स्विंग वोटर्स (Swing Voters) को बाबा जी के पक्ष में मोड़ना:
-   - अगर कोई कहे "सब नेता एक जैसे हैं", "वोट देकर क्या फायदा":
-     "भैया आपका गुस्सा बिल्कुल जायज है, चुनाव आते ही लोग हाथ जोड़ते हैं और फिर 5 साल नजर नहीं आते। लेकिन बाबा अभय सिंह का न कोई ठेकेदारी का धंधा है, न कोई स्वार्थ। पिछले 5 साल में JJM की पानी की टंकियां, मुख्य रास्तों पर पक्की सड़कें, जोहड़ों का पुनरुद्धार करवाया है। और सबसे बड़ी बात — आधी रात को भी किसी के सुख-दुख में खूंटा गाड़ कर साथ खड़े मिलते हैं। ऐसा निष्ठावान साथी छोड़ कर हम किसका मुंह देखेंगे भैया!"
-
+🎯 ज़मीनी माहौल की पड़ताल (Ground Pulse Check):
+- बात के अंत में सहजता से पूछें:
+  "वैसे भैया, आप बताओ... इस बार अपने वार्ड में क्या माहौल लग रहा है सच्ची? लोगों का क्या मूड है?"
 4. ⚠️ सख्त नियम — वोटर पर्ची (NO Hallucination Policy):
-   - कभी भी अपने मन से झूठा दावा मत करना कि "पर्ची भेज दी है" या "चेक कर लो"!
-   - अगर वोटर पर्ची मांगता है और नाम नहीं मिला है:
-     "भैया, इस नाम से सीधी पर्ची नहीं मिल पाई। एक बार अपने पिताजी का नाम या वार्ड नंबर बता दो न भैया, मैं तुरंत निकाल कर भेज देती हूँ! 😊"
-   - अगर कोई नाम मिलता है:
-     "भैया, लिस्ट में ये नाम मिला है, क्या यही आपकी पर्ची निकाल कर भेज दूं?"
-
-5. मुख्य विकास कार्य (Key Highlights — No Budget Amounts):
+   - कभी भी झूठा दावा मत करना कि "पर्ची भेज दी है"!
+   - अगर वोटर पर्ची मांगता है:
+     "भैया, एक बार अपने पिताजी का नाम या वार्ड नंबर बता दो न भैया, मैं तुरंत लिस्ट से निकाल कर भेज देती हूँ! 😊"
+5. मुख्य विकास कार्य (Locked Facts):
    - JJM के तहत घर-घर शुद्ध मीठा पेयजल और पानी की नई टंकियां।
-   - मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स।
+   - मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स (जैसे सीताराम मंदिर से शिव मंदिर, भजनलाल से लालसिंह, गौरव पथ से किशनलाल)।
    - पूज्य बाबा कुन्दनदास आश्रम तक पक्की डामर सड़क व जोहड़ों का सौंदर्यीकरण।
    (⚠️ किसी भी काम का रुपया या बजट कभी नहीं बताना)।
 
@@ -74,7 +97,7 @@ function getFastLocalAnswer(query, phone = null) {
 
     // Health / Wellbeing / How are you
     if (q.includes('haal') || q.includes('hal') || q.includes('kaise ho') || q.includes('kasa') || q.includes('kaisa') || q.includes('kese ho')) {
-        return "राम राम भैया! 🙏 बाबा जी के आशीर्वाद और आप सभी के प्यार-स्नेह से सब बढ़िया है। आप बताओ भैया, घर-परिवार में सब कुशल मंगल? भाभी जी और बच्चे कैसे हैं? आपकी शादी हो गई या तैयारी चल रही है? 😊🚩";
+        return "राम राम भैया! 🙏 बाबा अभय सिंह के आशीर्वाद और आप सभी के प्यार-स्नेह से सब बढ़िया है। आप बताओ भैया, घर-परिवार में सब कुशल मंगल? भाभी जी और बच्चे कैसे हैं? आपकी शादी हो गई या तैयारी चल रही है? 😊🚩";
     }
 
     // Bot status / Working check
@@ -97,7 +120,7 @@ function getFastLocalAnswer(query, phone = null) {
         return (
             "राम राम भैया! 🙏\n" +
             "मैं बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र से आपकी छोटी बहन सुमन हूँ।\n" +
-            "बाबा जी के विकास कार्यों की जानकारी, समस्याओं और आपकी वोटर पर्ची देखने के लिए यहाँ उपलब्ध हूँ। बताइए, क्या सेवा करूँ? 😊🚩"
+            "बाबा अभय सिंह के विकास कार्यों की जानकारी, समस्याओं और आपकी वोटर पर्ची देखने के लिए यहाँ उपलब्ध हूँ। बताइए, क्या सेवा करूँ? 😊🚩"
         );
     }
 
@@ -105,7 +128,7 @@ function getFastLocalAnswer(query, phone = null) {
     if (q.includes('virodhi') || q.includes('विरोधी') || q.includes('daaru') || q.includes('daru') || q.includes('दारू') || q.includes('पैसे') || q.includes('पैसा') || q.includes('शराब') || q.includes('bribe')) {
         return (
             "अरे भैया, 5 दिन की दारू-मुर्गे या 500 के नोट से 5 साल का गांव थोड़े ही संवरता है! " +
-            "जो चुनाव आते ही प्रलोभन बांटते हैं वे 5 साल फिर नजर भी नहीं आते। हमें तो अपना वही ईमानदार बाबा चाहिए जो आधी रात को भी सुख-दुख में साथ खड़ा मिले! बाकी आप खुद समझदार हो भैया! 😊🚩"
+            "जो चुनाव आते ही प्रलोभन बांटते हैं वे 5 साल फिर नजर भी नहीं आते। हमें तो अपने वही ईमानदार बाबा अभय सिंह चाहिए जो आधी रात को भी सुख-दुख में साथ खड़े मिले! बाकी आप खुद समझदार हो भैया! 😊🚩"
         );
     }
 
@@ -131,8 +154,19 @@ function getFastLocalAnswer(query, phone = null) {
             "बाबा अभय सिंह ने पिछले 5 सालों में गांव के लिए ये प्रमुख काम करवाए हैं:\n" +
             "• JJM के तहत पानी की टंकियां और घर-घर शुद्ध पेयजल\n" +
             "• मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स\n" +
-            "• सिहाली खुर्द-हाड़ाहेड़ी पक्की डामर सड़क व जोहड़ों का पुनरुद्धार\n\n" +
+            "• सिहाली खुर्द-हाड़ाहेड़ी पक्की डामर सड़क व जोहड़ों का पुनरुद्धार\n" +
+            "• सरकारी स्कूलों के 10वीं-12वीं टॉपर्स को 15 वर्षों से निरंतर प्रतिभा सम्मान\n\n" +
             "अगर अपनी वोटर पर्ची देखनी हो तो नाम लिख कर भेज देना!"
+        );
+    }
+
+    // Education / School / Topper queries
+    if (q.includes('school') || q.includes('topper') || q.includes('padhai') || q.includes('shiksha') || q.includes('टॉपर') || q.includes('स्कूल') || q.includes('शिक्षा') || q.includes('छात्र') || q.includes('विद्यार्थी') || q.includes('10th') || q.includes('12th')) {
+        return (
+            "राम राम भैया! 🙏\n" +
+            "शिक्षा और हमारे गाँव के बच्चों के भविष्य को लेकर बाबा अभय सिंह का बहुत बड़ा संकल्प रहा है:\n" +
+            "• पिछले 10-15 वर्षों से लगातार ग्राम पंचायत के सभी सरकारी स्कूलों में 10वीं व 12वीं बोर्ड परीक्षा के टॉपर्स को बाबा अभय सिंह जी द्वारा नकद पुरस्कार, मोमेंटो व सम्मान पत्र देकर सम्मानित व प्रोत्साहित किया जा रहा है!\n" +
+            "• साथ ही सरकारी स्कूलों में खेल मैदान, आधुनिक मॉड्यूलर लाइब्रेरी और कक्षाओं का कायाकल्प भी करवाया गया है। 🎓🚩"
         );
     }
 
@@ -144,34 +178,17 @@ function getFastLocalAnswer(query, phone = null) {
     );
 }
 
-// AI Assistant query with multi-tier failover and strict 3.8s timeout
-async function getAIResponse(userMessage, apiKey = null, conversationHistory = [], phone = null) {
-    const key = apiKey || process.env.NVIDIA_API_KEY || DEFAULT_NVIDIA_KEY;
-
-    // Fast Prince recognition
-    if (userMessage.toLowerCase().includes('prince')) {
-        return getFastLocalAnswer(userMessage, phone);
-    }
-
+// 1. Call NVIDIA Endpoint
+async function callNvidia(messages, key) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3800);
-
+    const timeout = setTimeout(() => controller.abort(), 3800);
     try {
-        const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
-        const systemPromptWithRAG = SYSTEM_PROMPT + (ragContext ? `\n\n${ragContext}` : '');
-
-        const messages = [
-            { role: 'system', content: systemPromptWithRAG },
-            ...conversationHistory.slice(-6),
-            { role: 'user', content: userMessage }
-        ];
-
-        const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+        const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
             method: 'POST',
             signal: controller.signal,
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${key}`
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 model: 'nvidia/nemotron-3.5-bolt-e4b',
@@ -180,40 +197,165 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
                 temperature: 0.6
             })
         });
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error(`NVIDIA HTTP ${res.status}`);
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content?.trim();
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
+}
 
-        clearTimeout(timeoutId);
+// 2. Call Groq Endpoint (Ultra-fast Secondary Fallback)
+async function callGroq(messages, key) {
+    if (!key) throw new Error('No Groq key configured');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'qwen/qwen3.8-27b',
+                messages: messages,
+                max_tokens: 280,
+                temperature: 0.6
+            })
+        });
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content?.trim();
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
+}
 
-        if (!response.ok) {
-            console.error('NVIDIA AI API Error:', response.status);
-            return getFastLocalAnswer(userMessage, phone);
+// 3. Call Gemini REST Endpoint (High-volume Tertiary Fallback)
+async function callGemini(systemPrompt, conversationHistory, userMessage, key) {
+    if (!key) throw new Error('No Gemini key configured');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    try {
+        const contents = [];
+        for (const msg of conversationHistory) {
+            contents.push({
+                role: msg.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: msg.content }]
+            });
         }
+        contents.push({
+            role: 'user',
+            parts: [{ text: userMessage }]
+        });
 
-        const data = await response.json();
-        const reply = data.choices?.[0]?.message?.content?.trim();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                system_instruction: { parts: [{ text: systemPrompt }] },
+                contents: contents,
+                generationConfig: { maxOutputTokens: 280, temperature: 0.6 }
+            })
+        });
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
+}
 
-        // Safety filter check: If AI gave a canned rejection, use local smart answer
-        if (
-            !reply ||
-            reply.toLowerCase().includes("i'm sorry") ||
-            reply.toLowerCase().includes("cannot help") ||
-            reply.toLowerCase().includes("can't help") ||
-            reply.toLowerCase().includes("cannot fulfill") ||
-            reply.toLowerCase().includes("as an ai")
-        ) {
-            console.log('[AI Assistant] Filtered canned rejection, using local smart engine.');
-            return getFastLocalAnswer(userMessage, phone);
-        }
+function isCannedRejection(reply) {
+    if (!reply) return true;
+    const l = reply.toLowerCase();
+    return (
+        l.includes("i'm sorry") ||
+        l.includes("cannot help") ||
+        l.includes("can't help") ||
+        l.includes("cannot fulfill") ||
+        l.includes("as an ai")
+    );
+}
 
-        return reply;
-    } catch (err) {
-        clearTimeout(timeoutId);
-        console.warn('AI Service timed out or failed, using local fast engine:', err.message);
+// AI Assistant query with multi-tier failover (NVIDIA Key 1 -> Key 2 -> Groq -> Gemini -> Local Fast Engine)
+async function getAIResponse(userMessage, apiKey = null, conversationHistory = [], phone = null) {
+    // Fast Prince recognition
+    if (userMessage.toLowerCase().includes('prince')) {
         return getFastLocalAnswer(userMessage, phone);
     }
+
+    const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
+    const systemPromptWithRAG = SYSTEM_PROMPT + (ragContext ? `\n\n${ragContext}` : '');
+
+    const messages = [
+        { role: 'system', content: systemPromptWithRAG },
+        ...conversationHistory.slice(-6),
+        { role: 'user', content: userMessage }
+    ];
+
+    // Tier 1: Primary NVIDIA (Key 1)
+    const nvidiaKey1 = apiKey || CONFIG.nvidia_keys[0];
+    if (nvidiaKey1) {
+        try {
+            const reply = await callNvidia(messages, nvidiaKey1);
+            if (!isCannedRejection(reply)) return reply;
+        } catch (e) {
+            console.warn('[AI Assistant] NVIDIA Key 1 failed:', e.message);
+        }
+    }
+
+    // Tier 2: Secondary NVIDIA (Key 2)
+    const nvidiaKey2 = CONFIG.nvidia_keys[1];
+    if (nvidiaKey2 && nvidiaKey2 !== nvidiaKey1) {
+        try {
+            const reply = await callNvidia(messages, nvidiaKey2);
+            if (!isCannedRejection(reply)) return reply;
+        } catch (e) {
+            console.warn('[AI Assistant] NVIDIA Key 2 failed:', e.message);
+        }
+    }
+
+    // Tier 3: Groq Fallback (If configured)
+    const groqKey = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
+    if (groqKey) {
+        try {
+            const reply = await callGroq(messages, groqKey);
+            if (!isCannedRejection(reply)) return reply;
+        } catch (e) {
+            console.warn('[AI Assistant] Groq fallback failed:', e.message);
+        }
+    }
+
+    // Tier 4: Gemini Fallback (If configured)
+    const geminiKey = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
+    if (geminiKey) {
+        try {
+            const reply = await callGemini(systemPromptWithRAG, conversationHistory.slice(-6), userMessage, geminiKey);
+            if (!isCannedRejection(reply)) return reply;
+        } catch (e) {
+            console.warn('[AI Assistant] Gemini fallback failed:', e.message);
+        }
+    }
+
+    // Tier 5: Local Offline Fast Engine (<0.001s, 100% Reliable Guaranteed)
+    console.log('[AI Assistant] All external LLMs unavailable or filtered, using local fast engine.');
+    return getFastLocalAnswer(userMessage, phone);
 }
 
 module.exports = {
     getAIResponse,
     getFastLocalAnswer,
-    SYSTEM_PROMPT
+    SYSTEM_PROMPT,
+    CONFIG
 };
