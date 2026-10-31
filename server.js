@@ -538,16 +538,10 @@ async function startSession(sessionObj) {
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         mediaTypeSent = 'voterSlip';
                         console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
-                    } else if (voterEngine.isLikelyNameOrVoterQuery(body)) {
-                        const qName = voterEngine.extractNameFromQuery(body);
-                        const lowerBody = body.toLowerCase();
-                        if (lowerBody.includes('prince') || (qName && qName.toLowerCase().includes('prince'))) {
-                            replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
-                        } else {
-                            replyText = `राम राम भाई जी! 🙏\nहमने सिहाली खुर्द की 3,435 वोटरों की लिस्ट में "${qName || body}" खोजा, लेकिन इस नाम से पर्ची नहीं मिली।\n\n👉 कृपया अपने पिता/पति का नाम या वार्ड नंबर साथ में लिखकर भेजें, जैसे:\n"रमेश वार्ड 2" या "सुरेश सुपुत्र धर्मपाल"\n\nबाबा अभय सिंह सेवा केंद्र आपकी पूरी सहायता करेगा! 🚩`;
-                        }
+                    } else if (body.toLowerCase().includes('prince')) {
+                        replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
-                        console.log(`[${sessionObj.id}] ✅ Handled name/voter query for ${senderPhone} (${qName || body})`);
+                        console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
                     } else {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).map(h => ({

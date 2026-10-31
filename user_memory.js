@@ -56,6 +56,11 @@ class UserMemory {
             this.users[phone] = {
                 phone: phone,
                 name: defaultName || '',
+                ward: null,
+                fatherOrSpouse: '',
+                occupation: '',
+                voterSentiment: 'neutral', // supporter | swing_voter | skeptic | committed
+                askedLifeQuestion: false,
                 firstSeen: new Date().toISOString(),
                 lastSeen: new Date().toISOString(),
                 interactionCount: 0,
@@ -146,6 +151,31 @@ class UserMemory {
 
         this.save();
         return picked.text;
+    }
+
+    updateProfile(rawPhone, updates = {}) {
+        const user = this.getUser(rawPhone);
+        if (!user) return null;
+        for (const [k, v] of Object.entries(updates)) {
+            if (v !== undefined && v !== null && v !== '') {
+                user[k] = v;
+            }
+        }
+        this.save();
+        return user;
+    }
+
+    getUserContextRAG(rawPhone) {
+        const user = this.getUser(rawPhone);
+        if (!user) return '';
+        let ctx = `[VOTER CONTEXT: Phone: ${user.phone}`;
+        if (user.name) ctx += ` | Name: ${user.name}`;
+        if (user.ward) ctx += ` | Ward: ${user.ward}`;
+        if (user.fatherOrSpouse) ctx += ` | Relation: ${user.fatherOrSpouse}`;
+        if (user.voterSentiment) ctx += ` | Voter Type: ${user.voterSentiment}`;
+        if (user.interactionCount) ctx += ` | Total Chats: ${user.interactionCount}`;
+        ctx += `]`;
+        return ctx;
     }
 
     getAllUsers() {

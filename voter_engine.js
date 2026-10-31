@@ -48,6 +48,10 @@ const TRANSLIT_MAP = {
     'anil': 'अनिल',
     'susheel': 'सुशील',
     'rahul': 'राहुल',
+    'pankaj': 'पंकज',
+    'panakaj': 'पंकज',
+    'dharampal': 'धर्मपाल',
+    'dharmpal': 'धर्मपाल',
     'rohit': 'रोहित',
     'amit': 'अमित',
     'sumit': 'सुमित',
@@ -141,7 +145,9 @@ function cleanQuery(text) {
     const fillers = [
         'mera', 'naam', 'name', 'h', 'hai', 'he', 'ji', 'bhai', 'bhaiya', 'ka', 'ki', 'ke', 'ko',
         'parchi', 'check', 'karo', 'bhejo', 'kardo', 'dekhna', 'batao', 'voter', 'epic',
-        'number', 'no', 'sir', 'plz', 'please', 'baba', 'sihali', 'khurd', 'bolna', 'na',
+        'number', 'no', 'sir', 'plz', 'please', 'baba', 'sihali', 'khurd', 'bolna', 'na', 'naa', 'kie',
+        'acha', 'accha', 'achha', 'are', 'arey', 'm', 'main', 'mai', 'dhund', 'dhundo', 'cha', 'chahta',
+        'raha', 'rahi', 'rahe', 'hu', 'hoon', 'hun', 'hindi', 'nahi', 'aati', 'tum', 'samaj', 'samajh', 'jaao', 'jaa',
         'मेरा', 'नाम', 'है', 'जी', 'भाई', 'पर्ची', 'भेजो', 'करो', 'बताओ', 'वोटर', 'कार्ड', 'दिखाओ'
     ];
 
