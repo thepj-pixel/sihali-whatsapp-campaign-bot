@@ -30,7 +30,44 @@ const TRANSLIT_MAP = {
     'meghwal': 'मेघवाल',
     'ahir': 'अहीर',
     'rao': 'राव',
-    'prince': 'प्रिंस',
+        'prince': 'प्रिंस',
+    'pirnce': 'प्रिंस',
+    'princ': 'प्रिंस',
+    'abhay': 'अभय',
+    'abay': 'अभय',
+    'abhe': 'अभय',
+    'baba': 'अभय',
+    'shambhu': 'शम्भूदयाल',
+    'shambhudayal': 'शम्भूदयाल',
+    'shyodan': 'श्योदान',
+    'mohit': 'मोहित',
+    'archana': 'अर्चना',
+    'sahil': 'साहिल',
+    'rohitash': 'रोहिताश',
+    'virendra': 'वीरेंद्र',
+    'veerendra': 'वीरेंद्र',
+    'tara': 'तारा',
+    'tarachand': 'ताराचन्द',
+    'moolchand': 'मूलचन्द',
+    'subhash': 'सुभाष',
+    'kailash': 'कैलाश',
+    'krishna': 'कृष्ण',
+    'krishan': 'कृष्ण',
+    'kishan': 'किशन',
+    'pooja': 'पूजा',
+    'puja': 'पूजा',
+    'poonam': 'पूनम',
+    'mamta': 'ममता',
+    'kavita': 'कविता',
+    'savita': 'सविता',
+    'sunita': 'सुनीता',
+    'anita': 'अनीता',
+    'rekha': 'रेखा',
+    'bhoop': 'भूप',
+    'bhoora': 'भूरा',
+    'chaman': 'चमन',
+    'arvind': 'अरविन्द',
+    'sheela': 'शीला',
 
     // Common First Names
     'satyanarayan': 'सत्यनारायण',
@@ -204,7 +241,7 @@ function isConversationalInquiry(text) {
     if (lower.includes('parchi') || lower.includes('पर्ची') || lower.includes('voter') || lower.includes('वोटर') || lower.includes('epic')) {
         return false;
     }
-    const words = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length > 0);
+    const words = lower.split(/[^a-zA-Z0-9\u0900-\u097F/]+/).filter(w => w.length > 0);
     return words.some(w => CONVERSATIONAL_INQUIRY_WORDS.includes(w));
 }
 
@@ -246,7 +283,17 @@ const FILLERS_SET = new Set([
 
 function searchVoters(rawInput, limit = 5, fallbackWard = null) {
     if (!rawInput) return [];
-    let lower = rawInput.toLowerCase();
+    let trimmed = rawInput.trim();
+    let lower = trimmed.toLowerCase();
+
+    // Check direct ID or EPIC match anywhere in query
+    const idPatternMatch = trimmed.match(/\b([Ww]\d{1,2}-\d{1,4}|IED\d+|CYN\d+|RJ\/\d+\/\d+\/\d+)\b/i);
+    if (idPatternMatch) {
+        const directMatch = getVoterById(idPatternMatch[1]);
+        if (directMatch) {
+            return [directMatch];
+        }
+    }
     
     // Check ward
     let ward = fallbackWard;
@@ -265,7 +312,11 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
         const nameHi = (v.name_hi || '').toLowerCase();
         const relHi = (v.rel_name_hi || '').toLowerCase();
         const nameRaw = (v.name_raw || '').toLowerCase();
+        const nameEn = (v.name || '').toLowerCase();
+        const relEn = (v.rel_name || '').toLowerCase();
+        const searchText = (v.search_text || '').toLowerCase();
         const epic = (v.epic || '').toLowerCase();
+        const vId = (v.id || '').toLowerCase();
 
         for (const rawT of rawTokens) {
             const hindiT = (TRANSLIT_MAP[rawT] || rawT).toLowerCase();
@@ -277,8 +328,14 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
                 matchedDistinctName = true;
             }
 
-            // Name match
-            if (nameHi.includes(hindiT) || nameHi.includes(rawT)) {
+            // ID or Sr No match
+            if (vId === rawT || String(v.sr_no) === rawT || String(v.s) === rawT) {
+                score += 150;
+                matchedDistinctName = true;
+            }
+
+            // Name match (Hindi or English transliteration)
+            if (nameHi.includes(hindiT) || nameHi.includes(rawT) || nameEn.includes(rawT) || searchText.includes(rawT)) {
                 if (isSurname) {
                     score += 5;
                 } else {
@@ -287,8 +344,8 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
                 }
             }
 
-            // Relative / Father / Husband match
-            if (relHi.includes(hindiT) || relHi.includes(rawT)) {
+            // Relative / Father / Husband match (Hindi or English)
+            if (relHi.includes(hindiT) || relHi.includes(rawT) || relEn.includes(rawT)) {
                 if (isSurname) {
                     score += 5;
                 } else {

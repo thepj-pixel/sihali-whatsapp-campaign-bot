@@ -61,12 +61,31 @@ const voterEngine = require('./voter_engine.js');
 const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
 const posterEngine = require('./poster_engine.js');
+const mediaCatalog = require('./media_catalog.js');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ limit: '60mb', extended: true }));
 app.use('/media', express.static(path.join(__dirname, 'media')));
+
+// Endpoints to view registered complaints & ground intel
+app.get('/api/baba-register', (req, res) => {
+    const regFile = path.join(__dirname, 'baba_direct_register.json');
+    if (fs.existsSync(regFile)) {
+        try { return res.json(JSON.parse(fs.readFileSync(regFile, 'utf8'))); } catch(e) {}
+    }
+    res.json([]);
+});
+
+app.get('/api/ground-intel', (req, res) => {
+    const intelFile = path.join(__dirname, 'ground_intelligence_feed.json');
+    if (fs.existsSync(intelFile)) {
+        try { return res.json(JSON.parse(fs.readFileSync(intelFile, 'utf8'))); } catch(e) {}
+    }
+    res.json([]);
+});
+
 
 const PORT = process.env.PORT || 3000;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
