@@ -61,6 +61,11 @@ class UserMemory {
                 occupation: '',
                 voterSentiment: 'neutral', // supporter | swing_voter | skeptic | committed
                 askedLifeQuestion: false,
+                gender: 'M',
+                lastFoundVoter: null,
+                lastSearchResults: [],
+                proactivePingCount: 0,
+                lastPingTime: null,
                 firstSeen: new Date().toISOString(),
                 lastSeen: new Date().toISOString(),
                 interactionCount: 0,

@@ -234,65 +234,82 @@ function isLikelyNameOrVoterQuery(text) {
     return false;
 }
 
-function searchVoters(rawInput, limit = 3) {
-    const { query, ward } = cleanQuery(rawInput);
-    if (!query) return [];
+const SURNAMES = new Set(['yadav', 'यादव', 'singh', 'सिंह', 'kumar', 'कुमार', 'devi', 'देवी', 'sharma', 'शर्मा', 'gurjar', 'गुर्जर', 'meena', 'मीणा', 'jat', 'जाट', 'saini', 'सैनी', 'balai', 'बलाई']);
 
-    const qLower = query.toLowerCase();
-    const queryWords = qLower.split(/\s+/).filter(w => w.length > 0);
+const FILLERS_SET = new Set([
+    'are', 'arey', 'dhund', 'dhundo', 'na', 'naa', 'h', 'hai', 'he', 'papa', 'pitaji', 'pita',
+    'ka', 'ki', 'ke', 'ko', 'naam', 'name', 'syad', 'shayad', 'se', 'cha', 'raha', 'rahi', 'hu', 'hoon',
+    'bhai', 'apna', 'apni', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere', 'check', 'karo', 'kardo',
+    'batao', 'parchi', 'voter', 'slip', 'card', 'epic', 'plz', 'please', 'sir', 'ji', 'bhaiya',
+    'ward', 'w', 'bhej', 'bhejo', 'do', 'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main'
+]);
 
-    const results = [];
+function searchVoters(rawInput, limit = 5, fallbackWard = null) {
+    if (!rawInput) return [];
+    let lower = rawInput.toLowerCase();
+    
+    // Check ward
+    let ward = fallbackWard;
+    const wardMatch = lower.match(/(?:ward|वार्ड|w)[\s:]*([0-9]{1,2})/i);
+    if (wardMatch) ward = parseInt(wardMatch[1]);
 
+    const rawTokens = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length >= 2 && !FILLERS_SET.has(w));
+    if (rawTokens.length === 0) return [];
+
+    const scored = [];
     for (const v of VOTERS) {
         if (ward && v.ward !== ward) continue;
 
-        const epic = (v.epic || '').toLowerCase();
+        let score = 0;
+        let matchedDistinctName = false;
         const nameHi = (v.name_hi || '').toLowerCase();
         const relHi = (v.rel_name_hi || '').toLowerCase();
         const nameRaw = (v.name_raw || '').toLowerCase();
+        const epic = (v.epic || '').toLowerCase();
 
-        // Direct EPIC exact match
-        if (epic && (qLower === epic || epic.includes(qLower))) {
-            return [v];
+        for (const rawT of rawTokens) {
+            const hindiT = (TRANSLIT_MAP[rawT] || rawT).toLowerCase();
+            const isSurname = SURNAMES.has(rawT) || SURNAMES.has(hindiT);
+
+            // Exact EPIC match
+            if (epic && (epic === rawT || epic.includes(rawT))) {
+                score += 150;
+                matchedDistinctName = true;
+            }
+
+            // Name match
+            if (nameHi.includes(hindiT) || nameHi.includes(rawT)) {
+                if (isSurname) {
+                    score += 5;
+                } else {
+                    score += 40;
+                    matchedDistinctName = true;
+                }
+            }
+
+            // Relative / Father / Husband match
+            if (relHi.includes(hindiT) || relHi.includes(rawT)) {
+                if (isSurname) {
+                    score += 5;
+                } else {
+                    score += 35;
+                    matchedDistinctName = true;
+                }
+            }
+
+            // Raw OCR match
+            if (nameRaw.includes(hindiT) || nameRaw.includes(rawT)) {
+                if (!isSurname) score += 15;
+            }
         }
 
-        // Match against transliteration or direct words
-        let isMatch = false;
-
-        // Check full query transliteration
-        const qTranslit = TRANSLIT_MAP[qLower] || '';
-        if (
-            (qTranslit && nameHi.includes(qTranslit)) ||
-            (qTranslit && relHi.includes(qTranslit)) ||
-            nameHi.includes(qLower) ||
-            relHi.includes(qLower) ||
-            nameRaw.includes(qLower)
-        ) {
-            isMatch = true;
-        }
-
-        // Check individual words if multi-word query (e.g. "satyaprakash yadav" or "satyanarayan ward 1")
-        if (!isMatch && queryWords.length > 0) {
-            const allWordsMatch = queryWords.every(word => {
-                const wTrans = TRANSLIT_MAP[word] || '';
-                return (
-                    (wTrans && nameHi.includes(wTrans)) ||
-                    (wTrans && relHi.includes(wTrans)) ||
-                    nameHi.includes(word) ||
-                    relHi.includes(word) ||
-                    nameRaw.includes(word)
-                );
-            });
-            if (allWordsMatch) isMatch = true;
-        }
-
-        if (isMatch) {
-            results.push(v);
-            if (results.length >= 10) break;
+        if (matchedDistinctName || score >= 40) {
+            scored.push({ voter: v, score });
         }
     }
 
-    return results.slice(0, limit);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map(s => s.voter);
 }
 
 function getFamilyMembers(voter) {

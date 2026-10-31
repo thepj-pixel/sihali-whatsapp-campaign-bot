@@ -1,3 +1,48 @@
+
+// Proactive Daytime Nudge Engine (Sends sweet, respectful follow-ups 2-4 hours after inactivity)
+function runProactiveNudges(sock) {
+    try {
+        const now = new Date();
+        const istHours = (now.getUTCHours() + 5 + Math.floor((now.getUTCMinutes() + 30) / 60)) % 24;
+        // Only run between 10:00 AM and 7:45 PM IST
+        if (istHours < 10 || istHours >= 20) return;
+
+        const allUsers = userMemory.getAllUsers();
+        for (const u of allUsers) {
+            if (!u.phone || u.phone.includes('Self Device') || u.phone.length < 10) continue;
+            if (u.proactivePingCount >= 2) continue;
+
+            const lastSeenDate = new Date(u.lastSeen);
+            const hoursSinceLastChat = (Date.now() - lastSeenDate.getTime()) / (1000 * 60 * 60);
+
+            const lastPingDate = u.lastPingTime ? new Date(u.lastPingTime) : null;
+            const hoursSinceLastPing = lastPingDate ? (Date.now() - lastPingDate.getTime()) / (1000 * 60 * 60) : 999;
+
+            if (hoursSinceLastChat >= 2.5 && hoursSinceLastChat <= 8 && hoursSinceLastPing >= 20) {
+                const nudges = [
+                    `अरे भैया, सुनिए ना... 🙏 आपने बताया नहीं, घर पर सब ठीक-ठाक हैं न? भाभी जी और बच्चे कैसे हैं? सोचा एक बार हाल-चाल पूछ लूं! 😊`,
+                    `राम राम भैया! 🚩 आज बाबा जी के चुनाव प्रचार का बहुत सुंदर WhatsApp स्टेटस बना है। अगर आप कहें तो आपके नाम का एक प्यारा सा पोस्टर बना कर भेज दूं? अपने स्टेटस पर जरूर लगाना भैया! 📲`,
+                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा जी (मोटी आंगली वाले) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
+                ];
+                const pickedNudge = nudges[(u.proactivePingCount || 0) % nudges.length];
+                const replyJid = `${u.phone}@s.whatsapp.net`;
+
+                sendSafeMessage(sock, replyJid, { text: pickedNudge }).then(() => {
+                    u.proactivePingCount = (u.proactivePingCount || 0) + 1;
+                    u.lastPingTime = new Date().toISOString();
+                    userMemory.recordMessage(u.phone, 'bot', pickedNudge, 'proactiveNudge');
+                    userMemory.save();
+                    console.log(`[ProactiveNudge] Sent sweet follow-up to ${u.phone}`);
+                }).catch(e => console.error('[ProactiveNudge Error]:', e.message));
+                break; // 1 ping per cycle to prevent batch flood
+            }
+        }
+    } catch (err) {
+        console.error('[ProactiveNudge Runner Error]:', err.message);
+    }
+}
+
+
 const express = require('express');
 const cors = require('cors');
 const qrcode = require('qrcode');
@@ -481,7 +526,17 @@ async function startSession(sessionObj) {
                     const posterPath = path.join(__dirname, 'media', 'poster.jpg');
                     const videoPath = path.join(__dirname, 'media', 'campaign_reel.mp4');
 
-                    const matches = voterEngine.searchVoters(body);
+                    // Extract Ward if mentioned
+                    const user = userMemory.getUser(senderPhone);
+                    const wardMatch = lower.match(/(?:ward|वार्ड|w)[\s:]*([0-9]{1,2})/i);
+                    if (wardMatch) {
+                        user.ward = parseInt(wardMatch[1]);
+                        userMemory.save();
+                    }
+
+                    const isParchiConfirm = lower.includes('bhej do') || lower.includes('bhejo') || lower.includes('send') || lower.includes('nikalo') || lower.includes('निकालो') || lower.includes('भेज दो') || lower.includes('भेजो') || (lower.includes('haa') && lower.includes('parchi'));
+
+                    const matches = voterEngine.searchVoters(body, 5, user.ward);
 
                     if (isPosterGenQuery) {
                         // On-the-fly personalized status poster generation
@@ -742,6 +797,31 @@ app.post('/api/test-ai', async (req, res) => {
 });
 
 // API: Get Live Messages Feed (Voters Only)
+
+// API: Conversations View (Grouped by Real Voters, Hiding Self-Device)
+app.get('/api/conversations', (req, res) => {
+    try {
+        const all = userMemory.getAllUsers().filter(u => u.phone && !u.phone.includes('Self Device') && u.phone.length >= 10);
+        const list = all.map(u => {
+            const lastMsg = (u.history && u.history.length > 0) ? u.history[u.history.length - 1] : null;
+            return {
+                phone: u.phone,
+                name: u.name || (u.lastFoundVoter ? u.lastFoundVoter.name_hi : 'मतदाता'),
+                ward: u.ward || (u.lastFoundVoter ? u.lastFoundVoter.ward : null),
+                lastMessage: lastMsg ? lastMsg.text : '',
+                lastTime: lastMsg ? lastMsg.time : '',
+                lastSeen: u.lastSeen,
+                interactionCount: u.interactionCount || 0,
+                voterSentiment: u.voterSentiment || 'neutral',
+                history: u.history || []
+            };
+        });
+        res.json(list);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/messages', (req, res) => {
     res.json(LIVE_FEED);
 });
@@ -1888,6 +1968,15 @@ setInterval(() => {
     });
 }, 60000);
 
-app.listen(PORT, () => {
+
+    // Start Proactive Daytime Nudge Interval (Every 15 mins)
+    setInterval(() => {
+        const prim = SESSIONS.find(s => s.id === 'sim_636');
+        if (prim && prim.sock && prim.status === 'CONNECTED') {
+            runProactiveNudges(prim.sock);
+        }
+    }, 15 * 60 * 1000);
+
+    app.listen(PORT, () => {
     console.log(`[Server] Live on port ${PORT}`);
 });
