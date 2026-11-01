@@ -177,7 +177,8 @@ function normalizePhonetic(str) {
     if (!str) return '';
     let s = str.toLowerCase().trim();
     s = s.replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/v/g, 'w');
-    s = s.replace(/sh/g, 's').replace(/ch/g, 'c').replace(/z/g, 'j');
+    s = s.replace(/sh/g, 's').replace(/ch/g, 'c').replace(/gh/g, 'g').replace(/kh/g, 'k').replace(/th/g, 't').replace(/dh/g, 'd').replace(/bh/g, 'b').replace(/ph/g, 'f').replace(/z/g, 'j');
+    s = s.replace(/[mn]$/g, 'n');
     s = s.replace(/(.)\1+/g, '$1');
     s = s.replace(/ी/g, 'ि').replace(/ू/g, 'ु').replace(/श|ष/g, 'स');
     s = s.replace(/ण/g, 'न').replace(/ब/g, 'व').replace(/ँ/g, 'ं');
@@ -256,7 +257,14 @@ const CONVERSATIONAL_INQUIRY_WORDS = [
     'virodhi', 'vipaksh', 'election', 'vote', 'voting', 'daaru', 'daru', 'sharab', 'paise', 'paisa',
     'kaam', 'vikas', 'mudda', 'samashya', 'pani', 'road', 'sadak', 'slogan', 'nara', 'shayari',
     'batao', 'bolo', 'sunao', 'working', 'online', 'chalu', 'when', 'who', 'what', 'how', 'why',
-    'help', 'madad'
+    'help', 'madad', 'chunav', 'चुनाव', 'tarikh', 'तारीख', 'date', 'samay', 'time',
+    'karwaya', 'karwaye', 'karwayen', 'karvaya', 'karvaye', 'karvayein', 'karvayi',
+    'bataiye', 'bataye', 'bata do', 'bataen', 'batado', 'batana', 'bata', 'boliye', 'suno', 'samjhao',
+    'kaun-kaun', 'kaunse', 'kaunsi', 'konse', 'kya-kya', 'kaha', 'kahaa', 'kisko', 'kisne',
+    'sarpanch', 'सरपंच', 'panchayat', 'पंचायत', 'pratyashi', 'प्रत्याशी', 'candidate',
+    'jeet', 'जीत', 'jitenge', 'jitega', 'jitwayenge', 'support',
+    'school', 'स्कूल', 'topper', 'टॉपर', 'padhai', 'shiksha', 'शिक्षा',
+    'apne', 'apna', 'hamare', 'humara', 'hamaare', 'hume', 'gaav', 'gaon', 'गाँव', 'गांव'
 ];
 
 function isGreeting(text) {
@@ -319,7 +327,7 @@ const FILLERS_SET = new Set([
     'ka', 'ki', 'ke', 'ko', 'naam', 'name', 'syad', 'shayad', 'se', 'cha', 'raha', 'rahi', 'hu', 'hoon',
     'bhai', 'apna', 'apni', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere', 'check', 'karo', 'kardo',
     'batao', 'parchi', 'voter', 'slip', 'card', 'epic', 'plz', 'please', 'sir', 'ji', 'bhaiya',
-    'ward', 'w', 'bhej', 'bhejo', 'do', 'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main'
+    'ward', 'w', 'bhej', 'bhejo', 'do', 'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main', 'baba', 'abhay', 'abhey'
 ]);
 
 function searchVoters(rawInput, limit = 5, fallbackWard = null) {
@@ -492,8 +500,6 @@ function formatSlipResponse(voter) {
     const age = voter.age || voter.a || '—';
     const boothName = getBoothDetails(ward);
     const voterId = voter.id || `W${String(ward).padStart(2, '0')}-${String(srNo).padStart(4, '0')}`;
-    const digitalSlipUrl = `https://abhay-sihali.netlify.app/voter-directory.html?id=${voterId}`;
-
     let slip = `🗳️ *डिजिटल मतदाता पर्ची - सिहाली खुर्द* 🏛️\n`;
     slip += `━━━━━━━━━━━━━━━━━━━\n`;
     slip += `👤 *मतदाता का नाम:* ${name}\n`;
@@ -503,7 +509,6 @@ function formatSlipResponse(voter) {
     slip += `🏠 *मकान नं:* ${houseNo}  |  *आयु:* ${age} वर्ष\n`;
     slip += `🏫 *मतदान केंद्र:* ${boothName}\n`;
     slip += `🗓️ *मतदान तिथि:* सोमवार, 16 नवम्बर 2026 (प्रातः 8 से सायं 5)\n`;
-    slip += `🔗 *ऑनलाइन पर्ची लिंक:* ${digitalSlipUrl}\n`;
     slip += `━━━━━━━━━━━━━━━━━━━\n`;
 
     if (family.length > 0) {
@@ -538,8 +543,10 @@ module.exports = {
     searchVoters,
     getFamilyMembers,
     formatSlipResponse,
+    formatVoterSlip: formatSlipResponse,
     formatFallbackResponse,
     isLikelyNameOrVoterQuery,
+    isConversationalInquiry,
     extractNameFromQuery,
     isGreeting
 };

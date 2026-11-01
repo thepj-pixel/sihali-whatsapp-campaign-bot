@@ -574,14 +574,7 @@ async function startSession(sessionObj) {
                 let mediaTypeSent = null;
 
                 try {
-                    const lower = body.toLowerCase();
-                    const isParchiQuery = lower.includes('parchi') || lower.includes('voter') || lower.includes('पर्ची') || lower.includes('नाम') || lower.includes('epic') || lower.includes('ward') || lower.includes('वार्ड');
-                    const isPhotoQuery = lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
-                    const isVideoQuery = lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
-                    const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
-
-                    const posterPath = path.join(__dirname, 'media', 'poster.jpg');
-                    const videoPath = path.join(__dirname, 'media', 'campaign_reel.mp4');
+                    const lower = body.toLowerCase().trim();
 
                     // Extract Ward if mentioned
                     const user = userMemory.getUser(senderPhone);
@@ -591,9 +584,24 @@ async function startSession(sessionObj) {
                         userMemory.save();
                     }
 
-                    const isParchiConfirm = lower.includes('bhej do') || lower.includes('bhejo') || lower.includes('send') || lower.includes('nikalo') || lower.includes('निकालो') || lower.includes('भेज दो') || lower.includes('भेजो') || (lower.includes('haa') && lower.includes('parchi'));
+                    const isPhotoQuery = lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
+                    const isVideoQuery = lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
+                    const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
-                    const matches = voterEngine.searchVoters(body, 5, user.ward);
+                    // High-accuracy voter slip intent
+                    const hasEpicPattern = /\b([A-Za-z]{3}\d{7}|RJ\/\d+\/\d+\/\d+|[Ww]\d{1,2}-\d{1,4})\b/i.test(body);
+                    const hasExplicitParchiKeyword = lower.includes('parchi') || lower.includes('पर्ची') || lower.includes('voter slip') || lower.includes('मतदाता पर्ची') || lower.includes('voter card') || lower.includes('voter id') || lower.includes('पहचान पत्र');
+                    const hasParchiPhrase = lower.includes('bhej do') || lower.includes('bhejo') || lower.includes('nikalo') || lower.includes('निकालो') || lower.includes('भेज दो') || lower.includes('भेजो') || lower.includes('naam dekhna') || lower.includes('naam check') || lower.includes('list me naam') || lower.includes('naam list');
+
+                    const isConversational = voterEngine.isConversationalInquiry(body);
+                    const isGreetingMsg = voterEngine.isGreeting(body);
+
+                    const isVoterSlipIntent = !isConversational && !isGreetingMsg && !isPhotoQuery && !isVideoQuery && !isPosterGenQuery && (
+                        hasEpicPattern ||
+                        hasExplicitParchiKeyword ||
+                        (hasParchiPhrase && !lower.includes('photo') && !lower.includes('video') && !lower.includes('poster')) ||
+                        voterEngine.isLikelyNameOrVoterQuery(body)
+                    );
 
                     if (imageAnalysis) {
                         const voterName = user.name || 'भैया';
@@ -676,20 +684,25 @@ async function startSession(sessionObj) {
                         }
                         mediaTypeSent = poster.id.includes('demo') ? 'demoPoster' : 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster (${poster.id}) to ${senderPhone}`);
-                    } else if (matches && matches.length > 0) {
-                        // High-precision voter match found! Send voter slip immediately!
-                        replyText = voterEngine.formatSlipResponse(matches[0]);
-                        if (matches.length > 1) {
-                            replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
-                        }
-                        await sendSafeMessage(sock, replyJid, { text: replyText });
-                        mediaTypeSent = 'voterSlip';
-                        console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
                     } else if (body.toLowerCase().includes('prince')) {
                         replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
-                    } else {
+                    } else if (isVoterSlipIntent) {
+                        const matches = voterEngine.searchVoters(body, 5, user.ward);
+                        if (matches && matches.length > 0) {
+                            replyText = voterEngine.formatSlipResponse(matches[0]);
+                            if (matches.length > 1) {
+                                replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
+                            }
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            mediaTypeSent = 'voterSlip';
+                            console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
+                        } else {
+                            replyText = voterEngine.formatFallbackResponse();
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${body}"`);
+                        } else {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).map(h => ({
                             role: h.role === 'bot' ? 'assistant' : 'user',

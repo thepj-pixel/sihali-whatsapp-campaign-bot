@@ -156,7 +156,7 @@ function getFastLocalAnswer(query, phone = null) {
     }
 
     // Polling date / booth
-    if (q.includes('election') || q.includes('vote') || q.includes('तारीख') || q.includes('कब') || q.includes('booth') || q.includes('बूथ') || q.includes('date')) {
+    if (q.includes('election') || q.includes('vote') || q.includes('voting') || q.includes('chunav') || q.includes('चुनाव') || q.includes('तारीख') || q.includes('tarikh') || q.includes('कब') || q.includes('kab') || q.includes('booth') || q.includes('बूथ') || q.includes('date') || q.includes('when')) {
         return (
             "इलेक्शन सोमवार, 16 नवम्बर 2026 को है भैया! 🗓️\n" +
             "वोटिंग राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द (बूथ 95 व 96) में होगी।\n\n" +
@@ -165,7 +165,7 @@ function getFastLocalAnswer(query, phone = null) {
     }
 
     // Development / Work Done
-    if (q.includes('kaam') || q.includes('काम') || q.includes('vikas') || q.includes('विकास') || q.includes('योजना') || q.includes('road') || q.includes('pani')) {
+    if (q.includes('kaam') || q.includes('काम') || q.includes('kam') || q.includes('karwaya') || q.includes('karwayen') || q.includes('karvaya') || q.includes('karvaye') || q.includes('vikas') || q.includes('विकास') || q.includes('योजना') || q.includes('karya') || q.includes('कार्य') || q.includes('road') || q.includes('sadak') || q.includes('pani') || q.includes('paani')) {
         return (
             "राम राम भैया! 🙏\n" +
             "बाबा अभय सिंह ने पिछले 5 सालों में गांव के लिए ये प्रमुख काम करवाए हैं:\n" +
