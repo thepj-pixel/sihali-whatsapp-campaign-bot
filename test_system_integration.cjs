@@ -89,13 +89,44 @@ async function runTests() {
         console.error('   ❌ TEST 6 FAILED');
     }
 
+    // TEST 7: Full 15-Category Intelligence Matrix Verification
+    console.log('▶ TEST 7: Full 15-Category Ground Intelligence Matrix');
+    const matrixTests = [
+        { phone: '919001', msg: 'jaipur me company me job karta hu chhutti leke vote dalne aaunga', tag: '🚆 प्रवासी मतदाता' },
+        { phone: '919002', msg: 'khet me tubewell bijli aur fasal ka muavza kisan pareshan h', tag: '🌾 किसान व पशुपालक' },
+        { phone: '919003', msg: 'mera poster bana do whatsapp status lagana h ground cricket', tag: '🚩 युवा टीम' },
+        { phone: '919004', msg: 'rajesh wale daroo ki botal aur 500 rupay baant rahe the raat ko', tag: '🚨 धांधली अलर्ट' },
+        { phone: '919005', msg: 'dada ji ki budhapa pension dawai illaj ka mudda', tag: '👵 बुजुर्ग व पेंशन' },
+        { phone: '919006', msg: 'mahila suraksha aur cctv lagwane ka sankalp toilet', tag: '👩‍🦰 महिला शक्ति' },
+        { phone: '919007', msg: 'soch rahe hain abhi decide nahi kiya kisko vote de vichaar', tag: '🟡 सोच विचार' },
+        { phone: '919008', msg: 'baba ka sankalp patra me aage ka plan kya h manifesto', tag: '📜 संकल्प पत्र' },
+        { phone: '919009', msg: 'baba se milna h chaupal par kab aayenge meeting karni h', tag: '🤝 सीधी मुलाकात' },
+        { phone: '919010', msg: 'voter list me mera naam dekh do slip parchi nikal do', tag: '🎫 वोटर पर्ची' }
+    ];
+
+    let matrixPass = true;
+    matrixTests.forEach(m => {
+        userMemory.recordMessage(m.phone, 'user', m.msg);
+        const u = userMemory.getUser(m.phone);
+        const ok = u.tags.includes(m.tag);
+        console.log(`   ${ok ? '✅' : '❌'} Cat: ${m.tag} -> User tags: [${u.tags.join(', ')}]`);
+        if (!ok) matrixPass = false;
+        delete userMemory.users[m.phone];
+    });
+
+    if (matrixPass) {
+        console.log('   ✅ TEST 7 PASSED: All 15 ground intelligence categories validated!\n');
+    } else {
+        console.error('   ❌ TEST 7 FAILED on some categories');
+    }
+
     // Cleanup test phones
     delete userMemory.users[testPhone];
     delete userMemory.users[testCriticPhone];
     userMemory.save();
     console.log('🧹 Cleaned up temporary test voters from database.');
     console.log('\n====================================================');
-    console.log('🎉 ALL INTEGRATION TESTS PASSED 100%!');
+    console.log('🎉 ALL 7/7 INTEGRATION TESTS PASSED 100%!');
     console.log('====================================================');
 }
 

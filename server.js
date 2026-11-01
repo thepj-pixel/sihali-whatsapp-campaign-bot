@@ -1284,6 +1284,1264 @@ app.get('/scan/:id', (req, res) => {
     `);
 });
 
+// UI: Unified Mobile-First Master Dashboard
+app.get('/', (req, res) => {
+    let sessionPills = SESSIONS.map(s => {
+        let isConn = s.status === 'CONNECTED';
+        let color = isConn ? '#16a34a' : (s.status === 'QR_READY' ? '#eab308' : '#dc2626');
+        let scanLink = isConn 
+            ? `<div style="text-align:right;"><span style="color:#16a34a; font-weight:700; font-size:12px;">🟢 ONLINE</span><br><a href="/repair/${s.id}" style="color:#0284c7; font-size:11px; text-decoration:none; font-weight:700; margin-right:8px;">⚡ Repair</a><a href="/reset/${s.id}" onclick="return confirm('Clean reset and re-link ${s.name}?')" style="color:#64748b; font-size:11px; text-decoration:underline;">Re-link</a></div>`
+            : `<a href="/scan/${s.id}" style="background:#2563eb; color:white; padding:6px 12px; border-radius:6px; font-size:11px; text-decoration:none; font-weight:700;">📲 SCAN QR</a>`;
+
+        return `
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; min-width: 260px; flex: 1;">
+                <div>
+                    <div style="font-weight: 700; font-size: 14px; color: #1e293b;">${s.name}</div>
+                    <div style="font-size: 12px; color: ${color}; font-weight: 600;">● ${s.status}</div>
+                </div>
+                <div>${scanLink}</div>
+            </div>
+        `;
+    }).join('');
+
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Sihali Khurd Campaign Assistant - Command Tower</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+            <style>
+                * { box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #0f172a; }
+                .container { max-width: 1200px; margin: 0 auto; }
+                
+                /* Top Header */
+                .header-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; background: white; padding: 16px 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; gap: 15px; }
+                .brand h1 { margin: 0; font-size: 20px; color: #0f172a; }
+                .brand p { margin: 3px 0 0 0; font-size: 13px; color: #64748b; }
+                .top-actions { display: flex; gap: 10px; align-items: center; }
+                
+                /* Quick Add Box - Mobile Optimized */
+                .quick-box { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; border-radius: 14px; padding: 20px; margin-bottom: 25px; box-shadow: 0 8px 20px rgba(15,23,42,0.15); }
+                .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 15px; }
+                .form-group label { display: block; font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 5px; }
+                .input-field { width: 100%; padding: 11px 14px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 15px; outline: none; }
+                .input-field:focus { border-color: #3b82f6; }
+                .btn-add { background: #16a34a; color: white; border: none; padding: 13px 20px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 700; width: 100%; transition: background 0.2s; margin-top: 22px; }
+                .btn-add:hover { background: #15803d; }
+                .btn-add:active { transform: scale(0.98); }
+
+                /* Tab Navigation */
+                .tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; overflow-x: auto; }
+                .tab-btn { background: none; border: none; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer; border-radius: 8px; white-space: nowrap; }
+                .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+
+                /* Cards & Tables */
+                .card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
+                .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+                .table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+                .table th { background: #f8fafc; padding: 12px; color: #475569; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+                .table td { padding: 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+                
+                /* Badges */
+                .badge { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-block; }
+                .badge-success { background: #dcfce7; color: #15803d; }
+                .badge-warning { background: #fef3c7; color: #b45309; }
+                .badge-info { background: #e0f2fe; color: #0369a1; }
+                .badge-danger { background: #fee2e2; color: #b91c1c; }
+
+                /* Layout Grids */
+                .studio-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+                .chat-view-container { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+                @media (max-width: 850px) {
+                    .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
+                    .header-bar { flex-direction: column; align-items: flex-start; }
+                }
+                .voter-list { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+                .voter-item { padding: 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s; }
+                .voter-item:hover, .voter-item.selected { background: #eff6ff; }
+                .chat-box { border: 1px solid #e2e8f0; border-radius: 8px; height: 500px; display: flex; flex-direction: column; background: #fafafa; }
+                .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+                .bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; word-wrap: break-word; }
+                .bubble-user { align-self: flex-start; background: white; border: 1px solid #e2e8f0; color: #0f172a; }
+                .bubble-bot { align-self: flex-end; background: #dcfce7; color: #064e3b; }
+
+                /* WhatsApp Web Master Replica UI */
+                .wa-wrapper { display: flex; height: 720px; border-radius: 12px; overflow: hidden; border: 1px solid #cbd5e1; background: #ffffff; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                .wa-left { width: 360px; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; background: #ffffff; }
+                .wa-left-header { background: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+                .wa-search-bar { padding: 8px 12px; background: #ffffff; border-bottom: 1px solid #f1f5f9; }
+                .wa-filter-chips { display: flex; gap: 6px; padding: 8px 12px; background: #f8fafc; overflow-x: auto; border-bottom: 1px solid #e2e8f0; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+                .filter-chip { padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 600; cursor: pointer; background: white; border: 1px solid #cbd5e1; color: #475569; transition: all 0.15s; }
+                .filter-chip:hover { border-color: #00a884; }
+                .filter-chip.active { background: #00a884; color: white; border-color: #00a884; }
+                .wa-contacts-list { flex: 1; overflow-y: auto; }
+                .wa-contact-item { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s; align-items: flex-start; }
+                .wa-contact-item:hover { background: #f8fafc; }
+                .wa-contact-item.selected { background: #e0f2fe; border-left: 4px solid #0284c7; }
+                .wa-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #00a884, #128c7e); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .wa-contact-info { flex: 1; min-width: 0; }
+                .wa-contact-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+                .wa-contact-name { font-weight: 700; font-size: 14px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .wa-contact-time { font-size: 11px; color: #64748b; flex-shrink: 0; }
+                .wa-contact-sub { font-size: 12px; color: #0284c7; margin-bottom: 3px; display: flex; justify-content: space-between; align-items: center; }
+                .wa-contact-snippet { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+                .wa-tag-pill { display: inline-block; padding: 2px 7px; border-radius: 8px; font-size: 10px; font-weight: 600; margin-right: 4px; margin-top: 2px; border: 1px solid; }
+                .wa-right { flex: 1; display: flex; flex-direction: column; background: #efeae2; position: relative; }
+                .wa-header { background: #f8fafc; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+                .wa-intel-bar { background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+                .wa-chat-scroll { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; background-color: #efeae2; }
+                .wa-bubble { max-width: 78%; padding: 8px 12px 6px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.45; position: relative; box-shadow: 0 1px 2px rgba(15,23,42,0.12); word-break: break-word; }
+                .wa-bubble-user { align-self: flex-start; background: #ffffff; color: #0f172a; border-top-left-radius: 0; }
+                .wa-bubble-bot { align-self: flex-end; background: #d9fdd3; color: #0f172a; border-top-right-radius: 0; }
+                .wa-bubble-admin { align-self: flex-end; background: #e0f2fe; color: #0369a1; border-top-right-radius: 0; }
+                .wa-bubble-meta { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 4px; gap: 8px; }
+                .wa-quick-actions { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 7px 14px; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+                .wa-action-btn { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 16px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #1e293b; cursor: pointer; transition: all 0.15s; }
+                .wa-action-btn:hover { background: #e2e8f0; border-color: #00a884; }
+                .wa-input-container { background: #f8fafc; padding: 10px 16px; display: flex; gap: 10px; align-items: center; border-top: 1px solid #e2e8f0; }
+                .wa-input-field { flex: 1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 20px; padding: 11px 18px; font-size: 14px; color: #0f172a; outline: none; }
+                .wa-input-field:focus { border-color: #00a884; }
+                .wa-send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00a884; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; transition: background 0.15s; }
+                .wa-send-btn:hover { background: #028066; }
+
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <!-- Top Header -->
+                <div class="header-bar">
+                    <div class="brand">
+                        <h1>🏛️ सिहाली खुर्द चुनाव 2026 — बाबा अभय सिंह</h1>
+                        <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
+                    </div>
+                    <div class="top-actions">
+                        <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
+                        <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
+                    </div>
+                </div>
+
+                <!-- Session Status Pills -->
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+                    ${sessionPills}
+                </div>
+
+                <!-- Quick-Add / Instant Connect Box (Field Mode) -->
+                <div class="quick-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h2 style="margin: 0; font-size: 18px; color: #f8fafc;">⚡ Field Mode: Instant Voter Connect</h2>
+                            <p style="margin: 4px 0 0 0; font-size: 13px; color: #94a3b8;">Meeting a villager? Type their number and tap send — their WhatsApp buzzes instantly!</p>
+                        </div>
+                        <span id="send-status" style="font-weight: 700; font-size: 13px; padding: 4px 12px; border-radius: 20px; display: none;"></span>
+                    </div>
+
+                    <form id="quick-add-form" onsubmit="sendInstantMessage(event)">
+                        <div class="quick-grid">
+                            <div class="form-group">
+                                <label>Voter Mobile Number *</label>
+                                <input type="tel" id="v-phone" class="input-field" placeholder="e.g. 9829xxxxxx or 6367810227" required autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label>Voter Name (Optional)</label>
+                                <input type="text" id="v-name" class="input-field" placeholder="e.g. Ramesh Sharma" autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label>Sending WhatsApp Line</label>
+                                <select id="v-line" class="input-field">
+                                    <option value="sim_636">Primary Line (6367810227)</option>
+                                    <option value="baba_aux">Baba Aux Line (Secondary)</option>
+                                    <option value="canada">Canada Line (+1)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Action Template</label>
+                                <select id="v-template" class="input-field" onchange="toggleCustomText(this.value)">
+                                    <option value="welcome">Instant Connect ("Aapko jod liya h...")</option>
+                                    <option value="custom_poster">Personalized Name Poster 🎨</option>
+                                    <option value="poster">Official Campaign Poster 📸</option>
+                                    <option value="video">3D Campaign Video Reel 📹</option>
+                                    <option value="slogan">Rotating Campaign Slogan 🚩</option>
+                                    <option value="custom">Custom Message...</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1; display: none;" id="custom-text-group">
+                                <label>Custom WhatsApp Message</label>
+                                <input type="text" id="v-custom-text" class="input-field" placeholder="Type custom message to send...">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-add" id="btn-submit">
+                            📲 Jod Lo & Send WhatsApp Instantly
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tabbed Navigation -->
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Voter Chat</button>
+                    <button class="tab-btn" onclick="switchTab('diagnostics')">🛠️ Diagnostics & Self-Test Log</button>
+                    <button class="tab-btn" onclick="switchTab('studio')">🎨 Live Poster Studio</button>
+                    <button class="tab-btn" onclick="switchTab('playground')">🤖 AI Playground & Lab</button>
+                    <button class="tab-btn" onclick="switchTab('voters')">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
+                    <button class="tab-btn" onclick="switchTab('media')">📸 Media Bank & Uploader</button>
+                </div>
+
+                <!-- TAB 1: Live Chat Stream (Voters Only) -->
+                <div id="tab-feed" class="card tab-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px;">💬 Real-Time Incoming & Outgoing Chats</h3>
+                            <span style="color: #64748b; font-size: 12px;">Real voters only • Auto-refreshing every 4s • Permanent Storage</span>
+                        </div>
+                        <button onclick="clearAllLogs()" style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                            🧹 Clear Feed
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 85px;">Time</th>
+                                    <th style="width: 140px;">Line</th>
+                                    <th style="width: 130px;">Voter</th>
+                                    <th>Incoming Message</th>
+                                    <th>Bot Reply Sent</th>
+                                    <th style="width: 105px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="live-table-body">
+                                <tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: Diagnostics & Self-Test Log -->
+                <div id="tab-diagnostics" class="card tab-content" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px;">🛠️ System Diagnostics & Self-Test Activity</h3>
+                            <span style="color: #64748b; font-size: 12px;">Self-messages, encryption alerts & line controls</span>
+                        </div>
+                        <button onclick="clearAllLogs()" style="background: #ef4444; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                            🧹 Clear Diagnostics Logs
+                        </button>
+                    </div>
+
+                    <!-- Line Cards Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <!-- Primary 636 -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Primary Line (6367810227)</strong>
+                                <span class="badge ${SESSIONS[0].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[0].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                Main election campaign line. If Meta FB Ads linked, disconnect Facebook in WhatsApp Business to restore direct Signal encryption.
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/sim_636" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/repair/sim_636" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair (No QR)</a>
+                                <a href="/reset/sim_636" onclick="return confirm('Reset and generate fresh QR for Primary Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
+                            </div>
+                        </div>
+
+                        <!-- Baba Aux -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Baba Aux Line (Secondary)</strong>
+                                <span class="badge ${SESSIONS[1].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[1].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                Dedicated secondary SIM (100% clean, no Meta Ads interference). Scan any standard WhatsApp here!
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/baba_aux" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/repair/baba_aux" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
+                                <a href="/reset/baba_aux" onclick="return confirm('Reset Baba Aux Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
+                            </div>
+                        </div>
+
+                        <!-- Canada Line -->
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <strong style="font-size: 14px; color: #0f172a;">Canada Line (+1 Virtual)</strong>
+                                <span class="badge ${SESSIONS[2].status === 'CONNECTED' ? 'badge-success' : 'badge-warning'}">
+                                    ● ${SESSIONS[2].status}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                                International virtual line for high-capacity broadcasts and auxiliary campaign pings.
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="/scan/canada" target="_blank" style="flex: 1; text-align: center; background: #2563eb; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">📱 View QR</a>
+                                <a href="/repair/canada" style="flex: 1; text-align: center; background: #0284c7; color: white; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">⚡ Quick Repair</a>
+                                <a href="/reset/canada" onclick="return confirm('Reset Canada Line?')" style="flex: 1; text-align: center; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 7px; border-radius: 6px; font-size: 12px; text-decoration: none; font-weight: 600;">🔄 Full Reset</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Send Test Tool -->
+                    <div style="background: #f1f5f9; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                        <strong style="font-size: 14px; color: #0f172a; display: block; margin-bottom: 8px;">🧪 Send Direct WhatsApp Test Message</strong>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <select id="diag-line" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                                <option value="sim_636">Primary (6367810227)</option>
+                                <option value="baba_aux">Baba Aux Line</option>
+                                <option value="canada">Canada Line</option>
+                            </select>
+                            <input type="tel" id="diag-phone" placeholder="Enter recipient mobile (e.g. 9876543210)" class="input-field" style="width: 240px; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                            <input type="text" id="diag-msg" placeholder="Test message text..." class="input-field" style="flex: 1; min-width: 200px; background: white; color: #0f172a; border: 1px solid #cbd5e1;" value="राम राम भाई जी! यह बाबा अभय सिंह सेवा केंद्र का लाइव टेस्ट मैसेज है। 🚩">
+                            <button onclick="sendDiagnosticTest()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                                🚀 Send Test
+                            </button>
+                        </div>
+                        <div id="diag-send-status" style="margin-top: 8px; font-size: 12px; font-weight: 600;"></div>
+                    </div>
+
+                    <!-- Diagnostics Log Table -->
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 85px;">Time</th>
+                                    <th style="width: 140px;">Line</th>
+                                    <th style="width: 130px;">Sender / Type</th>
+                                    <th>Payload / Log Summary</th>
+                                    <th style="width: 110px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diag-table-body">
+                                <tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 2: Live Poster Studio (Personalized Status Posters) -->
+                <div id="tab-studio" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🎨 Dynamic Voter Status Poster Studio</h3>
+                    <p style="color: #64748b; font-size: 14px;">Generate personalized high-resolution campaign posters with voter names on the fly. Ready for WhatsApp DP and Status stories!</p>
+                    
+                    <div class="studio-grid" style="margin-top: 20px;">
+                        <div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label style="color:#334155;">Voter / Supporter Name</label>
+                                    <input type="text" id="p-name" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सत्यनारायण शर्मा" placeholder="Enter voter name">
+                                </div>
+                                <div class="form-group">
+                                    <label style="color:#334155;">Poster Aspect Ratio</label>
+                                    <select id="p-aspect" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;">
+                                        <option value="9:16">9:16 (WhatsApp Status Story - 1080x1920)</option>
+                                        <option value="1:1" selected>1:1 (WhatsApp Profile DP - 1080x1080)</option>
+                                        <option value="3:4">3:4 (Portrait Feed Card - 1080x1440)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 15px;">
+                                <label style="color:#334155;">Slogan</label>
+                                <input type="text" id="p-slogan" class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" value="सच्चा विकास, ईमानदार नेतृत्व 🚩">
+                            </div>
+                            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                <button onclick="generatePosterPreview()" style="background:#2563eb; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:700; cursor:pointer;">
+                                    ✨ Generate & Preview Poster
+                                </button>
+                                <button onclick="downloadPoster()" id="btn-download" style="background:#0f172a; color:white; border:none; padding:12px 20px; border-radius:8px; font-weight:700; cursor:pointer; display:none;">
+                                    ⬇️ Download High-Res
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Live Preview Box -->
+                        <div style="text-align: center; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; background: #f8fafc;">
+                            <div style="font-weight: 700; font-size: 13px; color: #64748b; margin-bottom: 10px;">Live Preview</div>
+                            <img id="poster-preview-img" src="/media/poster.jpg" style="max-height: 380px; width: auto; max-width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: AI Playground & Testing Lab -->
+                <div id="tab-playground" class="card tab-content" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px;">
+                        <div>
+                            <h3 style="margin-top:0;">🤖 AI Assistant Testing Lab</h3>
+                            <p style="color: #64748b; font-size: 14px;">Test conversations with Baba Abhay Singh's AI assistant in real-time before sending to voters.</p>
+                            
+                            <div style="border: 1px solid #e2e8f0; border-radius: 10px; height: 350px; display: flex; flex-direction: column; background: #fafafa; margin-top: 15px;">
+                                <div id="ai-chat-ui" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:10px;">
+                                    <div class="bubble bubble-bot">
+                                        राम राम भाई जी! 🙏 मैं बाबा अभय सिंह सेवा केंद्र का डिजिटल सहायक हूँ। बताइए, कैसे सेवा करूँ?
+                                    </div>
+                                </div>
+                                <div style="padding: 10px; background: white; border-top: 1px solid #e2e8f0; display:flex; gap:8px;">
+                                    <input type="text" id="ai-test-input" placeholder="Type query e.g. 'kon ho bhai tum' or 'daaru baatega kya'..." class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" onkeydown="if(event.key==='Enter') sendAITest()">
+                                    <button onclick="sendAITest()" style="background:#2563eb; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Send</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Knowledge & Rules Fact Sheet -->
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; background: #f8fafc; font-size: 13px;">
+                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">🧠 Active Persona & Rules:</div>
+                            <ul style="padding-left: 18px; margin: 0 0 15px 0; color: #334155; line-height: 1.5;">
+                                <li><b>Identity:</b> Baba Abhay Singh Seva Kendra digital assistant.</li>
+                                <li><b>Opposition Policy:</b> Never name opposite candidates directly. Slay bribing & liquor with sweet village satire.</li>
+                                <li><b>Budget Rule:</b> Zero rupees / tender amounts mentioned.</li>
+                                <li><b>Length:</b> 2-3 punchy, charming lines max.</li>
+                            </ul>
+                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">💡 Quick Test Buttons:</div>
+                            <div style="display:flex; flex-direction:column; gap:6px;">
+                                <button onclick="quickTestQuery('kon ho bhai tum')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">"kon ho bhai tum"</button>
+                                <button onclick="quickTestQuery('virodhi bol raha h daaru aur paise baatega')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"virodhi daaru baatega"</button>
+                                <button onclick="quickTestQuery('baba ne pichle 5 saal me kya kaam kiya')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"baba ne kya kaam kiya"</button>
+                                <button onclick="quickTestQuery('ek badhiya slogan sunao')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"ek slogan sunao"</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: WhatsApp Web Replica Master Dashboard -->
+                <div id="tab-voters" class="card tab-content" style="display: none; padding: 0; overflow: hidden; border: none;">
+                    <div class="wa-wrapper">
+                        <!-- Left Contacts Sidebar -->
+                        <div class="wa-left">
+                            <div class="wa-left-header">
+                                <div>
+                                    <h3 style="margin: 0; font-size: 14px; color: #0f172a; font-weight: 700;">💬 मतदाता संवाद कक्ष</h3>
+                                    <span style="font-size: 11px; color: #64748b;">WhatsApp Web Replica • Ground CRM</span>
+                                </div>
+                                <button onclick="toggleDemoPosterMode()" id="demo-mode-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid #16a34a; background: #dcfce7; color: #15803d; font-weight: 700; cursor: pointer;">
+                                    📸 डेमो पोस्टर मोड: चालू
+                                </button>
+                            </div>
+                            <div class="wa-search-bar">
+                                <input type="text" id="voter-search" placeholder="🔍 नाम, फोन नंबर या टैग से खोजें..." style="width: 100%; padding: 8px 12px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 13px; outline: none; background: #f8fafc; color: #0f172a;" oninput="filterVoters(this.value)">
+                            </div>
+                            <!-- 17 Smart Filter Chips -->
+                            <div class="wa-filter-chips">
+                                <span class="filter-chip active" onclick="applyTagFilter('ALL', this)">सभी (<span id="voter-count-badge">0</span>)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🟢 पक्का समर्थक', this)">🟢 समर्थक</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🟡 सोच विचार', this)">🟡 असमंजस</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🔴 विरोधी / नाराज', this)">🔴 विरोधी</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📝 काम की शिकायत', this)">📝 शिकायतें</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📢 चुनावी माहौल', this)">📢 माहौल</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👨‍👩‍👧 परिवार विवरण', this)">👨‍👩‍👧 परिवार</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚩 युवा टीम', this)">🚩 युवा टीम</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🌾 किसान व पशुपालक', this)">🌾 किसान</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚆 प्रवासी मतदाता', this)">🚆 प्रवासी</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚨 धांधली अलर्ट', this)">🚨 धांधली अलर्ट</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👵 बुजुर्ग व पेंशन', this)">👵 बुजुर्ग</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👩‍🦰 महिला शक्ति', this)">👩‍🦰 महिला</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📜 संकल्प पत्र', this)">📜 संकल्प</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🤝 सीधी मुलाकात', this)">🤝 मुलाकात</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🎫 वोटर पर्ची', this)">🎫 पर्ची</span>
+                                <span class="filter-chip" onclick="applyTagFilter('MANUAL', this)">⏸️ Manual</span>
+                            </div>
+                            <div class="wa-contacts-list" id="voter-list-ui">
+                                <div style="padding: 30px; text-align: center; color: #94a3b8;">लोड हो रहा है...</div>
+                            </div>
+                        </div>
+
+                        <!-- Right WhatsApp Chat Conversation -->
+                        <div class="wa-right">
+                            <!-- Chat Top Bar -->
+                            <div class="wa-header" id="wa-chat-header" style="display: none;">
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <div class="wa-avatar" id="header-avatar" style="width: 38px; height: 38px; font-size: 14px;">👤</div>
+                                    <div>
+                                        <div style="font-weight: 700; font-size: 14px; color: #0f172a;" id="header-name">Voter Name</div>
+                                        <div style="font-size: 12px; color: #64748b;" id="header-details">+91 00000 00000 • वार्ड: --</div>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <!-- AutoPilot AI Toggle Button -->
+                                    <button id="btn-toggle-autopilot" onclick="toggleCurrentAutoPilot()" style="padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 700; border: none; cursor: pointer; background: #16a34a; color: white;">
+                                        🤖 AutoPilot AI: चालू
+                                    </button>
+
+                                    <!-- Sentiment Dropdown -->
+                                    <select id="voter-sentiment-select" onchange="updateVoterSentiment(this.value)" style="padding: 5px 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 600; background: white; color: #0f172a;">
+                                        <option value="positive">🟢 पक्का समर्थक</option>
+                                        <option value="swing">🟡 असमंजस / सोच-विचार</option>
+                                        <option value="critical">🔴 विरोधी / नाराज</option>
+                                        <option value="neutral">⚪ सामान्य संपर्क</option>
+                                    </select>
+
+                                    <!-- Toggle Intelligence Notes Drawer -->
+                                    <button onclick="toggleIntelDrawer()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #0f172a;">
+                                        📋 वोटर नोट्स व टैग्स
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Collapsible Voter Intelligence & Memory Drawer -->
+                            <div class="wa-intel-bar" id="wa-intel-drawer">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <h4 style="margin: 0; font-size: 13px; color: #0f172a;">🧠 वोटर मेमरी, टैग्स व ज़मीनी खुफिया जानकारी</h4>
+                                    <button onclick="toggleIntelDrawer()" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #64748b;">✕</button>
+                                </div>
+
+                                <!-- Active Tags -->
+                                <div style="margin-bottom: 10px;">
+                                    <span style="font-size: 11px; font-weight: 700; color: #64748b; margin-right: 6px;">सक्रिय टैग्स:</span>
+                                    <span id="active-tags-container"></span>
+                                    <select id="add-tag-select" onchange="addTagToCurrentVoter(this.value)" style="padding: 2px 6px; font-size: 11px; border-radius: 6px; border: 1px solid #cbd5e1; margin-left: 6px; background:white; color:#0f172a;">
+                                        <option value="">+ नया टैग जोड़ें...</option>
+                                        <option value="🟢 पक्का समर्थक">🟢 पक्का समर्थक</option>
+                                        <option value="🟡 सोच विचार">🟡 सोच विचार</option>
+                                        <option value="🔴 विरोधी / नाराज">🔴 विरोधी / नाराज</option>
+                                        <option value="👨‍👩‍👧 परिवार विवरण">👨‍👩‍👧 परिवार विवरण</option>
+                                        <option value="📢 चुनावी माहौल">📢 चुनावी माहौल</option>
+                                        <option value="📝 काम की शिकायत">📝 काम की शिकायत</option>
+                                        <option value="🎫 वोटर पर्ची जारी">🎫 वोटर पर्ची</option>
+                                        <option value="🤝 सीधी मुलाकात">🤝 सीधी मुलाकात</option>
+                                        <option value="🚩 युवा टीम">🚩 युवा टीम</option>
+                                        <option value="🌾 किसान व पशुपालक">🌾 किसान व पशुपालक</option>
+                                        <option value="👵 बुजुर्ग व पेंशन">👵 बुजुर्ग व पेंशन</option>
+                                        <option value="👩‍🦰 महिला शक्ति">👩‍🦰 महिला शक्ति</option>
+                                        <option value="🚨 धांधली अलर्ट">🚨 धांधली अलर्ट</option>
+                                        <option value="📜 संकल्प पत्र">📜 संकल्प पत्र</option>
+                                        <option value="🚆 प्रवासी मतदाता">🚆 प्रवासी मतदाता</option>
+                                    </select>
+                                </div>
+
+                                <!-- Notes Form -->
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+                                    <div>
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">👨‍👩‍👧 परिवार विवरण (Family Info)</label>
+                                        <input type="text" id="intel-family" placeholder="उदा: 5 वोट, चाचा जी साथ हैं..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📢 चुनावी माहौल व चर्चा (Ground Mahool)</label>
+                                        <input type="text" id="intel-mahool" placeholder="उदा: वार्ड में अच्छी हवा, विरोधियों की चर्चा..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📝 बाबा अभय सिंह प्राथमिकता रजिस्टर</label>
+                                        <input type="text" id="intel-baba" placeholder="उदा: रास्ते की नाली ठीक करवाने का वादा..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                    </div>
+                                </div>
+                                <div style="text-align: right; margin-top: 8px;">
+                                    <button onclick="saveVoterIntelligence()" style="background: #2563eb; color: white; border: none; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                                        💾 Save Notes & Intelligence
+                                    </button>
+                                    <span id="intel-save-status" style="font-size: 11px; font-weight: 600; color: #16a34a; margin-left: 8px; display: none;">✅ सहेज लिया गया!</span>
+                                </div>
+                            </div>
+
+                            <!-- Messages Stream -->
+                            <div class="wa-chat-scroll" id="wa-chat-scroll">
+                                <div style="text-align: center; color: #8696a0; margin-top: 180px;">
+                                    <div style="font-size: 44px; margin-bottom: 10px;">💬</div>
+                                    <div style="font-weight: 700; font-size: 16px; color: #334155;">मतदाता संवाद कक्ष में आपका स्वागत है</div>
+                                    <p style="font-size: 13px; max-width: 420px; margin: 6px auto 0 auto; color: #64748b;">बाईं तरफ से किसी भी मतदाता पर क्लिक करें। आप उनकी पूरी चैट देख सकते हैं, सीधे बात कर सकते हैं, या ऑटोपायलट संभाल सकते हैं।</p>
+                                </div>
+                            </div>
+
+                            <!-- Quick Action Bar -->
+                            <div class="wa-quick-actions" id="wa-quick-actions" style="display: none;">
+                                <button class="wa-action-btn" onclick="sendQuickAction('ramram')">🙏 राम राम</button>
+                                <button class="wa-action-btn" onclick="sendQuickAction('demo_poster')">📸 डेमो पोस्टर भेजें</button>
+                                <button class="wa-action-btn" onclick="sendQuickAction('video')">📹 3D वीडियो रील</button>
+                                <button class="wa-action-btn" onclick="sendQuickAction('slip')">🎫 वोटर पर्ची निकालें</button>
+                                <button class="wa-action-btn" onclick="sendQuickAction('baba_register')">📝 बाबा रजिस्टर में दर्ज</button>
+                                <button class="wa-action-btn" onclick="sendQuickAction('meeting')">🤝 चौपाल मुलाकात</button>
+                            </div>
+
+                            <!-- Chat Direct Input Bar -->
+                            <div class="wa-input-container" id="wa-input-container" style="display: none;">
+                                <input type="text" id="wa-direct-input" class="wa-input-field" placeholder="सीधा WhatsApp संदेश लिखें (Enter दबाएं या Send पर क्लिक करें)..." onkeydown="if(event.key==='Enter') sendManualWhatsAppReply()">
+                                <button class="wa-send-btn" onclick="sendManualWhatsAppReply()" title="Send WhatsApp Message">➤</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: Media Bank & Direct Uploader -->
+                <div id="tab-media" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
+                    <p style="color: #64748b; font-size: 14px;">Upload new campaign photos or videos directly from your mobile gallery or PC. Updates the bot instantly!</p>
+                    
+                    <!-- Direct Uploader Box -->
+                    <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: center;">
+                        <h4 style="margin: 0 0 10px 0;">📤 Upload Media from Device</h4>
+                        <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                            <input type="file" id="media-file-input" accept="image/*,video/mp4" style="font-size: 14px;">
+                            <select id="media-target-select" class="input-field" style="width: auto; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
+                                <option value="poster.jpg">Campaign Poster (poster.jpg)</option>
+                                <option value="campaign_reel.mp4">Campaign Video Reel (campaign_reel.mp4)</option>
+                            </select>
+                            <button onclick="uploadMediaFile()" style="background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                                ⬆️ Upload to Cloud
+                            </button>
+                        </div>
+                        <div id="upload-status" style="margin-top: 10px; font-weight: 600; font-size: 13px;"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; text-align: center;">
+                            <img src="/media/poster.jpg?t=${Date.now()}" id="poster-asset-img" style="max-height: 200px; border-radius: 8px; margin-bottom: 10px;" />
+                            <div style="font-weight: 700;">Official Campaign Poster</div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "photo", "poster", "tasveer"</div>
+                            <a href="/media/poster.jpg" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Open High-Res Poster →</a>
+                        </div>
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; text-align: center;">
+                            <div style="height: 200px; display: flex; align-items:center; justify-content:center; background:#0f172a; border-radius:8px; margin-bottom: 10px; color:white; font-size: 32px;">
+                                📹
+                            </div>
+                            <div style="font-weight: 700;">3D Campaign Video Reel (MP4)</div>
+                            <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "video", "reel"</div>
+                            <a href="/media/campaign_reel.mp4" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Play Campaign Video Reel →</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard JavaScript -->
+            <script>
+                let allVoters = [];
+                let selectedVoterPhone = null;
+                let currentPosterBlob = null;
+                let aiHistory = [];
+
+                function switchTab(tabId) {
+                    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+                    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+                    document.getElementById('tab-' + tabId).style.display = 'block';
+                    event.target.classList.add('active');
+                    if (tabId === 'voters') loadVoters();
+                }
+
+                function toggleCustomText(val) {
+                    document.getElementById('custom-text-group').style.display = val === 'custom' ? 'block' : 'none';
+                }
+
+                // Send Instant WhatsApp Message from Field Mode Form
+                async function sendInstantMessage(e) {
+                    e.preventDefault();
+                    const phone = document.getElementById('v-phone').value;
+                    const name = document.getElementById('v-name').value;
+                    const lineId = document.getElementById('v-line').value;
+                    const template = document.getElementById('v-template').value;
+                    const customText = document.getElementById('v-custom-text').value;
+                    const statusEl = document.getElementById('send-status');
+                    const btn = document.getElementById('btn-submit');
+
+                    btn.disabled = true;
+                    btn.innerText = '⏳ Sending WhatsApp Message...';
+
+                    try {
+                        const res = await fetch('/api/send-message', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone, name, template, customText, lineId })
+                        });
+                        const data = await res.json();
+
+                        if (res.ok) {
+                            statusEl.style.display = 'inline-block';
+                            statusEl.style.background = '#dcfce7';
+                            statusEl.style.color = '#15803d';
+                            statusEl.innerText = '✅ Buzz! Sent to +' + data.phone + ' via ' + data.line;
+                            document.getElementById('v-phone').value = '';
+                            document.getElementById('v-name').value = '';
+                            document.getElementById('v-custom-text').value = '';
+                            setTimeout(() => { statusEl.style.display = 'none'; }, 6000);
+                            updateLiveFeed();
+                        } else {
+                            alert('Failed to send: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (err) {
+                        alert('Error communicating with server: ' + err.message);
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = '📲 Jod Lo & Send WhatsApp Instantly';
+                    }
+                }
+
+                // Poster Studio Generator
+                async function generatePosterPreview() {
+                    const name = document.getElementById('p-name').value;
+                    const aspect = document.getElementById('p-aspect').value;
+                    const slogan = document.getElementById('p-slogan').value;
+
+                    try {
+                        const res = await fetch('/api/generate-poster', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, aspect, customSlogan: slogan })
+                        });
+                        const blob = await res.blob();
+                        currentPosterBlob = blob;
+                        const url = URL.createObjectURL(blob);
+                        document.getElementById('poster-preview-img').src = url;
+                        document.getElementById('btn-download').style.display = 'inline-block';
+                    } catch (e) {
+                        alert('Error generating poster: ' + e.message);
+                    }
+                }
+
+                function downloadPoster() {
+                    if (!currentPosterBlob) return;
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(currentPosterBlob);
+                    a.download = 'Sihali_Khurd_Poster_' + Date.now() + '.jpg';
+                    a.click();
+                }
+
+                // Upload Media from Device
+                async function uploadMediaFile() {
+                    const fileInput = document.getElementById('media-file-input');
+                    const targetSelect = document.getElementById('media-target-select');
+                    const statusEl = document.getElementById('upload-status');
+
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        alert('Please select a file to upload!');
+                        return;
+                    }
+
+                    const file = fileInput.files[0];
+                    statusEl.innerText = '⏳ Uploading ' + file.name + '... Please wait.';
+                    statusEl.style.color = '#2563eb';
+
+                    const reader = new FileReader();
+                    reader.onload = async function() {
+                        try {
+                            const res = await fetch('/api/upload-media', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    target: targetSelect.value,
+                                    base64Data: reader.result
+                                })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                                statusEl.innerText = '✅ ' + data.message;
+                                statusEl.style.color = '#16a34a';
+                                if (targetSelect.value === 'poster.jpg') {
+                                    document.getElementById('poster-asset-img').src = '/media/poster.jpg?t=' + Date.now();
+                                }
+                            } else {
+                                statusEl.innerText = '❌ Error: ' + data.error;
+                                statusEl.style.color = '#dc2626';
+                            }
+                        } catch (err) {
+                            statusEl.innerText = '❌ Upload failed: ' + err.message;
+                            statusEl.style.color = '#dc2626';
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+
+                // AI Playground
+                async function sendAITest() {
+                    const input = document.getElementById('ai-test-input');
+                    const text = input.value.trim();
+                    if (!text) return;
+
+                    input.value = '';
+                    const chatUi = document.getElementById('ai-chat-ui');
+                    chatUi.innerHTML += \`<div class="bubble bubble-user">\${text}</div>\`;
+                    chatUi.scrollTop = chatUi.scrollHeight;
+
+                    aiHistory.push({ role: 'user', content: text });
+
+                    try {
+                        const res = await fetch('/api/test-ai', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: text, history: aiHistory })
+                        });
+                        const data = await res.json();
+                        aiHistory.push({ role: 'assistant', content: data.reply });
+
+                        chatUi.innerHTML += \`
+                            <div class="bubble bubble-bot">
+                                \${data.reply}
+                            </div>
+                        \`;
+                        chatUi.scrollTop = chatUi.scrollHeight;
+                    } catch (e) {
+                        chatUi.innerHTML += \`<div class="bubble bubble-bot" style="color:red;">Error: \${e.message}</div>\`;
+                    }
+                }
+
+                function quickTestQuery(q) {
+                    document.getElementById('ai-test-input').value = q;
+                    sendAITest();
+                }
+
+                // Update Live Voter Chat Feed (Voters Only)
+                async function updateLiveFeed() {
+                    try {
+                        const res = await fetch('/api/messages');
+                        const messages = await res.json();
+                        const tbody = document.getElementById('live-table-body');
+                        if (!messages || messages.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 35px;">💬 Waiting for voter messages... Real incoming chats will appear here in real time!</td></tr>';
+                            return;
+                        }
+
+                        tbody.innerHTML = messages.map(m => {
+                            let badgeClass = 'badge-success';
+                            if (m.status === 'HANDSHAKE_SENT') badgeClass = 'badge-info';
+                            else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
+                            else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
+
+                            return \`
+                                <tr>
+                                    <td style="color: #64748b; font-size: 12px;">\${m.timestamp}</td>
+                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${m.session}</span></td>
+                                    <td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+\${m.phone}</span></td>
+                                    <td style="font-weight: 500; color: #0f172a;">\${m.incoming}</td>
+                                    <td style="color: #334155; font-size: 13px; white-space: pre-wrap;">\${m.reply}</td>
+                                    <td><span class="badge \${badgeClass}">● \${m.status}</span></td>
+                                </tr>
+                            \`;
+                        }).join('');
+                    } catch (e) {}
+                }
+                setInterval(updateLiveFeed, 4000);
+                updateLiveFeed();
+
+                // Update Diagnostics Feed
+                async function updateDiagnostics() {
+                    try {
+                        const res = await fetch('/api/diagnostics');
+                        const data = await res.json();
+                        const tbody = document.getElementById('diag-table-body');
+                        if (!data || !data.feed || data.feed.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 25px;">No system events or self-tests recorded yet.</td></tr>';
+                            return;
+                        }
+
+                        tbody.innerHTML = data.feed.map(d => {
+                            let badgeClass = 'badge-warning';
+                            if (d.status === 'SELF_DEVICE') badgeClass = 'badge-info';
+                            else if (d.status === 'BAD_MAC') badgeClass = 'badge-danger';
+
+                            return \`
+                                <tr>
+                                    <td style="color: #64748b; font-size: 12px;">\${d.timestamp}</td>
+                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${d.session}</span></td>
+                                    <td><span style="color: #475569; font-weight: 700; font-size: 12px;">\${d.phone}</span></td>
+                                    <td style="color: #334155; font-size: 12px;"><b>\${d.incoming}</b><br><span style="color:#64748b;">\${d.reply}</span></td>
+                                    <td><span class="badge \${badgeClass}">● \${d.status}</span></td>
+                                </tr>
+                            \`;
+                        }).join('');
+                    } catch (e) {}
+                }
+                setInterval(updateDiagnostics, 4000);
+                updateDiagnostics();
+
+                // Clear All Logs
+                async function clearAllLogs() {
+                    if (!confirm('Are you sure you want to clear chat and diagnostic logs?')) return;
+                    try {
+                        await fetch('/api/clear-logs', { method: 'POST' });
+                        updateLiveFeed();
+                        updateDiagnostics();
+                    } catch (e) {
+                        alert('Failed to clear logs: ' + e.message);
+                    }
+                }
+
+                // Send Diagnostic Test Message
+                async function sendDiagnosticTest() {
+                    const lineId = document.getElementById('diag-line').value;
+                    const phone = document.getElementById('diag-phone').value.trim();
+                    const message = document.getElementById('diag-msg').value.trim();
+                    const statusEl = document.getElementById('diag-send-status');
+
+                    if (!phone || !message) {
+                        alert('Please enter recipient phone number and message.');
+                        return;
+                    }
+
+                    statusEl.innerText = '⏳ Sending test WhatsApp...';
+                    statusEl.style.color = '#2563eb';
+
+                    try {
+                        const res = await fetch('/api/test-send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionId: lineId, phone, message })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            statusEl.innerText = '✅ ' + data.message;
+                            statusEl.style.color = '#16a34a';
+                            updateLiveFeed();
+                        } else {
+                            statusEl.innerText = '❌ ' + (data.error || 'Failed');
+                            statusEl.style.color = '#dc2626';
+                        }
+                    } catch (e) {
+                        statusEl.innerText = '❌ Error: ' + e.message;
+                        statusEl.style.color = '#dc2626';
+                    }
+                }
+
+                // Load Voters and Memory - WhatsApp Web Replica JS Engine
+                let currentFilterTag = 'ALL';
+                let currentVoterData = null;
+
+                function getTagStyle(t) {
+                    if (t.indexOf('🔴') !== -1 || t.indexOf('🚨') !== -1) return 'background:#fee2e2; color:#991b1b; border-color:#fca5a5;';
+                    if (t.indexOf('🟢') !== -1) return 'background:#dcfce7; color:#166534; border-color:#86efac;';
+                    if (t.indexOf('🟡') !== -1) return 'background:#fef3c7; color:#92400e; border-color:#fcd34d;';
+                    if (t.indexOf('📝') !== -1) return 'background:#ffedd5; color:#9a3412; border-color:#fdba74;';
+                    if (t.indexOf('👨‍👩‍👧') !== -1 || t.indexOf('📢') !== -1) return 'background:#e0f2fe; color:#0369a1; border-color:#7dd3fc;';
+                    if (t.indexOf('🚩') !== -1 || t.indexOf('📜') !== -1) return 'background:#f3e8ff; color:#6b21a8; border-color:#d8b4fe;';
+                    if (t.indexOf('🌾') !== -1) return 'background:#d1fae5; color:#065f46; border-color:#6ee7b7;';
+                    if (t.indexOf('🚆') !== -1) return 'background:#ccfbf1; color:#115e59; border-color:#5eead4;';
+                    if (t.indexOf('👵') !== -1 || t.indexOf('👩‍🦰') !== -1) return 'background:#fce7f3; color:#9d174d; border-color:#f9a8d4;';
+                    return 'background:#f1f5f9; color:#334155; border-color:#cbd5e1;';
+                }
+
+                async function toggleDemoPosterMode() {
+                    try {
+                        const statusRes = await fetch('/api/demo-poster-status');
+                        const statusData = await statusRes.json();
+                        const nextState = !statusData.demoMode;
+                        const res = await fetch('/api/toggle-demo-posters', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ enabled: nextState })
+                        });
+                        const data = await res.json();
+                        const badge = document.getElementById('demo-mode-badge');
+                        if (data.demoMode) {
+                            badge.style.background = '#dcfce7';
+                            badge.style.color = '#15803d';
+                            badge.style.borderColor = '#16a34a';
+                            badge.innerText = '📸 डेमो पोस्टर मोड: चालू';
+                        } else {
+                            badge.style.background = '#e0f2fe';
+                            badge.style.color = '#0284c7';
+                            badge.style.borderColor = '#0284c7';
+                            badge.innerText = '🖼️ ओरिजिनल पोस्टर मोड';
+                        }
+                    } catch (e) {
+                        alert('Error toggling demo poster mode: ' + e.message);
+                    }
+                }
+
+                async function loadVoters() {
+                    try {
+                        const res = await fetch('/api/voters');
+                        allVoters = await res.json();
+                        document.getElementById('voter-count').innerText = allVoters.length;
+                        document.getElementById('voter-count-badge').innerText = allVoters.length;
+                        applyTagFilter(currentFilterTag);
+                    } catch (e) {
+                        console.error('Error loading voters:', e);
+                    }
+                }
+
+                function applyTagFilter(tag, el) {
+                    currentFilterTag = tag;
+                    if (el) {
+                        document.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
+                        el.classList.add('active');
+                    }
+
+                    if (tag === 'ALL') {
+                        renderVoterList(allVoters);
+                    } else if (tag === 'MANUAL') {
+                        const filtered = allVoters.filter(function(v) { return v.autoPilot === false; });
+                        renderVoterList(filtered);
+                    } else {
+                        const filtered = allVoters.filter(function(v) {
+                            return (v.tags && v.tags.indexOf(tag) !== -1) || v.voterSentiment === tag;
+                        });
+                        renderVoterList(filtered);
+                    }
+                }
+
+                function filterVoters(q) {
+                    const lower = (q || '').toLowerCase();
+                    const filtered = allVoters.filter(function(v) {
+                        const nameMatch = v.name && v.name.toLowerCase().indexOf(lower) !== -1;
+                        const phoneMatch = v.phone && v.phone.indexOf(lower) !== -1;
+                        const tagMatch = v.tags && v.tags.some(function(t) { return t.toLowerCase().indexOf(lower) !== -1; });
+                        return nameMatch || phoneMatch || tagMatch;
+                    });
+                    renderVoterList(filtered);
+                }
+
+                function renderVoterList(voters) {
+                    const listUi = document.getElementById('voter-list-ui');
+                    if (!voters || voters.length === 0) {
+                        listUi.innerHTML = '<div style="padding: 30px; text-align: center; color: #94a3b8; font-size: 13px;">कोई मतदाता नहीं मिला।</div>';
+                        return;
+                    }
+
+                    listUi.innerHTML = voters.map(function(v) {
+                        const isSelected = selectedVoterPhone === v.phone;
+                        const initial = (v.name && v.name.trim()) ? v.name.trim().charAt(0).toUpperCase() : '👤';
+                        const lastMsg = (v.history && v.history.length > 0) ? v.history[v.history.length - 1] : null;
+                        const snippet = lastMsg ? ((lastMsg.role === 'user' ? '📩 ' : '🚩 ') + lastMsg.text) : 'नई बातचीत...';
+                        const time = lastMsg ? lastMsg.time : '';
+                        const autoPilotBadge = v.autoPilot === false 
+                            ? '<span style="background:#fed7aa; color:#9a3412; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700;">⏸️ Manual</span>'
+                            : '<span style="background:#dcfce7; color:#15803d; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700;">🤖 Auto</span>';
+
+                        const tagsHtml = (v.tags || []).slice(0, 3).map(function(t) {
+                            return '<span class="wa-tag-pill" style="' + getTagStyle(t) + '">' + t + '</span>';
+                        }).join('');
+
+                        return '<div class="wa-contact-item ' + (isSelected ? 'selected' : '') + '" onclick="selectVoter(\'' + v.phone + '\')">' +
+                            '<div class="wa-avatar">' + initial + '</div>' +
+                            '<div class="wa-contact-info">' +
+                                '<div class="wa-contact-top">' +
+                                    '<div class="wa-contact-name">' + (v.name || 'ग्रामवासी') + '</div>' +
+                                    '<div class="wa-contact-time">' + time + '</div>' +
+                                '</div>' +
+                                '<div class="wa-contact-sub">' +
+                                    '<span>+' + v.phone + '</span>' +
+                                    autoPilotBadge +
+                                '</div>' +
+                                '<div class="wa-contact-snippet">' + snippet + '</div>' +
+                                '<div>' + tagsHtml + '</div>' +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+                }
+
+                async function selectVoter(phone) {
+                    selectedVoterPhone = phone;
+                    renderVoterList(allVoters);
+
+                    try {
+                        const res = await fetch('/api/voter/' + phone);
+                        currentVoterData = await res.json();
+                        const v = currentVoterData;
+
+                        document.getElementById('wa-chat-header').style.display = 'flex';
+                        document.getElementById('wa-quick-actions').style.display = 'flex';
+                        document.getElementById('wa-input-container').style.display = 'flex';
+
+                        document.getElementById('header-name').innerText = v.name || 'ग्रामवासी';
+                        const details = '+' + v.phone + ' • वार्ड: ' + (v.ward || '--') + (v.fatherOrSpouse ? ' • संबंध: ' + v.fatherOrSpouse : '');
+                        document.getElementById('header-details').innerText = details;
+                        document.getElementById('header-avatar').innerText = (v.name && v.name.trim()) ? v.name.trim().charAt(0).toUpperCase() : '👤';
+
+                        // AutoPilot Button State
+                        const apBtn = document.getElementById('btn-toggle-autopilot');
+                        if (v.autoPilot === false) {
+                            apBtn.style.background = '#f97316';
+                            apBtn.innerText = '⏸️ मैन्युअल मोड: सक्रिय';
+                            apBtn.title = 'Click to activate AI AutoPilot';
+                        } else {
+                            apBtn.style.background = '#16a34a';
+                            apBtn.innerText = '🤖 AutoPilot AI: चालू';
+                            apBtn.title = 'Click to pause AI and takeover manually';
+                        }
+
+                        // Sentiment select
+                        document.getElementById('voter-sentiment-select').value = v.voterSentiment || 'neutral';
+
+                        // Populate Intelligence notes
+                        document.getElementById('intel-family').value = v.familyNotes || '';
+                        document.getElementById('intel-mahool').value = v.mahoolNotes || '';
+                        document.getElementById('intel-baba').value = v.babaNotes || '';
+                        renderActiveTags(v.tags || []);
+
+                        // Render messages
+                        const scrollUi = document.getElementById('wa-chat-scroll');
+                        if (!v.history || v.history.length === 0) {
+                            scrollUi.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top:150px;">इस मतदाता के साथ अभी कोई संदेश रिकॉर्ड नहीं हुआ है। नीचे से सीधा संदेश भेजें!</div>';
+                            return;
+                        }
+
+                        scrollUi.innerHTML = v.history.map(function(h) {
+                            let bubbleClass = 'wa-bubble-user';
+                            let senderLabel = '👤 ' + (v.name || 'वोटर');
+
+                            if (h.role === 'bot') {
+                                if (h.session === 'Admin Direct' || h.session === 'Admin Manual' || h.session === 'Admin Quick Action') {
+                                    bubbleClass = 'wa-bubble-admin';
+                                    senderLabel = '👨‍💻 एडमिन सीधा संदेश (' + h.session + ')';
+                                } else {
+                                    bubbleClass = 'wa-bubble-bot';
+                                    senderLabel = '🚩 बाबा अभय सिंह सेवा केंद्र (सुमन)';
+                                }
+                            }
+
+                            return '<div class="wa-bubble ' + bubbleClass + '">' +
+                                '<div style="font-size: 10px; font-weight: 700; opacity: 0.8; margin-bottom: 3px;">' + senderLabel + '</div>' +
+                                '<div style="white-space: pre-wrap;">' + h.text + '</div>' +
+                                '<div class="wa-bubble-meta">' +
+                                    '<span>' + (h.mediaType ? '📎 ' + h.mediaType : '') + '</span>' +
+                                    '<span>' + h.time + ' ✓✓</span>' +
+                                '</div>' +
+                            '</div>';
+                        }).join('');
+
+                        scrollUi.scrollTop = scrollUi.scrollHeight;
+                    } catch (e) {
+                        console.error('Error selecting voter:', e);
+                    }
+                }
+
+                function renderActiveTags(tags) {
+                    const cont = document.getElementById('active-tags-container');
+                    cont.innerHTML = tags.map(function(t) {
+                        return '<span class="wa-tag-pill" style="' + getTagStyle(t) + ' padding:3px 8px; border-radius:12px; font-size:11px;">' +
+                            t + ' <span onclick="removeTagFromCurrentVoter(\'' + t + '\')" style="cursor:pointer; margin-left:4px; font-weight:bold; color:#ef4444;">×</span>' +
+                        '</span>';
+                    }).join('');
+                }
+
+                async function toggleCurrentAutoPilot() {
+                    if (!selectedVoterPhone || !currentVoterData) return;
+                    const nextState = currentVoterData.autoPilot === false ? true : false;
+                    try {
+                        const res = await fetch('/api/toggle-autopilot', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, autoPilot: nextState })
+                        });
+                        const data = await res.json();
+                        currentVoterData.autoPilot = data.autoPilot;
+                        selectVoter(selectedVoterPhone);
+                        loadVoters();
+                    } catch (e) {
+                        alert('Failed to toggle AutoPilot: ' + e.message);
+                    }
+                }
+
+                async function updateVoterSentiment(sentiment) {
+                    if (!selectedVoterPhone) return;
+                    try {
+                        await fetch('/api/update-tags', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, sentiment: sentiment })
+                        });
+                        loadVoters();
+                    } catch (e) {}
+                }
+
+                function toggleIntelDrawer() {
+                    const drawer = document.getElementById('wa-intel-drawer');
+                    drawer.style.display = (drawer.style.display === 'block') ? 'none' : 'block';
+                }
+
+                async function addTagToCurrentVoter(tag) {
+                    if (!tag || !selectedVoterPhone || !currentVoterData) return;
+                    document.getElementById('add-tag-select').value = '';
+                    const tags = currentVoterData.tags || [];
+                    if (tags.indexOf(tag) === -1) tags.push(tag);
+                    try {
+                        await fetch('/api/update-tags', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, tags: tags })
+                        });
+                        currentVoterData.tags = tags;
+                        renderActiveTags(tags);
+                        loadVoters();
+                    } catch (e) {}
+                }
+
+                async function removeTagFromCurrentVoter(tag) {
+                    if (!selectedVoterPhone || !currentVoterData) return;
+                    let tags = currentVoterData.tags || [];
+                    tags = tags.filter(function(t) { return t !== tag; });
+                    try {
+                        await fetch('/api/update-tags', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, tags: tags })
+                        });
+                        currentVoterData.tags = tags;
+                        renderActiveTags(tags);
+                        loadVoters();
+                    } catch (e) {}
+                }
+
+                async function saveVoterIntelligence() {
+                    if (!selectedVoterPhone) return;
+                    const familyNotes = document.getElementById('intel-family').value;
+                    const mahoolNotes = document.getElementById('intel-mahool').value;
+                    const babaNotes = document.getElementById('intel-baba').value;
+                    const statusEl = document.getElementById('intel-save-status');
+
+                    try {
+                        await fetch('/api/update-notes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, familyNotes: familyNotes, mahoolNotes: mahoolNotes, babaNotes: babaNotes })
+                        });
+                        statusEl.style.display = 'inline';
+                        setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
+                        loadVoters();
+                    } catch (e) {
+                        alert('Failed to save notes: ' + e.message);
+                    }
+                }
+
+                async function sendQuickAction(action) {
+                    if (!selectedVoterPhone) return;
+                    let customNote = '';
+                    if (action === 'baba_register') {
+                        customNote = prompt('बाबा अभय सिंह के प्राथमिकता रजिस्टर में क्या समस्या दर्ज करनी है?');
+                        if (!customNote) return;
+                    }
+
+                    try {
+                        const res = await fetch('/api/quick-action', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, action: action, customNote: customNote })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            setTimeout(function() { selectVoter(selectedVoterPhone); }, 600);
+                        } else {
+                            alert('Action failed: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Error executing action: ' + e.message);
+                    }
+                }
+
+                async function sendManualWhatsAppReply() {
+                    if (!selectedVoterPhone) return;
+                    const input = document.getElementById('wa-direct-input');
+                    const text = input.value.trim();
+                    if (!text) return;
+
+                    input.value = '';
+                    try {
+                        await fetch('/api/send-message', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, template: 'custom', customText: text })
+                        });
+                        setTimeout(function() { selectVoter(selectedVoterPhone); }, 600);
+                    } catch (e) {
+                        alert('Error sending message: ' + e.message);
+                    }
+                }
+            
+            </script>
+        </body>
+        </html>
+    `);
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({
