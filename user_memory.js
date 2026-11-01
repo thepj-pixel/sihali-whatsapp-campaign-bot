@@ -62,6 +62,7 @@ class UserMemory {
                 voterSentiment: 'neutral', // positive | swing | critical | neutral
                 autoPilot: true, // Default true: Bot replies automatically. Set false for admin manual takeover
                 tags: ['⚪ सामान्य संपर्क'],
+                campaignGoal: '', // Specific conversational target for this voter (e.g. invite to chaupal, clarify water)
                 familyNotes: '',
                 mahoolNotes: '',
                 babaNotes: '',
@@ -89,6 +90,7 @@ class UserMemory {
             // Ensure schema integrity for existing records
             if (this.users[phone].autoPilot === undefined) this.users[phone].autoPilot = true;
             if (!this.users[phone].tags) this.users[phone].tags = ['⚪ सामान्य संपर्क'];
+            if (this.users[phone].campaignGoal === undefined) this.users[phone].campaignGoal = '';
             if (this.users[phone].familyNotes === undefined) this.users[phone].familyNotes = '';
             if (this.users[phone].mahoolNotes === undefined) this.users[phone].mahoolNotes = '';
             if (this.users[phone].babaNotes === undefined) this.users[phone].babaNotes = '';
@@ -129,6 +131,34 @@ class UserMemory {
             const lower = text.toLowerCase();
             user.tags = user.tags || [];
             const newTags = [];
+
+            // Background Name Extraction (e.g. "मेरा नाम रमेश है", "main sunil bol raha hu")
+            if (!user.name || user.name === 'ग्रामवासी' || user.name === 'Voter') {
+                const namePatterns = [
+                    /(?:mera naam|mera name|मेरा नाम|नाम है|naam hai|naam h|my name is)\s*(?:hai|h|:)?\s*([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,20})?)/i,
+                    /(?:main|mai|m|मैं)\s+([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,20})?)\s+(?:bol raha|bol rha|bol rahi|बोल रहा|बोल रही)/i,
+                    /(?:naam likho|naam note karo|नाम लिखो)\s*:?\s*([A-Za-z\u0900-\u097F]{2,20}(?:\s+[A-Za-z\u0900-\u097F]{2,20})?)/i
+                ];
+                const stopWords = [
+                    'kya', 'hai', 'है', 'हूँ', 'hoon', 'hu', 'bhai', 'baba', 'ji', 'जी', 'भाई', 'sir', 'yaha', 'यहाँ',
+                    'kaise', 'kaam', 'काम', 'vote', 'वोट', 'nahi', 'नहीं', 'nhi', 'dekh', 'dekho', 'dekhna',
+                    'bol', 'raha', 'rha', 'batana', 'batao', 'aaya', 'gaya', 'kar', 'karo', 'dunga', 'denge',
+                    'to', 'bhi', 'भी', 'kuch', 'कुछ', 'mat', 'kyu', 'kyun', 'parchi', 'slip', 'list', 'ward', 'gaon'
+                ];
+                for (const pat of namePatterns) {
+                    const match = text.match(pat);
+                    if (match && match[1]) {
+                        const candidate = match[1].trim();
+                        const parts = candidate.toLowerCase().split(/\s+/);
+                        const hasStopWord = parts.some(p => stopWords.includes(p));
+                        if (candidate.length >= 2 && candidate.length <= 30 && !hasStopWord) {
+                            user.name = candidate;
+                            console.log(`[UserMemory] Extracted voter name: "${candidate}" for ${user.phone}`);
+                            break;
+                        }
+                    }
+                }
+            }
 
             // 1. Opposition / Slurs / Critical
             if (
@@ -398,6 +428,42 @@ class UserMemory {
         return user;
     }
 
+    setCampaignGoal(rawPhone, goal) {
+        const user = this.getUser(rawPhone);
+        if (!user) return null;
+        user.campaignGoal = (goal || '').trim();
+        this.save();
+        return user.campaignGoal;
+    }
+
+    getDynamicGreeting(rawPhone) {
+        const user = this.getUser(rawPhone);
+        if (!user) return "राम राम भाई जी! 🙏";
+
+        if (user.name && user.name.trim()) {
+            const cleanName = user.name.trim();
+            const greetingsWithName = [
+                `राम राम ${cleanName} भैया! 🙏🚩 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। बताइए परिवार में सब कुशल-मंगल?`,
+                `प्रणाम ${cleanName} जी! 🙏 आशा है आप सकुशल हैं। बताइए आज बाबा के प्रचार या अपने मोहल्ले के विकास पर क्या विचार हैं?`,
+                `जय बाबा की ${cleanName} भैया! 🚩 सिहाली खुर्द के विकास में आपका स्नेह व आशीर्वाद सदा साथ रहता है। आज कैसे याद किया भैया? 😊`,
+                `राम राम भाई ${cleanName}! 🙏 घर-परिवार में सब ठीक-ठाक हैं न भैया? भाभी जी और बच्चे कैसे हैं? 😊`,
+                `प्रणाम ${cleanName} जी! 🙏 16 नवम्बर 2026 बाबा अभय सिंह के पक्ष में मतदान का संकल्प। बताइए आपकी क्या सेवा कर सकती हूँ? 🚩`,
+                `राम राम ${cleanName} भैया! 🙏 आज अपनी गली-मोहल्ले में क्या चुनावी माहौल लग रहा है भैया?`
+            ];
+            const idx = (user.interactionCount || 0) % greetingsWithName.length;
+            return greetingsWithName[idx];
+        } else {
+            const greetingsWithoutName = [
+                "राम राम भाई जी! 🙏 मैं बाबा अभय सिंह के सेवा केंद्र से आपकी छोटी बहन सुमन। भैया, आपका शुभ नाम जान सकती हूँ ताकि आपको सही सम्मान से याद रख सकूँ? 😊",
+                "प्रणाम भाई जी! 🙏 बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र में आपका स्वागत है। भैया, आपका नाम क्या है? ताकि लिस्ट में आपकी वोटर पर्ची भी देख सकूँ!",
+                "राम राम भैया! 🚩 सिहाली खुर्द 2026 चुनाव सेवा केंद्र। भैया, अपना नाम या वार्ड नंबर बता दीजिए न, ताकि आपसे आत्मीयता से बात हो सके! 😊",
+                "प्रणाम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। भैया, आपका शुभ नाम बता दीजिए, ताकि आगे से आपको नाम से पुकार सकूँ! 🚩"
+            ];
+            const idx = (user.interactionCount || 0) % greetingsWithoutName.length;
+            return greetingsWithoutName[idx];
+        }
+    }
+
     getUserContextRAG(rawPhone) {
         const user = this.getUser(rawPhone);
         if (!user) return '';
@@ -407,6 +473,7 @@ class UserMemory {
         if (user.fatherOrSpouse) ctx += ` | Relation: ${user.fatherOrSpouse}`;
         if (user.voterSentiment) ctx += ` | Sentiment: ${user.voterSentiment}`;
         if (user.tags && user.tags.length > 0) ctx += ` | Tags: ${user.tags.join(', ')}`;
+        if (user.campaignGoal) ctx += ` | TARGET CAMPAIGN GOAL: ${user.campaignGoal} (Gently steer conversation towards this goal!)`;
         if (user.familyNotes) ctx += ` | Family Notes: ${user.familyNotes}`;
         if (user.mahoolNotes) ctx += ` | Ground Mahool: ${user.mahoolNotes}`;
         if (user.babaNotes) ctx += ` | Note for Baba: ${user.babaNotes}`;

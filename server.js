@@ -950,12 +950,83 @@ app.post('/api/update-tags', (req, res) => {
     res.json({ success: true, phone, tags: user.tags, sentiment: user.voterSentiment });
 });
 
-// API: Update voter intelligence notes (Family, Mahool, Baba)
+// API: Update voter intelligence notes (Family, Mahool, Baba, Campaign Goal)
 app.post('/api/update-notes', (req, res) => {
-    const { phone, familyNotes, mahoolNotes, babaNotes } = req.body;
+    const { phone, familyNotes, mahoolNotes, babaNotes, campaignGoal } = req.body;
     if (!phone) return res.status(400).json({ error: 'Phone is required' });
+    if (campaignGoal !== undefined) userMemory.setCampaignGoal(phone, campaignGoal);
     const user = userMemory.updateNotes(phone, { familyNotes, mahoolNotes, babaNotes });
     res.json({ success: true, phone, user });
+});
+
+// API: AI Copilot / Assisted Message Drafting for Admin
+app.post('/api/ai-draft', async (req, res) => {
+    try {
+        const { phone, instruction } = req.body;
+        if (!instruction || !instruction.trim()) {
+            return res.status(400).json({ error: 'Instruction prompt is required' });
+        }
+
+        const user = phone ? userMemory.getUser(phone) : null;
+        const voterName = (user && user.name) ? user.name : 'भैया';
+        const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
+
+        const systemInstruction = `आप 'सुमन' (बाबा अभय सिंह के सेवा केंद्र से उनकी डिजिटल सारथी व छोटी बहन) हैं।
+प्रबंधक प्रिंस ने आपको मतदाता '${voterName}' के लिए यह संदेश तैयार करने को कहा है:
+"${instruction.trim()}"
+
+🎯 नियम:
+1. एडमिन के इस निर्देश को सुमन की मीठी, आत्मीय, संस्कारी गांव की बहन की आवाज़ में 1 से 2 छोटी असरदार WhatsApp पंक्तियों में बदलो।
+2. कोई भारी-भरकम किताबी भाषण नहीं।
+3. सीधे वही संदेश आउटपुट करो जो WhatsApp पर भेजा जाना है (Zero Meta-talk, Zero Quotes).`;
+
+        let draft = '';
+        try {
+            draft = await aiService.getAIResponse(instruction, NVIDIA_API_KEY, [{ role: 'system', content: systemInstruction }], phone);
+            if (!draft || draft.includes('डिजिटल सेवा केंद्र में आपका स्वागत')) {
+                draft = `राम राम ${voterName}! 🙏 ${instruction} 😊🚩`;
+            }
+        } catch (e) {
+            draft = `राम राम ${voterName}! 🙏 ${instruction} 😊🚩`;
+        }
+
+        res.json({ success: true, draft: draft.trim() });
+    } catch (e) {
+        console.error('Error in /api/ai-draft:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// API: Get Cloudflare Tunnel Status
+app.get('/api/tunnel-status', (req, res) => {
+    exec('pm2 logs tunnel --lines 60 --nostream 2>/dev/null', (err, stdout, stderr) => {
+        const text = stdout || stderr || '';
+        const matches = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g);
+        if (matches && matches.length > 0) {
+            const url = matches[matches.length - 1];
+            return res.json({ success: true, url: url, provider: 'Cloudflare' });
+        }
+        res.json({ success: false, message: 'Tunnel URL not found in recent logs', hint: 'Run: pm2 logs tunnel --lines 50' });
+    });
+});
+
+// Global Daily Target Poster / Campaign Goal
+let DAILY_CAMPAIGN_TARGET = {
+    targetType: 'poster_demo',
+    title: 'प्रारूप डेमो पोस्टर',
+    instruction: 'सभी मतदाताओं को डेमो पोस्टर भेजकर वोटर पर्ची चेक करने का आग्रह करना।'
+};
+
+app.post('/api/daily-target', (req, res) => {
+    const { targetType, title, instruction } = req.body;
+    if (targetType) DAILY_CAMPAIGN_TARGET.targetType = targetType;
+    if (title) DAILY_CAMPAIGN_TARGET.title = title;
+    if (instruction) DAILY_CAMPAIGN_TARGET.instruction = instruction;
+    res.json({ success: true, dailyTarget: DAILY_CAMPAIGN_TARGET });
+});
+
+app.get('/api/daily-target', (req, res) => {
+    res.json(DAILY_CAMPAIGN_TARGET);
 });
 
 // API: Toggle Demo Poster mode
@@ -1019,8 +1090,7 @@ app.post('/api/quick-action', async (req, res) => {
             await sock.sendMessage(jid, { text: replyText });
             mediaType = 'voterSlip';
         } else if (action === 'ramram') {
-            const user = userMemory.getUser(cleanedPhone);
-            replyText = `राम राम ${user.name ? user.name + ' जी' : 'भाई जी'}! 🙏🚩\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) के सेवा केंद्र से आपका बहुत-बहुत स्वागत है। बताइए आज परिवार में सब कुशल मंगल?`;
+            replyText = userMemory.getDynamicGreeting(cleanedPhone);
             await sock.sendMessage(jid, { text: replyText });
         } else if (action === 'meeting') {
             replyText = mediaCatalog.getMeetingDetails();
@@ -1417,6 +1487,7 @@ app.get('/', (req, res) => {
                         <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
                     </div>
                     <div class="top-actions">
+                        <span id="tunnel-badge" style="background: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">🔗 टनल जांच रहे हैं...</span>
                         <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
                         <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
                     </div>
@@ -1828,6 +1899,10 @@ app.get('/', (req, res) => {
                                         <input type="text" id="intel-baba" placeholder="उदा: रास्ते की नाली ठीक करवाने का वादा..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
                                     </div>
                                 </div>
+                                <div style="margin-top: 10px;">
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">🎯 इस मतदाता से बातचीत का विशेष लक्ष्य (Campaign Goal)</label>
+                                    <input type="text" id="intel-goal" placeholder="उदा: कल सुबह चौपाल पर बुलाना, पानी का समाधान बताना, वार्ड 3 की नाराजगी दूर करना..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                </div>
                                 <div style="text-align: right; margin-top: 8px;">
                                     <button onclick="saveVoterIntelligence()" style="background: #2563eb; color: white; border: none; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
                                         💾 Save Notes & Intelligence
@@ -1853,6 +1928,15 @@ app.get('/', (req, res) => {
                                 <button class="wa-action-btn" onclick="sendQuickAction('slip')">🎫 वोटर पर्ची निकालें</button>
                                 <button class="wa-action-btn" onclick="sendQuickAction('baba_register')">📝 बाबा रजिस्टर में दर्ज</button>
                                 <button class="wa-action-btn" onclick="sendQuickAction('meeting')">🤝 चौपाल मुलाकात</button>
+                            </div>
+
+                            <!-- AI Copilot / Assisted Message Drafting Bar -->
+                            <div id="wa-copilot-container" style="background: #f8fafc; padding: 8px 16px; border-top: 1px solid #e2e8f0; display: none; gap: 8px; align-items: center;">
+                                <span style="font-size: 12px; font-weight: 700; color: #6366f1; white-space: nowrap;">✨ AI सह-चालक:</span>
+                                <input type="text" id="wa-ai-instruction" placeholder="AI को निर्देश दें (उदा: 'बोलो कि कल सुबह 9 बजे चौपाल पर आएं और साथ में चाय पीते हैं')..." style="flex: 1; padding: 7px 12px; border-radius: 12px; border: 1px solid #cbd5e1; font-size: 12px; background: white; color: #0f172a;" onkeydown="if(event.key==='Enter') generateAIDraft()">
+                                <button onclick="generateAIDraft()" id="btn-ai-draft" style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                                    ✨ ड्राफ्ट बनाएं
+                                </button>
                             </div>
 
                             <!-- Chat Direct Input Bar -->
@@ -2355,6 +2439,8 @@ app.get('/', (req, res) => {
                         document.getElementById('intel-family').value = v.familyNotes || '';
                         document.getElementById('intel-mahool').value = v.mahoolNotes || '';
                         document.getElementById('intel-baba').value = v.babaNotes || '';
+                        document.getElementById('intel-goal').value = v.campaignGoal || '';
+                        document.getElementById('wa-copilot-container').style.display = 'flex';
                         renderActiveTags(v.tags || []);
 
                         // Render messages
@@ -2476,13 +2562,14 @@ app.get('/', (req, res) => {
                     const familyNotes = document.getElementById('intel-family').value;
                     const mahoolNotes = document.getElementById('intel-mahool').value;
                     const babaNotes = document.getElementById('intel-baba').value;
+                    const campaignGoal = document.getElementById('intel-goal').value;
                     const statusEl = document.getElementById('intel-save-status');
 
                     try {
                         await fetch('/api/update-notes', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone: selectedVoterPhone, familyNotes: familyNotes, mahoolNotes: mahoolNotes, babaNotes: babaNotes })
+                            body: JSON.stringify({ phone: selectedVoterPhone, familyNotes: familyNotes, mahoolNotes: mahoolNotes, babaNotes: babaNotes, campaignGoal: campaignGoal })
                         });
                         statusEl.style.display = 'inline';
                         setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
@@ -2536,6 +2623,56 @@ app.get('/', (req, res) => {
                     }
                 }
             
+            
+                async function checkTunnelStatus() {
+                    try {
+                        const res = await fetch('/api/tunnel-status');
+                        const data = await res.json();
+                        const el = document.getElementById('tunnel-badge');
+                        if (data.success && data.url) {
+                            el.innerHTML = '🔗 <a href="' + data.url + '" target="_blank" style="color:#0369a1; text-decoration:none; font-weight:bold;">' + data.url.replace('https://', '') + '</a> <button onclick="navigator.clipboard.writeText(\'' + data.url + '\'); alert(\'Tunnel URL Copied!\');" style="background:none; border:none; cursor:pointer; font-size:11px;" title="Copy Tunnel URL">📋</button>';
+                        } else {
+                            el.innerHTML = '🔗 Port 3000 Active';
+                        }
+                    } catch (e) {}
+                }
+                checkTunnelStatus();
+
+                async function generateAIDraft() {
+                    if (!selectedVoterPhone) return;
+                    const inputEl = document.getElementById('wa-ai-instruction');
+                    const instruction = inputEl.value.trim();
+                    if (!instruction) {
+                        alert('कृपया AI को निर्देश लिखें (उदा: "बोलो कि कल सुबह चौपाल पर आएं")');
+                        return;
+                    }
+
+                    const btn = document.getElementById('btn-ai-draft');
+                    btn.disabled = true;
+                    btn.innerText = '⏳ सोच रहे हैं...';
+
+                    try {
+                        const res = await fetch('/api/ai-draft', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: selectedVoterPhone, instruction: instruction })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.draft) {
+                            document.getElementById('wa-direct-input').value = data.draft;
+                            document.getElementById('wa-direct-input').focus();
+                            inputEl.value = '';
+                        } else {
+                            alert('Draft failed: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Draft error: ' + e.message);
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = '✨ ड्राफ्ट बनाएं';
+                    }
+                }
+
             </script>
         </body>
         </html>
