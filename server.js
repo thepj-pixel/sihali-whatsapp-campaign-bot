@@ -1675,12 +1675,12 @@ app.get('/', (req, res) => {
 
                 <!-- Tabbed Navigation -->
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('feed')">💬 Live Voter Chat</button>
-                    <button class="tab-btn" onclick="switchTab('diagnostics')">🛠️ Diagnostics & Self-Test Log</button>
-                    <button class="tab-btn" onclick="switchTab('studio')">🎨 Live Poster Studio</button>
-                    <button class="tab-btn" onclick="switchTab('playground')">🤖 AI Playground & Lab</button>
-                    <button class="tab-btn" onclick="switchTab('voters')">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
-                    <button class="tab-btn" onclick="switchTab('media')">📸 Media Bank & Uploader</button>
+                    <button class="tab-btn active" onclick="switchTab('feed', this)">💬 Live Voter Chat</button>
+                    <button class="tab-btn" onclick="switchTab('diagnostics', this)">🛠️ Diagnostics & Self-Test Log</button>
+                    <button class="tab-btn" onclick="switchTab('studio', this)">🎨 Live Poster Studio</button>
+                    <button class="tab-btn" onclick="switchTab('playground', this)">🤖 AI Playground & Lab</button>
+                    <button class="tab-btn" onclick="switchTab('voters', this)">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
+                    <button class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -2212,12 +2212,19 @@ app.get('/', (req, res) => {
                 let currentPosterBlob = null;
                 let aiHistory = [];
 
-                function switchTab(tabId) {
+                function switchTab(tabId, btn) {
                     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
                     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-                    document.getElementById('tab-' + tabId).style.display = 'block';
-                    event.target.classList.add('active');
+                    const target = document.getElementById('tab-' + tabId);
+                    if (target) target.style.display = 'block';
+                    if (btn && btn.classList) {
+                        btn.classList.add('active');
+                    } else if (window.event) {
+                        const b = (window.event.currentTarget && window.event.currentTarget.classList) ? window.event.currentTarget : window.event.target.closest('.tab-btn');
+                        if (b) b.classList.add('active');
+                    }
                     if (tabId === 'voters') loadVoters();
+                    if (tabId === 'playground' && typeof loadCampaignAgendaUI === 'function') loadCampaignAgendaUI();
                 }
 
                 function toggleCustomText(val) {
@@ -2350,7 +2357,7 @@ app.get('/', (req, res) => {
 
                     input.value = '';
                     const chatUi = document.getElementById('ai-chat-ui');
-                    chatUi.innerHTML += \`<div class="bubble bubble-user">\${text}</div>\`;
+                    chatUi.innerHTML += '<div class="bubble bubble-user">' + text + '</div>';
                     chatUi.scrollTop = chatUi.scrollHeight;
 
                     aiHistory.push({ role: 'user', content: text });
@@ -2364,14 +2371,10 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         aiHistory.push({ role: 'assistant', content: data.reply });
 
-                        chatUi.innerHTML += \`
-                            <div class="bubble bubble-bot">
-                                \${data.reply}
-                            </div>
-                        \`;
+                        chatUi.innerHTML += '<div class="bubble bubble-bot">' + (data.reply || '').replace(/\n/g, '<br>') + '</div>';
                         chatUi.scrollTop = chatUi.scrollHeight;
                     } catch (e) {
-                        chatUi.innerHTML += \`<div class="bubble bubble-bot" style="color:red;">Error: \${e.message}</div>\`;
+                        chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">Error: ' + e.message + '</div>';
                     }
                 }
 
@@ -2397,16 +2400,14 @@ app.get('/', (req, res) => {
                             else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
                             else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
 
-                            return \`
-                                <tr>
-                                    <td style="color: #64748b; font-size: 12px;">\${m.timestamp}</td>
-                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${m.session}</span></td>
-                                    <td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+\${m.phone}</span></td>
-                                    <td style="font-weight: 500; color: #0f172a;">\${m.incoming}</td>
-                                    <td style="color: #334155; font-size: 13px; white-space: pre-wrap;">\${m.reply}</td>
-                                    <td><span class="badge \${badgeClass}">● \${m.status}</span></td>
-                                </tr>
-                            \`;
+                            return '<tr>' +
+                                '<td style="color: #64748b; font-size: 12px;">' + (m.timestamp || '') + '</td>' +
+                                '<td><span style="font-weight: 600; color: #334155; font-size: 12px;">' + (m.session || '') + '</span></td>' +
+                                '<td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+' + (m.phone || '') + '</span></td>' +
+                                '<td style="font-weight: 500; color: #0f172a;">' + (m.incoming || '') + '</td>' +
+                                '<td style="color: #334155; font-size: 13px; white-space: pre-wrap;">' + (m.reply || '') + '</td>' +
+                                '<td><span class="badge ' + badgeClass + '">● ' + (m.status || '') + '</span></td>' +
+                                '</tr>';
                         }).join('');
                     } catch (e) {}
                 }
@@ -2429,15 +2430,13 @@ app.get('/', (req, res) => {
                             if (d.status === 'SELF_DEVICE') badgeClass = 'badge-info';
                             else if (d.status === 'BAD_MAC') badgeClass = 'badge-danger';
 
-                            return \`
-                                <tr>
-                                    <td style="color: #64748b; font-size: 12px;">\${d.timestamp}</td>
-                                    <td><span style="font-weight: 600; color: #334155; font-size: 12px;">\${d.session}</span></td>
-                                    <td><span style="color: #475569; font-weight: 700; font-size: 12px;">\${d.phone}</span></td>
-                                    <td style="color: #334155; font-size: 12px;"><b>\${d.incoming}</b><br><span style="color:#64748b;">\${d.reply}</span></td>
-                                    <td><span class="badge \${badgeClass}">● \${d.status}</span></td>
-                                </tr>
-                            \`;
+                            return '<tr>' +
+                                '<td style="color: #64748b; font-size: 12px;">' + (d.timestamp || '') + '</td>' +
+                                '<td><span style="font-weight: 600; color: #334155; font-size: 12px;">' + (d.session || '') + '</span></td>' +
+                                '<td><span style="color: #475569; font-weight: 700; font-size: 12px;">' + (d.phone || '') + '</span></td>' +
+                                '<td style="color: #334155; font-size: 12px;"><b>' + (d.incoming || '') + '</b><br><span style="color:#64748b;">' + (d.reply || '') + '</span></td>' +
+                                '<td><span class="badge ' + badgeClass + '">● ' + (d.status || '') + '</span></td>' +
+                                '</tr>';
                         }).join('');
                     } catch (e) {}
                 }
