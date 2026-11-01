@@ -2371,7 +2371,7 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         aiHistory.push({ role: 'assistant', content: data.reply });
 
-                        chatUi.innerHTML += '<div class="bubble bubble-bot">' + (data.reply || '').replace(/\n/g, '<br>') + '</div>';
+                        chatUi.innerHTML += '<div class="bubble bubble-bot">' + (data.reply || '').split(String.fromCharCode(10)).join('<br>') + '</div>';
                         chatUi.scrollTop = chatUi.scrollHeight;
                     } catch (e) {
                         chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">Error: ' + e.message + '</div>';
@@ -2600,7 +2600,7 @@ app.get('/', (req, res) => {
                             return '<span class="wa-tag-pill" style="' + getTagStyle(t) + '">' + t + '</span>';
                         }).join('');
 
-                        return '<div class="wa-contact-item ' + (isSelected ? 'selected' : '') + '" onclick="selectVoter(\'' + v.phone + '\')">' +
+                        return '<div class="wa-contact-item ' + (isSelected ? 'selected' : '') + '" data-phone="' + v.phone + '" onclick="selectVoter(this.dataset.phone)">' +
                             '<div class="wa-avatar">' + initial + '</div>' +
                             '<div class="wa-contact-info">' +
                                 '<div class="wa-contact-top">' +
@@ -2700,7 +2700,7 @@ app.get('/', (req, res) => {
                     const cont = document.getElementById('active-tags-container');
                     cont.innerHTML = tags.map(function(t) {
                         return '<span class="wa-tag-pill" style="' + getTagStyle(t) + ' padding:3px 8px; border-radius:12px; font-size:11px;">' +
-                            t + ' <span onclick="removeTagFromCurrentVoter(\'' + t + '\')" style="cursor:pointer; margin-left:4px; font-weight:bold; color:#ef4444;">×</span>' +
+                            t + ' <span data-tag="' + t + '" onclick="removeTagFromCurrentVoter(this.dataset.tag)" style="cursor:pointer; margin-left:4px; font-weight:bold; color:#ef4444;">×</span>' +
                         '</span>';
                     }).join('');
                 }
@@ -2846,7 +2846,7 @@ app.get('/', (req, res) => {
                         const data = await res.json();
                         const el = document.getElementById('tunnel-badge');
                         if (data.success && data.url) {
-                            el.innerHTML = '🔗 <a href="' + data.url + '" target="_blank" style="color:#0369a1; text-decoration:none; font-weight:bold;">' + data.url.replace('https://', '') + '</a> <button onclick="navigator.clipboard.writeText(\'' + data.url + '\'); alert(\'Tunnel URL Copied!\');" style="background:none; border:none; cursor:pointer; font-size:11px;" title="Copy Tunnel URL">📋</button>';
+                            el.innerHTML = '🔗 <a href="' + data.url + '" target="_blank" style="color:#0369a1; text-decoration:none; font-weight:bold;">' + data.url.replace("https://", "") + '</a> <button data-url="' + data.url + '" onclick="navigator.clipboard.writeText(this.dataset.url); alert(&quot;Tunnel URL Copied!&quot;);" style="background:none; border:none; cursor:pointer; font-size:11px;" title="Copy Tunnel URL">📋</button>';
                         } else {
                             el.innerHTML = '🔗 Port 3000 Active';
                         }
@@ -3029,7 +3029,7 @@ app.get('/', (req, res) => {
                             pgAiHistory.push({ role: 'user', content: text || '[फोटो]' });
                             pgAiHistory.push({ role: 'assistant', content: data.reply });
 
-                            let botHtml = '<div class="bubble bubble-bot">' + data.reply.replace(/\n/g, '<br>') + '</div>';
+                            let botHtml = '<div class="bubble bubble-bot">' + data.reply.split(String.fromCharCode(10)).join('<br>') + '</div>';
                             chatUi.innerHTML += botHtml;
                             chatUi.scrollTop = chatUi.scrollHeight;
 
