@@ -702,7 +702,8 @@ async function startSession(sessionObj) {
                             replyText = voterEngine.formatFallbackResponse();
                             await sendSafeMessage(sock, replyJid, { text: replyText });
                             console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${body}"`);
-                        } else {
+                        }
+                    } else {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).map(h => ({
                             role: h.role === 'bot' ? 'assistant' : 'user',
