@@ -62,6 +62,8 @@ const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
 const posterEngine = require('./poster_engine.js');
 const mediaCatalog = require('./media_catalog.js');
+const campaignAgenda = require('./campaign_agenda.js');
+const visionService = require('./vision_service.js');
 
 const app = express();
 app.use(cors());
@@ -495,6 +497,28 @@ async function startSession(sessionObj) {
                 // Extract message body from all possible structures
                 let body = extractMessageText(msg.message).trim();
 
+                // Multimodal Vision: Check for incoming image message
+                const hasImage = !!(msg.message?.imageMessage || msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage);
+                let imageAnalysis = null;
+                if (hasImage) {
+                    try {
+                        const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+                        const imgBuffer = await downloadMediaMessage(msg, 'buffer', {});
+                        if (imgBuffer) {
+                            imageAnalysis = await visionService.analyzeImage(imgBuffer);
+                            console.log(`[${sessionObj.id}] 📷 Vision Analysis for ${senderPhone}:`, imageAnalysis);
+                        }
+                    } catch (imgErr) {
+                        console.error(`[${sessionObj.id}] Vision decode error for ${senderPhone}:`, imgErr.message);
+                    }
+                }
+
+                if (!body && hasImage) {
+                    body = (imageAnalysis && imageAnalysis.summaryHindi)
+                        ? `[फोटो: ${imageAnalysis.summaryHindi}]`
+                        : '[फोटो प्राप्त हुई]';
+                }
+
                 // If body is empty (e.g. Meta Cloud encryption Bad MAC or initial handshake)
                 if (!body) {
                     console.log(`[${sessionObj.id}] Decryption empty or Bad MAC for ${targetJid} (raw: ${rawJid})`);
@@ -571,7 +595,29 @@ async function startSession(sessionObj) {
 
                     const matches = voterEngine.searchVoters(body, 5, user.ward);
 
-                    if (isPosterGenQuery) {
+                    if (imageAnalysis) {
+                        const voterName = user.name || 'भैया';
+                        if (imageAnalysis.suggestedTag) {
+                            userMemory.updateTags(senderPhone, [imageAnalysis.suggestedTag]);
+                        }
+                        if (imageAnalysis.category === 'civic_issue') {
+                            const newMahool = ((user.mahoolNotes || '') + ' | शिकायत: ' + imageAnalysis.summaryHindi).trim();
+                            userMemory.updateNotes(senderPhone, { mahoolNotes: newMahool });
+                            replyText = visionService.getConversationalReply(imageAnalysis, voterName);
+                        } else if (imageAnalysis.category === 'voter_id') {
+                            const searchQ = imageAnalysis.details?.epic || imageAnalysis.details?.name || '';
+                            const parchiMatches = searchQ ? voterEngine.searchVoters(searchQ) : [];
+                            if (parchiMatches && parchiMatches.length > 0) {
+                                replyText = `राम राम ${voterName}! 🙏 आपकी वोटर आईडी / पर्ची की पहचान हो गई है:\n\n` + voterEngine.formatVoterSlip(parchiMatches[0]);
+                            } else {
+                                replyText = visionService.getConversationalReply(imageAnalysis, voterName);
+                            }
+                        } else {
+                            replyText = visionService.getConversationalReply(imageAnalysis, voterName);
+                        }
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        mediaTypeSent = 'visionResponse';
+                    } else if (isPosterGenQuery) {
                         // On-the-fly personalized status poster generation
                         let voterName = (matches && matches.length > 0) ? matches[0].name : (userMemory.getUser(senderPhone).name || 'समर्थक');
                         // Clean query to see if voter gave an explicit name e.g. "mera poster banao Ramesh"
@@ -827,6 +873,84 @@ app.post('/api/upload-media', (req, res) => {
 });
 
 // API: Test AI Directly in Dashboard Playground
+// API: Campaign Agenda (Get & Update)
+app.get('/api/campaign-agenda', (req, res) => {
+    res.json(campaignAgenda.getAgenda());
+});
+
+app.post('/api/campaign-agenda', (req, res) => {
+    const updated = campaignAgenda.updateAgenda(req.body);
+    res.json({ success: true, agenda: updated });
+});
+
+// API: Direct Fuzzy Voter Search
+app.get('/api/search-voters', (req, res) => {
+    const q = req.query.q || '';
+    const ward = req.query.ward ? parseInt(req.query.ward) : null;
+    const matches = voterEngine.searchVoters(q, 10, ward);
+    res.json({ count: matches.length, results: matches });
+});
+
+// API: Playground Chat with Live Goal, Agenda, Model Cascade, & Vision Test
+app.post('/api/playground/chat', async (req, res) => {
+    try {
+        const { message, history, phone, voterName, campaignGoal, dailyAgenda, provider, imageBase64, mimeType } = req.body;
+        const start = Date.now();
+        const testPhone = phone || '919876543000';
+
+        let visionAnalysis = null;
+        let effectiveMessage = message || '';
+
+        if (imageBase64) {
+            visionAnalysis = await visionService.analyzeImage(imageBase64, mimeType || 'image/jpeg');
+            if (!effectiveMessage.trim()) {
+                effectiveMessage = visionAnalysis.summaryHindi ? `[फोटो: ${visionAnalysis.summaryHindi}]` : '[फोटो]';
+            }
+        }
+
+        const user = userMemory.getUser(testPhone);
+        if (voterName) user.name = voterName;
+        if (campaignGoal !== undefined) user.campaignGoal = campaignGoal;
+        if (visionAnalysis && visionAnalysis.suggestedTag) {
+            userMemory.updateTags(testPhone, [visionAnalysis.suggestedTag]);
+        }
+
+        let reply = '';
+        if (visionAnalysis && (!message || message.trim().length === 0)) {
+            reply = visionService.getConversationalReply(visionAnalysis, user.name || 'भैया');
+            if (visionAnalysis.category === 'voter_id' && visionAnalysis.details?.epic) {
+                const parchiMatches = voterEngine.searchVoters(visionAnalysis.details.epic);
+                if (parchiMatches.length > 0) {
+                    reply += '\n\n' + voterEngine.formatVoterSlip(parchiMatches[0]);
+                }
+            }
+        } else {
+            reply = await aiService.getAIResponse(effectiveMessage, null, history || [], testPhone);
+        }
+
+        const nextDrip = campaignAgenda.getNextDripMedia(user);
+
+        res.json({
+            success: true,
+            reply: reply,
+            timeMs: Date.now() - start,
+            provider: provider || 'Cascade (NVIDIA / Groq / Gemini)',
+            user: {
+                name: user.name,
+                phone: user.phone,
+                tags: user.tags || [],
+                sentiment: user.voterSentiment,
+                campaignGoal: user.campaignGoal
+            },
+            visionAnalysis: visionAnalysis,
+            nextDripMedia: nextDrip
+        });
+    } catch (e) {
+        console.error('Playground chat error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/test-ai', async (req, res) => {
     try {
         const { message, history } = req.body;
@@ -1738,41 +1862,134 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- TAB 3: AI Playground & Testing Lab -->
+                <!-- TAB 3: Advanced AI Playground, Vision & Agenda Lab -->
                 <div id="tab-playground" class="card tab-content" style="display: none;">
-                    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 380px; gap: 20px;">
                         <div>
-                            <h3 style="margin-top:0;">🤖 AI Assistant Testing Lab</h3>
-                            <p style="color: #64748b; font-size: 14px;">Test conversations with Baba Abhay Singh's AI assistant in real-time before sending to voters.</p>
-                            
-                            <div style="border: 1px solid #e2e8f0; border-radius: 10px; height: 350px; display: flex; flex-direction: column; background: #fafafa; margin-top: 15px;">
-                                <div id="ai-chat-ui" style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; gap:10px;">
+                            <!-- Header & Context Controls -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                                <div>
+                                    <h3 style="margin: 0; font-size: 18px; color: #0f172a;">🎮 AI प्लेग्राउंड (लाइव टेस्टिंग लैब)</h3>
+                                    <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">मतदाता के साथ रीयल-टाइम चैट, विज़न विश्लेषण और चुनावी लक्ष्य का लाइव परीक्षण करें।</p>
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <span style="font-size: 12px; font-weight: 700; color: #475569;">मॉडल:</span>
+                                    <select id="pg-provider" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; background: white; color: #0f172a; font-weight: 600;">
+                                        <option value="cascade">⚡ ऑटो कैस्केड (NVIDIA ➡️ Groq ➡️ Gemini)</option>
+                                        <option value="groq">🟠 Groq Qwen (27B Ultra-Fast)</option>
+                                        <option value="gemini">🔵 Gemini 3.8 Flash (Vision & Text)</option>
+                                        <option value="nvidia">🟢 NVIDIA Nemotron</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Voter Simulation Context Bar -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 15px;">
+                                <div>
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">👤 मतदाता का नाम:</label>
+                                    <input type="text" id="pg-voter-name" placeholder="उदा: विक्रम यादव" value="विक्रम यादव" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">📱 फोन नंबर:</label>
+                                    <input type="text" id="pg-voter-phone" placeholder="919876543210" value="919876543210" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🎯 इस चैट का विशेष लक्ष्य (Campaign Goal):</label>
+                                    <input type="text" id="pg-campaign-goal" placeholder="उदा: कल सुबह चौपाल पर बुलाना" value="कल सुबह चौपाल पर चाय पर बुलाना और बिजली सबस्टेशन की बात छेड़ना" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
+                                </div>
+                            </div>
+
+                            <!-- WhatsApp Style Chat Simulator -->
+                            <div style="border: 1px solid #cbd5e1; border-radius: 12px; height: 380px; display: flex; flex-direction: column; background: #efeae2; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                                <div id="ai-chat-ui" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
                                     <div class="bubble bubble-bot">
-                                        राम राम भाई जी! 🙏 मैं बाबा अभय सिंह सेवा केंद्र का डिजिटल सहायक हूँ। बताइए, कैसे सेवा करूँ?
+                                        राम राम विक्रम भैया! 🙏 मैं बाबा अभय सिंह के सेवा केंद्र से आपकी छोटी बहन सुमन। बताइए भैया, घर-परिवार में सब कुशल मंगल? आज अपने मोहल्ले में क्या चुनावी माहौल लग रहा है? 😊🚩
                                     </div>
                                 </div>
-                                <div style="padding: 10px; background: white; border-top: 1px solid #e2e8f0; display:flex; gap:8px;">
-                                    <input type="text" id="ai-test-input" placeholder="Type query e.g. 'kon ho bhai tum' or 'daaru baatega kya'..." class="input-field" style="background:#f8fafc; color:#0f172a; border:1px solid #cbd5e1;" onkeydown="if(event.key==='Enter') sendAITest()">
-                                    <button onclick="sendAITest()" style="background:#2563eb; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">Send</button>
+
+                                <!-- Image Preview Bar (if selected) -->
+                                <div id="pg-image-preview-bar" style="display: none; padding: 6px 14px; background: #e2e8f0; font-size: 12px; color: #1e293b; align-items: center; justify-content: space-between;">
+                                    <span id="pg-image-filename">📷 फोटो चयनित</span>
+                                    <button onclick="clearPlaygroundImage()" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">✕ हटाएं</button>
+                                </div>
+
+                                <!-- Input Bar -->
+                                <div style="padding: 10px 14px; background: #f0f2f5; border-top: 1px solid #cbd5e1; display: flex; gap: 8px; align-items: center;">
+                                    <input type="file" id="pg-file-input" accept="image/*" style="display: none;" onchange="onPlaygroundFileSelected(event)">
+                                    <button onclick="document.getElementById('pg-file-input').click()" style="background: white; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 20px; font-size: 14px; cursor: pointer;" title="फोटो अपलोड करें (वोटर कार्ड, टूटी सड़क, पोस्टर)">
+                                        📷
+                                    </button>
+                                    <input type="text" id="ai-test-input" placeholder="संदेश लिखें (उदा: 'बिजली का क्या माहौल है', 'वोटर पर्ची चाहिए', 'दारू बांटेगा क्या')..." class="input-field" style="flex: 1; background: white; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 20px; padding: 8px 16px; font-size: 13px;" onkeydown="if(event.key==='Enter') sendPlaygroundChat()">
+                                    <button onclick="sendPlaygroundChat()" id="btn-pg-send" style="background: #2563eb; color: white; border: none; padding: 8px 18px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer;">
+                                        भेजें 🚀
+                                    </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Active Knowledge & Rules Fact Sheet -->
-                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 15px; background: #f8fafc; font-size: 13px;">
-                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">🧠 Active Persona & Rules:</div>
-                            <ul style="padding-left: 18px; margin: 0 0 15px 0; color: #334155; line-height: 1.5;">
-                                <li><b>Identity:</b> Baba Abhay Singh Seva Kendra digital assistant.</li>
-                                <li><b>Opposition Policy:</b> Never name opposite candidates directly. Slay bribing & liquor with sweet village satire.</li>
-                                <li><b>Budget Rule:</b> Zero rupees / tender amounts mentioned.</li>
-                                <li><b>Length:</b> 2-3 punchy, charming lines max.</li>
-                            </ul>
-                            <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">💡 Quick Test Buttons:</div>
-                            <div style="display:flex; flex-direction:column; gap:6px;">
-                                <button onclick="quickTestQuery('kon ho bhai tum')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">"kon ho bhai tum"</button>
-                                <button onclick="quickTestQuery('virodhi bol raha h daaru aur paise baatega')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"virodhi daaru baatega"</button>
-                                <button onclick="quickTestQuery('baba ne pichle 5 saal me kya kaam kiya')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"baba ne kya kaam kiya"</button>
-                                <button onclick="quickTestQuery('ek badhiya slogan sunao')" style="text-align:left; background:white; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12px;">"ek slogan sunao"</button>
+                        <!-- Right Panel: Daily Campaign Agenda, Voter Search & Diagnostics -->
+                        <div style="display: flex; flex-direction: column; gap: 14px;">
+                            <!-- 1. Daily Campaign Agenda & Multi-Media Drip Box -->
+                            <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 700; color: #0f172a; font-size: 13px;">📢 आज का चुनावी एजेंडा (Daily Agenda)</span>
+                                    <span style="font-size: 11px; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; font-weight: 700;">Active RAG</span>
+                                </div>
+                                <div style="margin-bottom: 8px;">
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">विषय (Topic):</label>
+                                    <input type="text" id="agenda-topic" style="width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 2px; color:#0f172a;">
+                                </div>
+                                <div style="margin-bottom: 8px;">
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">मुख्य बातचीत बिंदु (Talking Points):</label>
+                                    <textarea id="agenda-points" rows="2" style="width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 2px; color:#0f172a; resize: vertical;"></textarea>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 11px; color: #64748b;">3-4 मीडिया ड्रिप अनुक्रम एक्टिव</span>
+                                    <button onclick="saveCampaignAgendaUI()" style="background: #15803d; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
+                                        💾 एजेंडा सेव करें
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 2. Fuzzy Voter Search Engine -->
+                            <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 6px;">🔍 3,636 वोटर स्मार्ट सर्च (Typo-Tolerant)</div>
+                                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                                    <input type="text" id="pg-voter-search-input" placeholder="उदा: rina, pirnce, w1 45..." style="flex: 1; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; color:#0f172a;" onkeydown="if(event.key==='Enter') testPlaygroundVoterSearch()">
+                                    <button onclick="testPlaygroundVoterSearch()" style="background: #2563eb; color: white; border: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;">खोजें</button>
+                                </div>
+                                <div id="pg-voter-search-result" style="max-height: 110px; overflow-y: auto; font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; color: #334155;">
+                                    सर्च रिजल्ट यहाँ दिखेगा...
+                                </div>
+                            </div>
+
+                            <!-- 3. Live AI Inspection Metrics -->
+                            <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; background: #f8fafc; font-size: 12px;">
+                                <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">⚡ लाइव AI डिबग व विश्लेषण:</div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span style="color: #64748b;">प्रदाता / मॉडल:</span>
+                                    <span id="pg-metric-provider" style="font-weight: 700; color: #2563eb;">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span style="color: #64748b;">विलंबता (Latency):</span>
+                                    <span id="pg-metric-latency" style="font-weight: 700; color: #16a34a;">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                                    <span style="color: #64748b;">पहचाने गए टैग:</span>
+                                    <span id="pg-metric-tags" style="font-weight: 700; color: #d97706;">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b;">अगला मीडिया ड्रिप:</span>
+                                    <span id="pg-metric-drip" style="font-weight: 700; color: #7c3aed;">-</span>
+                                </div>
+                            </div>
+
+                            <!-- 4. Quick Sample Chips -->
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                <button onclick="quickPlaygroundQuery('kon ho bhai tum')" style="background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 12px; font-size: 11px; cursor: pointer;">"kon ho tum"</button>
+                                <button onclick="quickPlaygroundQuery('baba ne kya kaam kiya')" style="background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 12px; font-size: 11px; cursor: pointer;">"kya kaam kiya"</button>
+                                <button onclick="quickPlaygroundQuery('virodhi daaru baant rahe hain')" style="background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 12px; font-size: 11px; cursor: pointer;">"daaru mudda"</button>
+                                <button onclick="quickPlaygroundQuery('voter parchi kaise milegi')" style="background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 12px; font-size: 11px; cursor: pointer;">"parchi"</button>
                             </div>
                         </div>
                     </div>
@@ -2670,6 +2887,166 @@ app.get('/', (req, res) => {
                     } finally {
                         btn.disabled = false;
                         btn.innerText = '✨ ड्राफ्ट बनाएं';
+                    }
+                }
+
+            
+                let pgImageBase64 = null;
+                let pgImageMime = null;
+                let pgAiHistory = [];
+
+                async function loadCampaignAgendaUI() {
+                    try {
+                        const res = await fetch('/api/campaign-agenda');
+                        const data = await res.json();
+                        if (data && data.topic) {
+                            const topEl = document.getElementById('agenda-topic');
+                            const ptEl = document.getElementById('agenda-points');
+                            if (topEl) topEl.value = data.topic;
+                            if (ptEl) ptEl.value = data.talkingPoints || '';
+                        }
+                    } catch (e) {}
+                }
+                loadCampaignAgendaUI();
+
+                async function saveCampaignAgendaUI() {
+                    const topic = document.getElementById('agenda-topic').value.trim();
+                    const talkingPoints = document.getElementById('agenda-points').value.trim();
+                    try {
+                        const res = await fetch('/api/campaign-agenda', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ topic: topic, talkingPoints: talkingPoints })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ चुनावी एजेंडा सफलतापूर्वक सेव हो गया!');
+                        }
+                    } catch (e) {
+                        alert('एजेंडा सेव करने में त्रुटि: ' + e.message);
+                    }
+                }
+
+                function onPlaygroundFileSelected(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        pgImageBase64 = e.target.result;
+                        pgImageMime = file.type || 'image/jpeg';
+                        document.getElementById('pg-image-preview-bar').style.display = 'flex';
+                        document.getElementById('pg-image-filename').innerText = '📷 ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+                    };
+                    reader.readAsDataURL(file);
+                }
+
+                function clearPlaygroundImage() {
+                    pgImageBase64 = null;
+                    pgImageMime = null;
+                    document.getElementById('pg-file-input').value = '';
+                    document.getElementById('pg-image-preview-bar').style.display = 'none';
+                }
+
+                function quickPlaygroundQuery(text) {
+                    document.getElementById('ai-test-input').value = text;
+                    sendPlaygroundChat();
+                }
+
+                async function testPlaygroundVoterSearch() {
+                    const q = document.getElementById('pg-voter-search-input').value.trim();
+                    if (!q) return;
+                    const resEl = document.getElementById('pg-voter-search-result');
+                    resEl.innerHTML = '⏳ खोज रहे हैं...';
+                    try {
+                        const res = await fetch('/api/search-voters?q=' + encodeURIComponent(q));
+                        const data = await res.json();
+                        if (data && data.results && data.results.length > 0) {
+                            let html = '<b>' + data.results.length + ' परिणाम मिले:</b><br>';
+                            data.results.slice(0, 3).forEach(v => {
+                                html += '<div style="margin-top:4px; padding:4px; background:white; border-radius:4px; border:1px solid #cbd5e1;">'
+                                    + '🏛️ <b>' + v.name + '</b> (W' + v.ward + ', #' + v.sr_no + ')<br>'
+                                    + 'संबंधी: ' + v.rel_name + ' (' + v.rel_type + ') | EPIC: ' + v.epic + '<br>'
+                                    + 'मकान: ' + v.house_no + ' | बूथ: ' + v.booth
+                                    + '</div>';
+                            });
+                            resEl.innerHTML = html;
+                        } else {
+                            resEl.innerHTML = '❌ कोई पर्ची नहीं मिली। स्पेलिंग जांचें।';
+                        }
+                    } catch (e) {
+                        resEl.innerHTML = 'सर्च त्रुटि: ' + e.message;
+                    }
+                }
+
+                async function sendPlaygroundChat() {
+                    const inputEl = document.getElementById('ai-test-input');
+                    const text = inputEl.value.trim();
+                    if (!text && !pgImageBase64) return;
+
+                    const voterName = document.getElementById('pg-voter-name').value.trim();
+                    const voterPhone = document.getElementById('pg-voter-phone').value.trim();
+                    const campaignGoal = document.getElementById('pg-campaign-goal').value.trim();
+                    const provider = document.getElementById('pg-provider').value;
+
+                    const chatUi = document.getElementById('ai-chat-ui');
+
+                    // Display user bubble
+                    let userBubbleHtml = '<div class="bubble bubble-user">';
+                    if (pgImageBase64) {
+                        userBubbleHtml += '<img src="' + pgImageBase64 + '" style="max-width: 140px; border-radius: 8px; display: block; margin-bottom: 4px;">';
+                    }
+                    if (text) userBubbleHtml += '<div>' + text + '</div>';
+                    userBubbleHtml += '</div>';
+                    chatUi.innerHTML += userBubbleHtml;
+                    chatUi.scrollTop = chatUi.scrollHeight;
+
+                    inputEl.value = '';
+                    const tempImgBase64 = pgImageBase64;
+                    const tempImgMime = pgImageMime;
+                    clearPlaygroundImage();
+
+                    const btn = document.getElementById('btn-pg-send');
+                    btn.disabled = true;
+                    btn.innerText = '⏳ सोच रहे हैं...';
+
+                    try {
+                        const res = await fetch('/api/playground/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: text,
+                                history: pgAiHistory,
+                                phone: voterPhone,
+                                voterName: voterName,
+                                campaignGoal: campaignGoal,
+                                provider: provider,
+                                imageBase64: tempImgBase64,
+                                mimeType: tempImgMime
+                            })
+                        });
+
+                        const data = await res.json();
+                        if (data.success) {
+                            pgAiHistory.push({ role: 'user', content: text || '[फोटो]' });
+                            pgAiHistory.push({ role: 'assistant', content: data.reply });
+
+                            let botHtml = '<div class="bubble bubble-bot">' + data.reply.replace(/\n/g, '<br>') + '</div>';
+                            chatUi.innerHTML += botHtml;
+                            chatUi.scrollTop = chatUi.scrollHeight;
+
+                            // Update live debug metrics
+                            document.getElementById('pg-metric-provider').innerText = data.provider || provider;
+                            document.getElementById('pg-metric-latency').innerText = data.timeMs + ' ms';
+                            document.getElementById('pg-metric-tags').innerText = (data.user?.tags || []).join(', ') || 'सामान्य';
+                            document.getElementById('pg-metric-drip').innerText = data.nextDripMedia ? data.nextDripMedia.title : 'पूर्ण';
+                        } else {
+                            chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">त्रुटि: ' + (data.error || 'अज्ञात समस्या') + '</div>';
+                        }
+                    } catch (e) {
+                        chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">कनेक्शन त्रुटि: ' + e.message + '</div>';
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = 'भेजें 🚀';
                     }
                 }
 

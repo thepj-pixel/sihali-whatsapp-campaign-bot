@@ -22,6 +22,12 @@ const TRANSLIT_MAP = {
     'singh': 'सिंह',
     'kumar': 'कुमार',
     'devi': 'देवी',
+    'kumari': 'कुमारी',
+    'kmari': 'कुमारी',
+    'reena': 'रीना',
+    'rina': 'रीना',
+    'rinku': 'रिंकू',
+    'mnoj': 'मनोज',
     'gurjar': 'गुर्जर',
     'meena': 'मीणा',
     'jat': 'जाट',
@@ -165,6 +171,41 @@ const TRANSLIT_MAP = {
     'mamta': 'ममता',
     'kavita': 'कविता'
 };
+
+
+function normalizePhonetic(str) {
+    if (!str) return '';
+    let s = str.toLowerCase().trim();
+    s = s.replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/v/g, 'w');
+    s = s.replace(/sh/g, 's').replace(/ch/g, 'c').replace(/z/g, 'j');
+    s = s.replace(/(.)\1+/g, '$1');
+    s = s.replace(/ी/g, 'ि').replace(/ू/g, 'ु').replace(/श|ष/g, 'स');
+    s = s.replace(/ण/g, 'न').replace(/ब/g, 'व').replace(/ँ/g, 'ं');
+    return s;
+}
+
+function levenshteinDistance(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
 
 function cleanQuery(text) {
     if (!text) return { query: '', ward: null };
@@ -357,6 +398,26 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
             // Raw OCR match
             if (nameRaw.includes(hindiT) || nameRaw.includes(rawT)) {
                 if (!isSurname) score += 15;
+            }
+
+            // Phonetic & Fuzzy match for typos (e.g. 'reena' vs 'rina', 'mnoj' vs 'manoj')
+            if (rawT.length >= 3 && !isSurname) {
+                const normT = normalizePhonetic(rawT);
+                const allWords = (nameHi + ' ' + nameEn + ' ' + relHi + ' ' + relEn).split(/[\s,.:;!?-]+/).filter(w => w.length >= 3);
+                for (const w of allWords) {
+                    const normW = normalizePhonetic(w);
+                    if (normW === normT || normW.includes(normT) || normT.includes(normW)) {
+                        score += 30;
+                        matchedDistinctName = true;
+                        break;
+                    } else if (normT.length >= 4 && Math.abs(normT.length - normW.length) <= 1) {
+                        if (levenshteinDistance(normT, normW) <= 1) {
+                            score += 25;
+                            matchedDistinctName = true;
+                            break;
+                        }
+                    }
+                }
             }
         }
 

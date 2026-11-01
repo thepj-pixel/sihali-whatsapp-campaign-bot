@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const userMemory = require('./user_memory.js');
+const campaignAgenda = require('./campaign_agenda.js');
 
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 let KB = {};
@@ -271,7 +272,7 @@ async function callGemini(systemPrompt, conversationHistory, userMessage, key) {
             parts: [{ text: userMessage }]
         });
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${key}`;
         const res = await fetch(url, {
             method: 'POST',
             signal: controller.signal,
@@ -312,7 +313,10 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     }
 
     const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
-    const systemPromptWithRAG = SYSTEM_PROMPT + (ragContext ? `\n\n${ragContext}` : '');
+    const agendaContext = campaignAgenda ? campaignAgenda.getAgendaRAGPrompt() : '';
+    let systemPromptWithRAG = SYSTEM_PROMPT;
+    if (agendaContext) systemPromptWithRAG += `\n\n${agendaContext}`;
+    if (ragContext) systemPromptWithRAG += `\n\n${ragContext}`;
 
     const messages = [
         { role: 'system', content: systemPromptWithRAG },
