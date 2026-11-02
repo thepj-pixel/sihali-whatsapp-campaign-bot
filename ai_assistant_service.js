@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const userMemory = require('./user_memory.js');
 const campaignAgenda = require('./campaign_agenda.js');
+const voterEngine = require('./voter_engine.js');
 
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 let KB = {};
@@ -84,10 +85,9 @@ const SYSTEM_PROMPT = `
 🎯 ज़मीनी माहौल की पड़ताल (Ground Pulse Check):
 - बात के अंत में सहजता से पूछें:
   "वैसे भैया, आप बताओ... इस बार अपने वार्ड में क्या माहौल लग रहा है सच्ची? लोगों का क्या मूड है?"
-4. ⚠️ सख्त नियम — वोटर पर्ची (NO Hallucination Policy):
-   - कभी भी झूठा दावा मत करना कि "पर्ची भेज दी है"!
-   - अगर वोटर पर्ची मांगता है:
-     "भैया, एक बार अपने पिताजी का नाम या वार्ड नंबर बता दो न भैया, मैं तुरंत लिस्ट से निकाल कर भेज देती हूँ! 😊"
+4. 🗳️ वोटर पर्ची सहायता:
+- जब भी कोई वोटर अपना नाम, पर्ची या परिवार का विवरण पूछे, तो 3,636 वोटरों के अधिकृत डेटाबेस से खोजकर तुरंत सटीक पर्ची दी जाती है।
+- कभी भी 'स्पेलिंग अलग होगी' या 'हाथ से चेक करवाती हूँ' जैसे बहाने नहीं बनाना। अगर नाम मिला है तो सीधे पर्ची प्रस्तुत करें।
 5. मुख्य विकास कार्य (Locked Facts):
    - JJM के तहत घर-घर शुद्ध मीठा पेयजल और पानी की नई टंकियां।
    - मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स (जैसे सीताराम मंदिर से शिव मंदिर, भजनलाल से लालसिंह, गौरव पथ से किशनलाल)।
@@ -198,7 +198,7 @@ function getFastLocalAnswer(query, phone = null) {
 // 1. Call NVIDIA Endpoint
 async function callNvidia(messages, key) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3800);
+    const timeout = setTimeout(() => controller.abort(), 8500);
     try {
         const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
             method: 'POST',
@@ -228,7 +228,7 @@ async function callNvidia(messages, key) {
 async function callGroq(messages, key) {
     if (!key) throw new Error('No Groq key configured');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 8500);
     try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -238,7 +238,7 @@ async function callGroq(messages, key) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: 'qwen/qwen3.8-27b',
+                model: 'llama-3.1-8b-instant',
                 messages: messages,
                 max_tokens: 280,
                 temperature: 0.6
@@ -310,6 +310,38 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     // Fast Prince recognition
     if (userMessage.toLowerCase().includes('prince')) {
         return getFastLocalAnswer(userMessage, phone);
+    }
+
+    const user = phone ? userMemory.getUser(phone) : null;
+    const lowerMsg = userMessage.toLowerCase();
+
+    // Check if voter is giving a contextual follow-up confirmation ("ye hie details h", "yahi h", etc.)
+    const isFollowUpDetails = lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi') || lowerMsg.includes('yahi h') || lowerMsg.includes('yahi he');
+    if (isFollowUpDetails && user && user.lastFoundVoter) {
+        console.log('[AI Assistant] Delivering stored voter slip upon details confirmation for:', phone);
+        return voterEngine.formatSlipResponse(user.lastFoundVoter);
+    }
+
+    // Direct voter search interception ONLY if message is likely a name or voter query
+    if (voterEngine && voterEngine.isLikelyNameOrVoterQuery(userMessage)) {
+        const candidateTerms = ['baba abhay singh', 'abhay singh', 'baba ji', 'babaji', 'baba'];
+        const isCandidateQuery = candidateTerms.some(t => lowerMsg.includes(t));
+        if (!isCandidateQuery) {
+            const userWard = user?.ward || null;
+            const matches = voterEngine.searchVoters(userMessage, 1, userWard);
+            if (matches && matches.length > 0) {
+                if (user) {
+                    user.lastSearchedQuery = userMessage;
+                    user.lastSearchedName = matches[0].name;
+                    user.lastFoundVoter = matches[0];
+                    if (!user.ward && matches[0].ward) user.ward = matches[0].ward;
+                    if (!user.name) user.name = matches[0].name;
+                    userMemory.save();
+                }
+                console.log('[AI Assistant] Auto-intercepted high-precision voter query for:', userMessage);
+                return voterEngine.formatSlipResponse(matches[0]);
+            }
+        }
     }
 
     const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';

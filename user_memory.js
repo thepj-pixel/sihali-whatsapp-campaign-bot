@@ -106,7 +106,7 @@ class UserMemory {
         return this.users[phone];
     }
 
-    recordMessage(rawPhone, role, text, mediaType = null, sessionName = 'Primary') {
+    recordMessage(rawPhone, role, text, mediaType = null, sessionName = 'Primary', mediaUrl = null) {
         const phone = this.cleanPhone(rawPhone);
         if (!phone) return;
 
@@ -335,6 +335,7 @@ class UserMemory {
             role: role, // 'user' or 'bot'
             text: text,
             mediaType: mediaType || null,
+            mediaUrl: mediaUrl || null,
             session: sessionName,
             time: timestamp
         });

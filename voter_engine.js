@@ -262,9 +262,10 @@ const CONVERSATIONAL_INQUIRY_WORDS = [
     'bataiye', 'bataye', 'bata do', 'bataen', 'batado', 'batana', 'bata', 'boliye', 'suno', 'samjhao',
     'kaun-kaun', 'kaunse', 'kaunsi', 'konse', 'kya-kya', 'kaha', 'kahaa', 'kisko', 'kisne',
     'sarpanch', 'सरपंच', 'panchayat', 'पंचायत', 'pratyashi', 'प्रत्याशी', 'candidate',
-    'jeet', 'जीत', 'jitenge', 'jitega', 'jitwayenge', 'support',
+    'jeet', 'जीत', 'jitenge', 'jitega', 'jeetega', 'jitwayenge', 'support', 'harega', 'haroge', 'haaroge', 'haarenge',
     'school', 'स्कूल', 'topper', 'टॉपर', 'padhai', 'shiksha', 'शिक्षा',
-    'apne', 'apna', 'hamare', 'humara', 'hamaare', 'hume', 'gaav', 'gaon', 'गाँव', 'गांव'
+    'apne', 'apna', 'hamare', 'humara', 'hamaare', 'hume', 'gaav', 'gaon', 'गाँव', 'गांव',
+    'mahool', 'mahol', 'hawa', 'takkar', 'kuch', 'tumne', 'tum', 'sab'
 ];
 
 function isGreeting(text) {
@@ -306,14 +307,20 @@ function isLikelyNameOrVoterQuery(text) {
         lower.includes('naam') || lower.includes('name') || lower.includes('नाम') ||
         lower.includes('parchi') || lower.includes('पर्ची') || lower.includes('voter') ||
         lower.includes('वोटर') || lower.includes('ward') || lower.includes('वार्ड') ||
-        lower.includes('epic') || lower.includes('list') || lower.includes('लिस्ट')
+        lower.includes('epic') || lower.includes('list') || lower.includes('लिस्ट') ||
+        lower.includes('slip')
     ) {
         return true;
     }
     
-    // 1 to 4 words that are not conversational
-    const words = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length > 0);
-    if (words.length >= 1 && words.length <= 4) {
+    // Check tokens after stripping fillers
+    const nonFillerTokens = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length >= 2 && !FILLERS_SET.has(w));
+    if (nonFillerTokens.length >= 1 && nonFillerTokens.length <= 4) {
+        return true;
+    }
+    
+    const allWords = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length > 0);
+    if (allWords.length >= 1 && allWords.length <= 4) {
         return true;
     }
     
@@ -323,11 +330,13 @@ function isLikelyNameOrVoterQuery(text) {
 const SURNAMES = new Set(['yadav', 'यादव', 'singh', 'सिंह', 'kumar', 'कुमार', 'devi', 'देवी', 'sharma', 'शर्मा', 'gurjar', 'गुर्जर', 'meena', 'मीणा', 'jat', 'जाट', 'saini', 'सैनी', 'balai', 'बलाई']);
 
 const FILLERS_SET = new Set([
-    'are', 'arey', 'dhund', 'dhundo', 'na', 'naa', 'h', 'hai', 'he', 'papa', 'pitaji', 'pita',
-    'ka', 'ki', 'ke', 'ko', 'naam', 'name', 'syad', 'shayad', 'se', 'cha', 'raha', 'rahi', 'hu', 'hoon',
-    'bhai', 'apna', 'apni', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere', 'check', 'karo', 'kardo',
-    'batao', 'parchi', 'voter', 'slip', 'card', 'epic', 'plz', 'please', 'sir', 'ji', 'bhaiya',
-    'ward', 'w', 'bhej', 'bhejo', 'do', 'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main', 'baba', 'abhay', 'abhey'
+    'are', 'aree', 'arey', 'dhund', 'dhundo', 'na', 'naa', 'h', 'hai', 'he', 'hie', 'hi', 'ye', 'toh',
+    'papa', 'pitaji', 'pita', 'ka', 'ki', 'ke', 'ko', 'naam', 'name', 'syad', 'shayad', 'se', 'cha',
+    'raha', 'rahi', 'hu', 'hoon', 'bhai', 'apna', 'apni', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere',
+    'check', 'karo', 'kardo', 'batao', 'bataya', 'batado', 'bata', 'bol', 'bola', 'bolna', 'parchi', 'voter',
+    'slip', 'card', 'epic', 'plz', 'please', 'sir', 'ji', 'bhaiya', 'ward', 'w', 'bhej', 'bhejo', 'do',
+    'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main', 'baba', 'abhay', 'abhey', 'details', 'sirf',
+    'bas', 'paas'
 ]);
 
 function searchVoters(rawInput, limit = 5, fallbackWard = null) {
@@ -384,34 +393,59 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
             }
 
             // Name match (Hindi or English transliteration)
-            if (nameHi.includes(hindiT) || nameHi.includes(rawT) || nameEn.includes(rawT) || searchText.includes(rawT)) {
+            const nameHiWords = nameHi.split(/\s+/);
+            const nameEnWords = nameEn.split(/\s+/);
+            const isExactWordHi = nameHiWords.includes(hindiT);
+            const isExactWordEn = nameEnWords.includes(rawT);
+            const matchedInOwnName = isExactWordHi || isExactWordEn || nameHi.includes(hindiT) || nameHi.includes(rawT) || nameEn.includes(rawT) || searchText.includes(rawT);
+
+            if (matchedInOwnName) {
                 if (isSurname) {
-                    score += 5;
+                    score += isExactWordHi || isExactWordEn ? 25 : 10;
                 } else {
-                    score += 40;
+                    score += isExactWordHi || isExactWordEn ? 150 : 80; // High reward for exact word match in own name!
                     matchedDistinctName = true;
                 }
             }
 
+            // Distinguish Kumar vs Kumari
+            if (rawT === 'kumar' || hindiT === 'कुमार') {
+                if (nameHi.includes('कुमारी') || nameEn.includes('kumari')) {
+                    score -= 50; // Don't falsely favor female 'Kumari' when 'Kumar' was asked
+                }
+            }
+
             // Relative / Father / Husband match (Hindi or English)
-            if (relHi.includes(hindiT) || relHi.includes(rawT) || relEn.includes(rawT)) {
+            const matchedInRel = relHi.includes(hindiT) || relHi.includes(rawT) || relEn.includes(rawT);
+            if (matchedInRel) {
                 if (isSurname) {
                     score += 5;
                 } else {
-                    score += 35;
+                    score += 25; // Relative match
                     matchedDistinctName = true;
                 }
             }
 
             // Raw OCR match
             if (nameRaw.includes(hindiT) || nameRaw.includes(rawT)) {
-                if (!isSurname) score += 15;
+                if (!isSurname) score += 20;
+            }
+
+            // Bonus if rawTokens has multiple words and all match own name (Full Name Match!)
+            if (rawTokens.length >= 2) {
+                const allInOwnName = rawTokens.every(t => {
+                    const ht = (TRANSLIT_MAP[t] || t).toLowerCase();
+                    return nameHi.includes(ht) || nameHi.includes(t) || nameEn.includes(t);
+                });
+                if (allInOwnName) {
+                    score += 200; // MASSIVE exact full name bonus!
+                }
             }
 
             // Phonetic & Fuzzy match for typos (e.g. 'reena' vs 'rina', 'mnoj' vs 'manoj')
             if (rawT.length >= 3 && !isSurname) {
                 const normT = normalizePhonetic(rawT);
-                const allWords = (nameHi + ' ' + nameEn + ' ' + relHi + ' ' + relEn).split(/[\s,.:;!?-]+/).filter(w => w.length >= 3);
+                const allWords = (nameHi + ' ' + nameEn).split(/[\s,.:;!?-]+/).filter(w => w.length >= 3);
                 for (const w of allWords) {
                     const normW = normalizePhonetic(w);
                     if (normW === normT || normW.includes(normT) || normT.includes(normW)) {

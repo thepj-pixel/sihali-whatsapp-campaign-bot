@@ -4,3 +4,4 @@ sessions_auth/
 api_config.json
 *.log
 messages_feed.json
+voters_rag.jsonl

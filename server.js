@@ -505,7 +505,11 @@ async function startSession(sessionObj) {
                         const { downloadMediaMessage } = require('@whiskeysockets/baileys');
                         const imgBuffer = await downloadMediaMessage(msg, 'buffer', {});
                         if (imgBuffer) {
+                            const uploadFilename = `${senderPhone}_${Date.now()}.jpg`;
+                            const uploadPath = path.join(__dirname, 'media', 'uploads', uploadFilename);
+                            try { fs.writeFileSync(uploadPath, imgBuffer); } catch(e) {}
                             imageAnalysis = await visionService.analyzeImage(imgBuffer);
+                            if (imageAnalysis) imageAnalysis.localUrl = `/media/uploads/${uploadFilename}`;
                             console.log(`[${sessionObj.id}] 📷 Vision Analysis for ${senderPhone}:`, imageAnalysis);
                         }
                     } catch (imgErr) {
@@ -534,6 +538,15 @@ async function startSession(sessionObj) {
 
                     // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
                     try {
+                        const existingUser = userMemory.getUser(senderPhone);
+                        if (existingUser && existingUser.lastHandshakeTime && (Date.now() - existingUser.lastHandshakeTime < 60000)) {
+                            console.log(`[${sessionObj.id}] Handshake already sent recently to ${senderPhone}, skipping duplicate`);
+                            continue;
+                        }
+                        if (existingUser) {
+                            existingUser.lastHandshakeTime = Date.now();
+                            userMemory.save();
+                        }
                         const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
                         await sendSafeMessage(sock, replyJid, { text: handshakeText });
                         console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${replyJid}`);
@@ -588,8 +601,16 @@ async function startSession(sessionObj) {
                     const isVideoQuery = lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
                     const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
+                    // Check if user is confirming previous query ("ye hie details h", "yahi h", "itna hi pata h", etc.)
+                    const isFollowUpDetails = lower.includes('ye hie') || lower.includes('yahi') || lower.includes('yehi') || lower.includes('itna hi') || lower.includes('yahi h') || lower.includes('yahi he') || lower.includes('nahi pata');
+                    let effectiveSearchText = body;
+                    if (isFollowUpDetails && user && user.lastSearchedQuery) {
+                        effectiveSearchText = user.lastSearchedQuery;
+                        console.log(`[${sessionObj.id}] Contextual follow-up detected for ${senderPhone}. Using last query: "${effectiveSearchText}"`);
+                    }
+
                     // High-accuracy voter slip intent
-                    const hasEpicPattern = /\b([A-Za-z]{3}\d{7}|RJ\/\d+\/\d+\/\d+|[Ww]\d{1,2}-\d{1,4})\b/i.test(body);
+                    const hasEpicPattern = /\b([A-Za-z]{3}\d{7}|RJ\/\d+\/\d+\/\d+|[Ww]\d{1,2}-\d{1,4})\b/i.test(effectiveSearchText);
                     const hasExplicitParchiKeyword = lower.includes('parchi') || lower.includes('पर्ची') || lower.includes('voter slip') || lower.includes('मतदाता पर्ची') || lower.includes('voter card') || lower.includes('voter id') || lower.includes('पहचान पत्र');
                     const hasParchiPhrase = lower.includes('bhej do') || lower.includes('bhejo') || lower.includes('nikalo') || lower.includes('निकालो') || lower.includes('भेज दो') || lower.includes('भेजो') || lower.includes('naam dekhna') || lower.includes('naam check') || lower.includes('list me naam') || lower.includes('naam list');
 
@@ -600,7 +621,8 @@ async function startSession(sessionObj) {
                         hasEpicPattern ||
                         hasExplicitParchiKeyword ||
                         (hasParchiPhrase && !lower.includes('photo') && !lower.includes('video') && !lower.includes('poster')) ||
-                        voterEngine.isLikelyNameOrVoterQuery(body)
+                        voterEngine.isLikelyNameOrVoterQuery(effectiveSearchText) ||
+                        isFollowUpDetails
                     );
 
                     if (imageAnalysis) {
@@ -689,8 +711,15 @@ async function startSession(sessionObj) {
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
                     } else if (isVoterSlipIntent) {
-                        const matches = voterEngine.searchVoters(body, 5, user.ward);
+                        const matches = voterEngine.searchVoters(effectiveSearchText, 5, user.ward);
                         if (matches && matches.length > 0) {
+                            user.lastSearchedQuery = effectiveSearchText;
+                            user.lastSearchedName = matches[0].name;
+                            user.lastFoundVoter = matches[0];
+                            if (!user.ward && matches[0].ward) user.ward = matches[0].ward;
+                            if (!user.name) user.name = matches[0].name;
+                            userMemory.save();
+
                             replyText = voterEngine.formatSlipResponse(matches[0]);
                             if (matches.length > 1) {
                                 replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
@@ -698,14 +727,19 @@ async function startSession(sessionObj) {
                             await sendSafeMessage(sock, replyJid, { text: replyText });
                             mediaTypeSent = 'voterSlip';
                             console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
+                        } else if (isFollowUpDetails && user && user.lastFoundVoter) {
+                            replyText = voterEngine.formatSlipResponse(user.lastFoundVoter);
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            mediaTypeSent = 'voterSlip';
+                            console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip upon follow-up to ${senderPhone}`);
                         } else {
                             replyText = voterEngine.formatFallbackResponse();
                             await sendSafeMessage(sock, replyJid, { text: replyText });
-                            console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${body}"`);
+                            console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
                         }
                     } else {
                         // AI Assistant query
-                        const history = userMemory.getUserHistory(senderPhone).map(h => ({
+                        const history = userMemory.getUserHistory(senderPhone).slice(0, -1).map(h => ({
                             role: h.role === 'bot' ? 'assistant' : 'user',
                             content: h.text
                         }));
@@ -2398,6 +2432,12 @@ app.get('/', (req, res) => {
                 }
 
                 // Update Live Voter Chat Feed (Voters Only)
+                function openVoterInCRM(phone) {
+                    const crmBtn = document.querySelectorAll('.tab-btn')[4];
+                    switchTab('voters', crmBtn);
+                    setTimeout(function() { selectVoter(phone); }, 150);
+                }
+
                 async function updateLiveFeed() {
                     try {
                         const res = await fetch('/api/messages');
@@ -2408,19 +2448,29 @@ app.get('/', (req, res) => {
                             return;
                         }
 
-                        tbody.innerHTML = messages.map(m => {
+                        // Group by unique voter phone number (Single updated entry per voter)
+                        const groupedByPhone = {};
+                        messages.forEach(m => {
+                            if (!m.phone) return;
+                            if (!groupedByPhone[m.phone]) {
+                                groupedByPhone[m.phone] = m;
+                            }
+                        });
+                        const uniqueVoters = Object.values(groupedByPhone);
+
+                        tbody.innerHTML = uniqueVoters.map(m => {
                             let badgeClass = 'badge-success';
                             if (m.status === 'HANDSHAKE_SENT') badgeClass = 'badge-info';
                             else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
                             else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
 
-                            return '<tr>' +
+                            return '<tr style="cursor: pointer;" onclick="openVoterInCRM(\'' + m.phone + '\')">' +
                                 '<td style="color: #64748b; font-size: 12px;">' + (m.timestamp || '') + '</td>' +
                                 '<td><span style="font-weight: 600; color: #334155; font-size: 12px;">' + (m.session || '') + '</span></td>' +
                                 '<td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+' + (m.phone || '') + '</span></td>' +
                                 '<td style="font-weight: 500; color: #0f172a;">' + (m.incoming || '') + '</td>' +
                                 '<td style="color: #334155; font-size: 13px; white-space: pre-wrap;">' + (m.reply || '') + '</td>' +
-                                '<td><span class="badge ' + badgeClass + '">● ' + (m.status || '') + '</span></td>' +
+                                '<td><span class="badge ' + badgeClass + '">● ' + (m.status || '') + '</span><br><button class="btn btn-sm" style="background:#2563eb; color:white; margin-top:4px; font-size:11px; padding:2px 8px; border-radius:4px; border:none;" onclick="event.stopPropagation(); openVoterInCRM(\'' + m.phone + '\')">💬 Open Chat</button></td>' +
                                 '</tr>';
                         }).join('');
                     } catch (e) {}
@@ -2694,9 +2744,19 @@ app.get('/', (req, res) => {
                                 }
                             }
 
+                            let mediaHtml = '';
+                            if (h.mediaUrl) {
+                                mediaHtml = '<div style="margin-top:6px;"><img src="' + h.mediaUrl + '" style="max-width:220px; max-height:220px; border-radius:8px; border:1px solid #cbd5e1; display:block;"></div>';
+                            } else if (h.mediaType === 'poster' || h.mediaType === 'demoPoster' || h.mediaType === 'customPoster') {
+                                mediaHtml = '<div style="margin-top:6px;"><img src="/media/poster.jpg" style="max-width:220px; max-height:220px; border-radius:8px; border:1px solid #cbd5e1; display:block;"></div>';
+                            } else if (h.mediaType === 'video') {
+                                mediaHtml = '<div style="margin-top:6px;"><video src="/media/campaign_reel.mp4" controls style="max-width:220px; border-radius:8px; display:block;"></video></div>';
+                            }
+
                             return '<div class="wa-bubble ' + bubbleClass + '">' +
                                 '<div style="font-size: 10px; font-weight: 700; opacity: 0.8; margin-bottom: 3px;">' + senderLabel + '</div>' +
                                 '<div style="white-space: pre-wrap;">' + h.text + '</div>' +
+                                mediaHtml +
                                 '<div class="wa-bubble-meta">' +
                                     '<span>' + (h.mediaType ? '📎 ' + h.mediaType : '') + '</span>' +
                                     '<span>' + h.time + ' ✓✓</span>' +
