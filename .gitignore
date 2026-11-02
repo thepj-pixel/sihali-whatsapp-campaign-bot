@@ -3,3 +3,4 @@ sessions_auth/
 .env
 api_config.json
 *.log
+messages_feed.json
