@@ -58,6 +58,7 @@ const {
 } = require('@whiskeysockets/baileys');
 
 const voterEngine = require('./voter_engine.js');
+const voterCardGen = require('./voter_card_generator.js');
 const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
 const posterEngine = require('./poster_engine.js');
@@ -713,25 +714,65 @@ async function startSession(sessionObj) {
                     } else if (isVoterSlipIntent) {
                         const matches = voterEngine.searchVoters(effectiveSearchText, 5, user.ward);
                         if (matches && matches.length > 0) {
+                            const targetVoter = matches[0];
                             user.lastSearchedQuery = effectiveSearchText;
-                            user.lastSearchedName = matches[0].name;
-                            user.lastFoundVoter = matches[0];
-                            if (!user.ward && matches[0].ward) user.ward = matches[0].ward;
-                            if (!user.name) user.name = matches[0].name;
+                            user.lastSearchedName = targetVoter.name;
+                            user.lastFoundVoter = targetVoter;
+                            if (!user.ward && targetVoter.ward) user.ward = targetVoter.ward;
+                            if (!user.name) user.name = targetVoter.name;
                             userMemory.save();
 
-                            replyText = voterEngine.formatSlipResponse(matches[0]);
+                            replyText = voterEngine.formatSlipResponse(targetVoter);
                             if (matches.length > 1) {
                                 replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
                             }
-                            await sendSafeMessage(sock, replyJid, { text: replyText });
-                            mediaTypeSent = 'voterSlip';
-                            console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${matches[0].name_hi})`);
+
+                            // Generate Official JPG Voter Card with Baba's Photo
+                            let cardBuffer = null;
+                            try {
+                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
+                            } catch (cardErr) {
+                                console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message);
+                            }
+
+                            if (cardBuffer) {
+                                const cardFileName = `parchi_${targetVoter.id || targetVoter.sr_no}.jpg`;
+                                const cardFilePath = path.join(__dirname, 'media', 'uploads', cardFileName);
+                                try { fs.writeFileSync(cardFilePath, cardBuffer); } catch(e) {}
+                                await sendSafeMessage(sock, replyJid, {
+                                    image: cardBuffer,
+                                    caption: replyText
+                                });
+                                mediaTypeSent = 'voterSlipCard';
+                                console.log(`[${sessionObj.id}] ✅ Sent voter slip JPG card + details to ${senderPhone} (${targetVoter.name_hi})`);
+                            } else {
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                mediaTypeSent = 'voterSlip';
+                                console.log(`[${sessionObj.id}] ✅ Sent text voter slip to ${senderPhone} (${targetVoter.name_hi})`);
+                            }
                         } else if (isFollowUpDetails && user && user.lastFoundVoter) {
-                            replyText = voterEngine.formatSlipResponse(user.lastFoundVoter);
-                            await sendSafeMessage(sock, replyJid, { text: replyText });
-                            mediaTypeSent = 'voterSlip';
-                            console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip upon follow-up to ${senderPhone}`);
+                            const targetVoter = user.lastFoundVoter;
+                            replyText = voterEngine.formatSlipResponse(targetVoter);
+
+                            let cardBuffer = null;
+                            try {
+                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
+                            } catch (cardErr) {
+                                console.error(`[${sessionObj.id}] Error generating follow-up voter card:`, cardErr.message);
+                            }
+
+                            if (cardBuffer) {
+                                await sendSafeMessage(sock, replyJid, {
+                                    image: cardBuffer,
+                                    caption: replyText
+                                });
+                                mediaTypeSent = 'voterSlipCard';
+                                console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip JPG card upon follow-up to ${senderPhone}`);
+                            } else {
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                mediaTypeSent = 'voterSlip';
+                                console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip text upon follow-up to ${senderPhone}`);
+                            }
                         } else {
                             replyText = voterEngine.formatFallbackResponse();
                             await sendSafeMessage(sock, replyJid, { text: replyText });

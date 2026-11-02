@@ -20,7 +20,8 @@ REMOTE=$(git rev-parse origin/main 2>/dev/null)
 if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$TIMESTAMP] 🚀 New GitHub commit detected! ($LOCAL -> $REMOTE)"
-    git pull origin main
-    pm2 restart whatsapp-bot
+    rm -f messages_feed.json
+    git reset --hard origin/main
+    pm2 restart all
     echo "[$TIMESTAMP] ✅ Bot updated and PM2 reloaded successfully!"
 fi
