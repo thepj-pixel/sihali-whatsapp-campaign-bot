@@ -141,6 +141,54 @@ function getFastLocalAnswer(query, phone = null) {
         );
     }
 
+    // Hospital / Health / Doctor queries
+    if (q.includes('hospital') || q.includes('aspatal') || q.includes('doctor') || q.includes('chikitsa') || q.includes('अस्पताल') || q.includes('डॉक्टर') || q.includes('दवा') || q.includes('इलाज') || q.includes('दवाई') || q.includes('एम्बुलेंस') || q.includes('ambulance')) {
+        return (
+            "राम राम जी! 🙏\n" +
+            "चिकित्सा एवं स्वास्थ्य के क्षेत्र में बाबा अभय सिंह का योगदान ऐतिहासिक है:\n" +
+            "• बाबा अभय सिंह जी ने स्वयं अपनी निजी 4 बीघा बेशकीमती जमीन दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र भवन बनवाया है!\n" +
+            "• साथ ही सिहाली कलां में सुरजन परिवार से भूमिदान करवाकर राजकीय पशु चिकित्सालय भवन का निर्माण करवाया।\n" +
+            "• आगामी 5 वर्षों के संकल्प में अस्पताल में नियमित एमबीबीएस डॉक्टर की पदस्थापना, हाड़ाहेड़ी में नया उपस्वास्थ्य केंद्र, और 24 घंटे आपातकालीन एम्बुलेंस सुविधा उपलब्ध कराना सर्वोच्च प्राथमिकता है! 🏥🚩"
+        );
+    }
+
+    // Sports Ground / Open Gym / Youth Running Track queries
+    if (q.includes('khel') || q.includes('ground') || q.includes('gym') || q.includes('running') || q.includes('track') || q.includes('मैदान') || q.includes('खेल') || q.includes('ओपन जिम') || q.includes('स्टेडियम') || q.includes('युवा')) {
+        return (
+            "राम राम भाई जी! 🚩\n" +
+            "गाँव के युवाओं व खिलाड़ियों के लिए बाबा अभय सिंह ने ऐतिहासिक कार्य किया है:\n" +
+            "• सिहाली खुर्द खेल मैदान में 75% पक्की चारदीवारी, समर्पित रनिंग ट्रैक, बास्केटबॉल व खेल कोर्ट का समतलीकरण और आधुनिक ओपन जिम (Open Gym) का निर्माण करवाया।\n" +
+            "• आगामी 5 वर्षों में हाड़ाहेड़ी व सिहाली कलां में भी नए खेल मैदान, ओपन जिम व रनिंग ट्रैक का पूर्ण विस्तार करने का संकल्प है! खेलो और आगे बढ़ो भाई! 🏃‍♂️🏆"
+        );
+    }
+
+    // Library / Modern Modular Library queries
+    if (q.includes('library') || q.includes('लाइब्रेरी') || q.includes('किताब') || q.includes('reading room') || q.includes('study')) {
+        return (
+            "राम राम भाई जी! 📚\n" +
+            "प्रतियोगी परीक्षाओं की तैयारी कर रहे छात्र-छात्राओं के लिए सिहाली खुर्द में अत्याधुनिक मॉड्यूलर / डिजिटल लाइब्रेरी का निर्माण करवाया गया है।\n" +
+            "आने वाले कार्यकाल में सिहाली खुर्द की तर्ज पर हाड़ाहेड़ी व सिहाली कलां में भी युवाओं के अध्ययन हेतु आधुनिक मॉड्यूलर लाइब्रेरी खोली जाएगी! 🎓🚩"
+        );
+    }
+
+    // Drinking Water / JJM / Borewell queries
+    if (q.includes('pani') || q.includes('paani') || q.includes('nal') || q.includes('borewell') || q.includes('jjm') || q.includes('पानी') || q.includes('नल') || q.includes('बोरवेल') || q.includes('जल') || q.includes('टंकी')) {
+        return (
+            "राम राम जी! 💧\n" +
+            "पेयजल आपूर्ति के लिए जल जीवन मिशन (JJM) के तहत गाँव में नई पानी की टंकियाँ, घर-घर नल कनेक्शन और सिहाली से हाड़ाहेड़ी के सीम संधे पर नए गहरे बोरवेल लगवाए गए हैं।\n" +
+            "हमारा पक्का संकल्प है कि शेष बची सभी ढाणियों और घरों तक भी मीठे पानी की स्थायी लाइन जल्द से जल्द पहुँचाई जाएगी! 🚩"
+        );
+    }
+
+    // Elder / Tauji / Respect / Chaupal queries
+    if (q.includes('tauji') || q.includes('tau') || q.includes('kaka') || q.includes('budhe') || q.includes('bujurg') || q.includes('pension') || q.includes('ताऊ') || q.includes('काका') || q.includes('बुजुर्ग') || q.includes('पेंशन') || q.includes('चौपाल')) {
+        return (
+            "राम राम ताऊ जी! 🙏\n" +
+            "बुजुर्गों का आशीर्वाद ही हमारी सबसे बड़ी ताकत है। बाबा अभय सिंह ने हमेशा बड़े-बुजुर्गों के मान-सम्मान और स्वास्थ्य को प्राथमिकता दी है।\n" +
+            "वरिष्ठ नागरिकों के विश्राम व आपसी विचार-विमर्श के लिए छायादार, पंखे व पेयजल युक्त आधुनिक सामुदायिक चौपाल और पंचायत में ही पटवार घर बनवाना हमारा प्रमुख संकल्प है ताकि आपको मुंडावर न भटकना पड़े! 🚩"
+        );
+    }
+
     // Opposition / Bribe / Alcohol queries
     if (q.includes('virodhi') || q.includes('विरोधी') || q.includes('daaru') || q.includes('daru') || q.includes('दारू') || q.includes('पैसे') || q.includes('पैसा') || q.includes('शराब') || q.includes('bribe')) {
         return (

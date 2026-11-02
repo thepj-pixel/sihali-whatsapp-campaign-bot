@@ -65,6 +65,7 @@ const posterEngine = require('./poster_engine.js');
 const mediaCatalog = require('./media_catalog.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const visionService = require('./vision_service.js');
+const contactsManager = require('./contacts_manager.js');
 
 const app = express();
 app.use(cors());
@@ -1383,6 +1384,94 @@ app.get('/api/voter/:phone', (req, res) => {
     res.json(user);
 });
 
+// API: Contacts Manager (VCF, CSV & Multi-Line Sync)
+app.get('/api/contacts', (req, res) => {
+    try {
+        const contacts = contactsManager.getAll(req.query);
+        res.json({ success: true, count: contacts.length, contacts });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/contacts/add', (req, res) => {
+    try {
+        const c = contactsManager.add(req.body);
+        res.json({ success: true, contact: c });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/contacts/delete', (req, res) => {
+    try {
+        const { id } = req.body;
+        contactsManager.delete(id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/contacts/import-voters', (req, res) => {
+    try {
+        const { ward, line, limit } = req.body;
+        const count = contactsManager.importFromVoterDB(ward, line, parseInt(limit) || 100);
+        res.json({ success: true, added: count });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/contacts/import-vcf', (req, res) => {
+    try {
+        const { vcfText } = req.body;
+        const imported = contactsManager.parseVCF(vcfText || '');
+        res.json({ success: true, count: imported.length });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.get('/api/contacts/export-vcf', (req, res) => {
+    try {
+        const vcf = contactsManager.generateVCF(req.query);
+        res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="sihali_voter_contacts.vcf"');
+        res.send(vcf);
+    } catch (e) {
+        res.status(500).send('Error generating VCF');
+    }
+});
+
+app.get('/api/contacts/export-csv', (req, res) => {
+    try {
+        const csv = contactsManager.generateCSV(req.query);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="sihali_voter_contacts.csv"');
+        res.send(csv);
+    } catch (e) {
+        res.status(500).send('Error generating CSV');
+    }
+});
+
+// API: Request Pairing Code (for Canada + Baba accounts)
+app.post('/api/request-pairing-code', async (req, res) => {
+    try {
+        const { sessionId, phone } = req.body;
+        const sessionObj = SESSIONS.find(s => s.id === sessionId);
+        if (!sessionObj || !sessionObj.sock) {
+            return res.status(404).json({ error: 'Session not active yet. Please wait 5s.' });
+        }
+        let clean = String(phone).replace(/[^0-9]/g, '');
+        if (!clean) return res.status(400).json({ error: 'Valid phone number required' });
+        const code = await sessionObj.sock.requestPairingCode(clean);
+        res.json({ success: true, code });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // API: PM2 Debug Logs (Tunnel + Bot)
 app.get('/api/debug', (req, res) => {
     exec('pm2 logs tunnel --lines 25 --nostream 2>/dev/null; pm2 logs whatsapp-bot --lines 60 --nostream', (err, stdout, stderr) => {
@@ -1814,6 +1903,7 @@ app.get('/', (req, res) => {
                     <button class="tab-btn" onclick="switchTab('studio', this)">🎨 Live Poster Studio</button>
                     <button class="tab-btn" onclick="switchTab('playground', this)">🤖 AI Playground & Lab</button>
                     <button class="tab-btn" onclick="switchTab('voters', this)">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
+                    <button class="tab-btn" onclick="switchTab('contacts', this)">📇 Voter Contacts & VCF/CSV (<span id="contacts-count">0</span>)</button>
                     <button class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
                 </div>
 
@@ -2299,6 +2389,139 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
+                <!-- TAB: Voter Contacts & VCF/CSV Manager -->
+                <div id="tab-contacts" class="card tab-content" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px;">📇 Voter Contacts & VCF/CSV Manager</h3>
+                            <span style="color: #64748b; font-size: 12px;">Saved contacts for Primary (6367810227), Baba Account, and Canada Line (+1) • Import & Export VCF/CSV</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <a href="/api/contacts/export-vcf" download="sihali_voter_contacts.vcf" style="background: #16a34a; color: white; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+                                📲 Export to VCF (Mobile Contacts)
+                            </a>
+                            <a href="/api/contacts/export-csv" download="sihali_voter_contacts.csv" style="background: #0284c7; color: white; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+                                📊 Export to CSV
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Quick Action Toolbars -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+                        <!-- Import from Voter DB -->
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📥 3,636 वोटर लिस्ट से आयात:</span>
+                            <select id="import-ward-select" style="padding: 5px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white;">
+                                <option value="all">सभी वार्ड (1-11)</option>
+                                <option value="1">वार्ड नं. 1</option>
+                                <option value="2">वार्ड नं. 2</option>
+                                <option value="3">वार्ड नं. 3</option>
+                                <option value="4">वार्ड नं. 4</option>
+                                <option value="5">वार्ड नं. 5</option>
+                                <option value="6">वार्ड नं. 6</option>
+                                <option value="7">वार्ड नं. 7</option>
+                                <option value="8">वार्ड नं. 8</option>
+                                <option value="9">वार्ड नं. 9</option>
+                                <option value="10">वार्ड नं. 10</option>
+                                <option value="11">वार्ड नं. 11</option>
+                            </select>
+                            <select id="import-line-select" style="padding: 5px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white;">
+                                <option value="sim_636">Primary Line (6367810227)</option>
+                                <option value="baba_aux">Baba Aux Line</option>
+                                <option value="canada">Canada Line (+1)</option>
+                            </select>
+                            <button onclick="importVotersToContacts()" style="background: #ea580c; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                                📥 आयात करें
+                            </button>
+                        </div>
+
+                        <!-- Direct Upload CSV / VCF -->
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📂 VCF / CSV फाइल अपलोड:</span>
+                            <input type="file" id="vcf-upload-input" accept=".vcf,.csv" style="font-size: 12px;">
+                            <button onclick="uploadContactsFile()" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                                ⬆️ अपलोड करें
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Add Single Contact Form (Collapsible/Inline) -->
+                    <div style="background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+                        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #0f172a;">➕ नया संपर्क सीधे जोड़ें</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
+                            <input type="text" id="new-c-name" placeholder="मतदाता का नाम (उदा: राजेश यादव)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <input type="text" id="new-c-phone" placeholder="मोबाइल नंबर (10 अंक)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <select id="new-c-ward" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                <option value="1">वार्ड नं. 1</option>
+                                <option value="2">वार्ड नं. 2</option>
+                                <option value="3" selected>वार्ड नं. 3</option>
+                                <option value="4">वार्ड नं. 4</option>
+                                <option value="5">वार्ड नं. 5</option>
+                                <option value="6">वार्ड नं. 6</option>
+                                <option value="7">वार्ड नं. 7</option>
+                                <option value="8">वार्ड नं. 8</option>
+                                <option value="9">वार्ड नं. 9</option>
+                                <option value="10">वार्ड नं. 10</option>
+                                <option value="11">वार्ड नं. 11</option>
+                            </select>
+                            <select id="new-c-line" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                <option value="sim_636">Primary Line (6367810227)</option>
+                                <option value="baba_aux">Baba Aux Line</option>
+                                <option value="canada">Canada Line (+1)</option>
+                            </select>
+                            <input type="text" id="new-c-notes" placeholder="नोट्स (उदा: पक्का समर्थक, 4 वोट)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <button onclick="saveSingleContact()" style="background: #16a34a; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
+                                💾 सहेजें
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter & Search Bar -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+                        <input type="text" id="contact-search-input" placeholder="🔍 नाम या फोन नंबर से खोजें..." onkeyup="filterContactsTable()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">
+                        <select id="contact-filter-line" onchange="loadContacts()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; background: white;">
+                            <option value="all">सभी लाइन्स (All WhatsApp)</option>
+                            <option value="sim_636">Primary (6367810227)</option>
+                            <option value="baba_aux">Baba Aux Line</option>
+                            <option value="canada">Canada Line (+1)</option>
+                        </select>
+                        <select id="contact-filter-ward" onchange="loadContacts()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; background: white;">
+                            <option value="all">सभी वार्ड (1-11)</option>
+                            <option value="1">वार्ड 1</option>
+                            <option value="2">वार्ड 2</option>
+                            <option value="3">वार्ड 3</option>
+                            <option value="4">वार्ड 4</option>
+                            <option value="5">वार्ड 5</option>
+                            <option value="6">वार्ड 6</option>
+                            <option value="7">वार्ड 7</option>
+                            <option value="8">वार्ड 8</option>
+                            <option value="9">वार्ड 9</option>
+                            <option value="10">वार्ड 10</option>
+                            <option value="11">वार्ड 11</option>
+                        </select>
+                    </div>
+
+                    <!-- Contacts Table -->
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;"><input type="checkbox" id="select-all-contacts" onclick="toggleSelectAllContacts(this)"></th>
+                                    <th>मतदाता का नाम</th>
+                                    <th>फोन नंबर</th>
+                                    <th>वार्ड</th>
+                                    <th>WhatsApp लाइन</th>
+                                    <th>नोट्स / पहचान</th>
+                                    <th style="width: 140px;">कार्य (Action)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contacts-table-body">
+                                <tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 30px;">⏳ संपर्क लोड हो रहे हैं...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- TAB 5: Media Bank & Direct Uploader -->
                 <div id="tab-media" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
@@ -2358,6 +2581,7 @@ app.get('/', (req, res) => {
                         if (b) b.classList.add('active');
                     }
                     if (tabId === 'voters') loadVoters();
+                    if (tabId === 'contacts') loadContacts();
                     if (tabId === 'playground' && typeof loadCampaignAgendaUI === 'function') loadCampaignAgendaUI();
                 }
 
@@ -3208,6 +3432,176 @@ app.get('/', (req, res) => {
                         btn.innerText = 'भेजें 🚀';
                     }
                 }
+
+                // --- Contacts Manager Client Logic ---
+                let cachedContacts = [];
+
+                async function loadContacts() {
+                    const line = document.getElementById('contact-filter-line')?.value || 'all';
+                    const ward = document.getElementById('contact-filter-ward')?.value || 'all';
+                    const tbody = document.getElementById('contacts-table-body');
+                    const countEl = document.getElementById('contacts-count');
+                    
+                    try {
+                        const res = await fetch('/api/contacts?line=' + encodeURIComponent(line) + '&ward=' + encodeURIComponent(ward));
+                        const data = await res.json();
+                        if (data.success) {
+                            cachedContacts = data.contacts || [];
+                            if (countEl) countEl.innerText = cachedContacts.length;
+                            renderContactsTable(cachedContacts);
+                        }
+                    } catch (e) {
+                        console.error('Error loading contacts:', e);
+                        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;">त्रुटि: ' + e.message + '</td></tr>';
+                    }
+                }
+
+                function renderContactsTable(list) {
+                    const tbody = document.getElementById('contacts-table-body');
+                    if (!tbody) return;
+                    if (!list || list.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:30px;">कोई संपर्क नहीं मिला। ऊपर से नया जोड़ें या वोटर लिस्ट से आयात करें!</td></tr>';
+                        return;
+                    }
+
+                    let rows = '';
+                    for (let i = 0; i < list.length; i++) {
+                        const c = list[i];
+                        const lineBadge = c.line === 'sim_636' ? 'Primary (636)' : (c.line === 'canada' ? 'Canada (+1)' : 'Baba Line');
+                        const lineBg = c.line === 'sim_636' ? '#dbeafe; color:#1e40af' : (c.line === 'canada' ? '#fef3c7; color:#92400e' : '#dcfce7; color:#166534');
+                        const safeName = (c.name || '').replace(/'/g, "\\'");
+                        rows += '<tr>' +
+                            '<td><input type="checkbox" class="contact-checkbox" value="' + c.id + '"></td>' +
+                            '<td style="font-weight:700; color:#0f172a;">' + escapeHtml(c.name) + '</td>' +
+                            '<td style="font-family:monospace; font-weight:600; color:#2563eb;">' + escapeHtml(c.phone) + '</td>' +
+                            '<td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700;">वार्ड ' + c.ward + '</span></td>' +
+                            '<td><span style="background:' + lineBg + '; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">' + lineBadge + '</span></td>' +
+                            '<td style="font-size:12px; color:#64748b;">' + escapeHtml(c.notes || '--') + '</td>' +
+                            '<td>' +
+                                '<button onclick="sendQuickWhatsAppToPhone(\'' + c.phone + '\', \'' + safeName + '\')" style="background:#16a34a; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-right:4px;">📲 चैट</button>' +
+                                '<button onclick="deleteContactRow(\'' + c.id + '\')" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">✕</button>' +
+                            '</td>' +
+                        '</tr>';
+                    }
+                    tbody.innerHTML = rows;
+                }
+
+                function filterContactsTable() {
+                    const q = document.getElementById('contact-search-input')?.value.toLowerCase().trim() || '';
+                    if (!q) {
+                        renderContactsTable(cachedContacts);
+                        return;
+                    }
+                    const filtered = cachedContacts.filter(c => 
+                        (c.name && c.name.toLowerCase().includes(q)) ||
+                        (c.phone && c.phone.includes(q)) ||
+                        (c.notes && c.notes.toLowerCase().includes(q))
+                    );
+                    renderContactsTable(filtered);
+                }
+
+                async function saveSingleContact() {
+                    const name = document.getElementById('new-c-name').value.trim();
+                    const phone = document.getElementById('new-c-phone').value.trim();
+                    const ward = document.getElementById('new-c-ward').value;
+                    const line = document.getElementById('new-c-line').value;
+                    const notes = document.getElementById('new-c-notes').value.trim();
+
+                    if (!phone) { alert('मोबाइल नंबर आवश्यक है!'); return; }
+                    try {
+                        const res = await fetch('/api/contacts/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name, phone, ward, line, notes })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            document.getElementById('new-c-name').value = '';
+                            document.getElementById('new-c-phone').value = '';
+                            document.getElementById('new-c-notes').value = '';
+                            loadContacts();
+                            alert('✅ संपर्क सहेज लिया गया!');
+                        } else {
+                            alert('त्रुटि: ' + data.error);
+                        }
+                    } catch (e) { alert('Error: ' + e.message); }
+                }
+
+                async function deleteContactRow(id) {
+                    if (!confirm('क्या आप इस संपर्क को हटाना चाहते हैं?')) return;
+                    try {
+                        const res = await fetch('/api/contacts/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        });
+                        const data = await res.json();
+                        if (data.success) loadContacts();
+                    } catch (e) { alert('Error: ' + e.message); }
+                }
+
+                async function importVotersToContacts() {
+                    const ward = document.getElementById('import-ward-select').value;
+                    const line = document.getElementById('import-line-select').value;
+                    const confirmMsg = 'क्या आप ' + (ward === 'all' ? 'सभी वार्डों' : 'वार्ड ' + ward) + ' के मतदाताओं को संपर्क सूची में आयात करना चाहते हैं?';
+                    if (!confirm(confirmMsg)) return;
+
+                    try {
+                        const res = await fetch('/api/contacts/import-voters', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ward, line, limit: 100 })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ ' + data.added + ' मतदाता संपर्क सूची में आयात कर लिए गए!');
+                            loadContacts();
+                        } else {
+                            alert('त्रुटि: ' + data.error);
+                        }
+                    } catch (e) { alert('Error: ' + e.message); }
+                }
+
+                async function uploadContactsFile() {
+                    const input = document.getElementById('vcf-upload-input');
+                    const file = input.files[0];
+                    if (!file) { alert('कृपया VCF या CSV फाइल चुनें!'); return; }
+
+                    const reader = new FileReader();
+                    reader.onload = async function(e) {
+                        const text = e.target.result;
+                        try {
+                            const res = await fetch('/api/contacts/import-vcf', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ vcfText: text })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                alert('✅ ' + data.count + ' संपर्क सफलतापूर्वक आयात हुए!');
+                                loadContacts();
+                                input.value = '';
+                            } else {
+                                alert('त्रुटि: ' + data.error);
+                            }
+                        } catch (err) { alert('Upload error: ' + err.message); }
+                    };
+                    reader.readAsText(file);
+                }
+
+                function toggleSelectAllContacts(master) {
+                    document.querySelectorAll('.contact-checkbox').forEach(cb => cb.checked = master.checked);
+                }
+
+                function sendQuickWhatsAppToPhone(phone, name) {
+                    document.getElementById('v-phone').value = phone;
+                    document.getElementById('v-name').value = name;
+                    switchTab('feed', document.querySelector('.tab-btn'));
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+
+                // Initial contacts load
+                setTimeout(loadContacts, 1200);
 
             </script>
         </body>
