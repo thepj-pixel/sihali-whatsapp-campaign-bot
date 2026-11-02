@@ -36,7 +36,7 @@ try {
 }
 
 const SYSTEM_PROMPT = `
-आप ग्राम पंचायत सिहाली खुर्द (सिहाली खुर्द, सिहाली कलां, हाड़ाहेड़ी) के सरपंच प्रत्याशी 'बाबा अभय सिंह' (या 'अभय सिंह') के सेवा केंद्र से उनकी डिजिटल सारथी व गांव की छोटी बहन 'सुमन' हैं। 🚩
+आप ग्राम पंचायत सिहाली खुर्द (सिहाली खुर्द, सिहाली कलां, हाड़ाहेड़ी) के सरपंच प्रत्याशी 'बाबा अभय सिंह' (या 'अभय सिंह') के सेवा केंद्र से उनकी 'डिजिटल सारथी व सेवा सहायिका' हैं। 🚩
 
 ⚠️ नाम का सख्त नियम:
 उन्हें हमेशा 'बाबा अभय सिंह' या 'अभय सिंह' कहें। कभी भी केवल 'बाबा जी' या 'बाबाजी' न कहें।
@@ -136,7 +136,7 @@ function getFastLocalAnswer(query, phone = null) {
     if (q.includes('kon ho') || q.includes('kaun ho') || q.includes('कौन हो') || q.includes('kiska bot') || q.includes('kiske admi') || q.includes('who are you')) {
         return (
             "राम राम भैया! 🙏\n" +
-            "मैं बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र से आपकी छोटी बहन सुमन हूँ।\n" +
+            "मैं बाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र से आपकी सहायता में उपस्थित हूँ।\n" +
             "बाबा अभय सिंह के विकास कार्यों की जानकारी, समस्याओं और आपकी वोटर पर्ची देखने के लिए यहाँ उपलब्ध हूँ। बताइए, क्या सेवा करूँ? 😊🚩"
         );
     }
@@ -307,13 +307,15 @@ function isCannedRejection(reply) {
 
 // AI Assistant query with multi-tier failover (NVIDIA Key 1 -> Key 2 -> Groq -> Gemini -> Local Fast Engine)
 async function getAIResponse(userMessage, apiKey = null, conversationHistory = [], phone = null) {
-    // Fast Prince recognition
-    if (userMessage.toLowerCase().includes('prince')) {
+    const lowerMsg = userMessage.toLowerCase().trim();
+    const isParchiReq = lowerMsg.includes('parchi') || lowerMsg.includes('voter') || lowerMsg.includes('slip') || lowerMsg.includes('nikal') || lowerMsg.includes('bhej') || lowerMsg.includes('yadav');
+
+    // Fast Prince Admin recognition (Only if purely addressing admin, not asking for voter parchi)
+    if ((lowerMsg === 'prince' || lowerMsg === 'admin') && !isParchiReq) {
         return getFastLocalAnswer(userMessage, phone);
     }
 
     const user = phone ? userMemory.getUser(phone) : null;
-    const lowerMsg = userMessage.toLowerCase();
 
     // Check if voter is giving a contextual follow-up confirmation ("ye hie details h", "yahi h", etc.)
     const isFollowUpDetails = lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi') || lowerMsg.includes('yahi h') || lowerMsg.includes('yahi he');

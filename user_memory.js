@@ -331,18 +331,26 @@ class UserMemory {
             }
         }
 
+        const now = Date.now();
+        const electionDate = new Date('2026-11-16T18:00:00+05:30').getTime();
+        // 30 days retention standard; 16 days post-election auto-delete
+        const retentionDays = (now > electionDate) ? 16 : 30;
+        const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000;
+
         user.history.push({
             role: role, // 'user' or 'bot'
             text: text,
             mediaType: mediaType || null,
             mediaUrl: mediaUrl || null,
             session: sessionName,
-            time: timestamp
+            time: timestamp,
+            createdAt: now
         });
 
-        // Keep last 40 messages in history
-        if (user.history.length > 40) {
-            user.history.shift();
+        // Automatic Time-based Cleanup (30 days / 16 days post-election)
+        user.history = user.history.filter(h => !h.createdAt || (now - h.createdAt <= maxAgeMs));
+        if (user.history.length > 50) {
+            user.history = user.history.slice(-50);
         }
 
         this.save();
@@ -455,7 +463,7 @@ class UserMemory {
             return greetingsWithName[idx];
         } else {
             const greetingsWithoutName = [
-                "राम राम भाई जी! 🙏 मैं बाबा अभय सिंह के सेवा केंद्र से आपकी छोटी बहन सुमन। भैया, आपका शुभ नाम जान सकती हूँ ताकि आपको सही सम्मान से याद रख सकूँ? 😊",
+                "राम राम भाई जी! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। भैया, आपका शुभ नाम जान सकते हैं ताकि लिस्ट में आपकी वोटर पर्ची देख सकें? 😊",
                 "प्रणाम भाई जी! 🙏 बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र में आपका स्वागत है। भैया, आपका नाम क्या है? ताकि लिस्ट में आपकी वोटर पर्ची भी देख सकूँ!",
                 "राम राम भैया! 🚩 सिहाली खुर्द 2026 चुनाव सेवा केंद्र। भैया, अपना नाम या वार्ड नंबर बता दीजिए न, ताकि आपसे आत्मीयता से बात हो सके! 😊",
                 "प्रणाम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। भैया, आपका शुभ नाम बता दीजिए, ताकि आगे से आपको नाम से पुकार सकूँ! 🚩"

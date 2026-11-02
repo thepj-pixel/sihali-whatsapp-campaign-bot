@@ -707,14 +707,58 @@ async function startSession(sessionObj) {
                         }
                         mediaTypeSent = poster.id.includes('demo') ? 'demoPoster' : 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster (${poster.id}) to ${senderPhone}`);
-                    } else if (body.toLowerCase().includes('prince')) {
-                        replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
-                        await sendSafeMessage(sock, replyJid, { text: replyText });
-                        console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
                     } else if (isVoterSlipIntent) {
-                        const matches = voterEngine.searchVoters(effectiveSearchText, 5, user.ward);
+                        let targetVoter = null;
+
+                        // Check if voter is answering an active disambiguation prompt (e.g. typing "1", "2", or father's name)
+                        if (user && user.disambiguationMatches && user.disambiguationMatches.length > 0) {
+                            const choiceNum = parseInt(body.trim());
+                            if (!isNaN(choiceNum) && choiceNum >= 1 && choiceNum <= user.disambiguationMatches.length) {
+                                targetVoter = user.disambiguationMatches[choiceNum - 1];
+                            } else {
+                                for (const cand of user.disambiguationMatches) {
+                                    const candRel = ((cand.rel_name_hi || '') + ' ' + (cand.rel_name_en || '')).toLowerCase();
+                                    const candWard = String(cand.ward);
+                                    if (candRel.includes(lower) || lower.includes(candWard) || candWard === body.trim()) {
+                                        targetVoter = cand;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (targetVoter) {
+                                delete user.disambiguationMatches;
+                                user.ward = targetVoter.ward;
+                                user.lastFoundVoter = targetVoter;
+                                userMemory.save();
+                            }
+                        }
+
+                        let matches = targetVoter ? [targetVoter] : voterEngine.searchVoters(effectiveSearchText, 5, user.ward);
+
+                        // If multiple distinct people share the same name and user hasn't specified father's name or ward:
+                        if (!targetVoter && matches && matches.length > 1) {
+                            const sameNameList = matches.filter(m => (m.name_hi === matches[0].name_hi || (m.name_en && m.name_en.toLowerCase() === matches[0].name_en.toLowerCase())));
+                            if (sameNameList.length > 1 && !user.ward) {
+                                user.disambiguationMatches = sameNameList;
+                                userMemory.save();
+                                replyText = voterEngine.formatDisambiguationPrompt(sameNameList, matches[0].name_hi);
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                mediaTypeSent = 'disambiguation';
+                                console.log(`[${sessionObj.id}] ⚠️ Disambiguation requested for ${matches[0].name_hi} (${sameNameList.length} matches)`);
+                                userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
+                                logMessage({
+                                    session: sessionObj.name,
+                                    phone: senderPhone,
+                                    incoming: body,
+                                    reply: replyText,
+                                    status: 'DISAMBIGUATION_SENT'
+                                });
+                                continue;
+                            }
+                        }
+
                         if (matches && matches.length > 0) {
-                            const targetVoter = matches[0];
+                            targetVoter = targetVoter || matches[0];
                             user.lastSearchedQuery = effectiveSearchText;
                             user.lastSearchedName = targetVoter.name;
                             user.lastFoundVoter = targetVoter;
@@ -722,10 +766,7 @@ async function startSession(sessionObj) {
                             if (!user.name) user.name = targetVoter.name;
                             userMemory.save();
 
-                            replyText = voterEngine.formatSlipResponse(targetVoter);
-                            if (matches.length > 1) {
-                                replyText += `\n\n📌 *नोट:* इस नाम से ${matches.length} मतदाता मिले हैं। सही पर्ची के लिए अपना वार्ड नंबर (उदा: "वार्ड ${matches[1].ward}") लिखकर भेजें।`;
-                            }
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter);
 
                             // Generate Official JPG Voter Card with Baba's Photo
                             let cardBuffer = null;
@@ -751,8 +792,8 @@ async function startSession(sessionObj) {
                                 console.log(`[${sessionObj.id}] ✅ Sent text voter slip to ${senderPhone} (${targetVoter.name_hi})`);
                             }
                         } else if (isFollowUpDetails && user && user.lastFoundVoter) {
-                            const targetVoter = user.lastFoundVoter;
-                            replyText = voterEngine.formatSlipResponse(targetVoter);
+                            targetVoter = user.lastFoundVoter;
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter);
 
                             let cardBuffer = null;
                             try {
@@ -778,6 +819,10 @@ async function startSession(sessionObj) {
                             await sendSafeMessage(sock, replyJid, { text: replyText });
                             console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
                         }
+                    } else if (body.toLowerCase().trim() === 'prince' || body.toLowerCase().trim() === 'admin') {
+                        replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
                     } else {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).slice(0, -1).map(h => ({
@@ -1184,12 +1229,12 @@ app.post('/api/ai-draft', async (req, res) => {
         const voterName = (user && user.name) ? user.name : 'भैया';
         const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
 
-        const systemInstruction = `आप 'सुमन' (बाबा अभय सिंह के सेवा केंद्र से उनकी डिजिटल सारथी व छोटी बहन) हैं।
+        const systemInstruction = `आप बाबा अभय सिंह सेवा केंद्र से उनकी डिजिटल सारथी व सेवा सहायिका हैं।
 प्रबंधक प्रिंस ने आपको मतदाता '${voterName}' के लिए यह संदेश तैयार करने को कहा है:
 "${instruction.trim()}"
 
 🎯 नियम:
-1. एडमिन के इस निर्देश को सुमन की मीठी, आत्मीय, संस्कारी गांव की बहन की आवाज़ में 1 से 2 छोटी असरदार WhatsApp पंक्तियों में बदलो।
+1. एडमिन के इस निर्देश को बाबा अभय सिंह सेवा केंद्र की मीठी, आत्मीय व विनम्र आवाज़ में 1 से 2 छोटी असरदार WhatsApp पंक्तियों में बदलो।
 2. कोई भारी-भरकम किताबी भाषण नहीं।
 3. सीधे वही संदेश आउटपुट करो जो WhatsApp पर भेजा जाना है (Zero Meta-talk, Zero Quotes).`;
 
@@ -1992,7 +2037,7 @@ app.get('/', (req, res) => {
                             <div style="border: 1px solid #cbd5e1; border-radius: 12px; height: 380px; display: flex; flex-direction: column; background: #efeae2; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
                                 <div id="ai-chat-ui" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
                                     <div class="bubble bubble-bot">
-                                        राम राम विक्रम भैया! 🙏 मैं बाबा अभय सिंह के सेवा केंद्र से आपकी छोटी बहन सुमन। बताइए भैया, घर-परिवार में सब कुशल मंगल? आज अपने मोहल्ले में क्या चुनावी माहौल लग रहा है? 😊🚩
+                                        राम राम विक्रम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। बताइए भैया, घर-परिवार में सब कुशल मंगल? आज अपने मोहल्ले में क्या चुनावी माहौल लग रहा है? 😊🚩
                                     </div>
                                 </div>
 
@@ -2781,7 +2826,7 @@ app.get('/', (req, res) => {
                                     senderLabel = '👨‍💻 एडमिन सीधा संदेश (' + h.session + ')';
                                 } else {
                                     bubbleClass = 'wa-bubble-bot';
-                                    senderLabel = '🚩 बाबा अभय सिंह सेवा केंद्र (सुमन)';
+                                    senderLabel = '🚩 बाबा अभय सिंह सेवा केंद्र';
                                 }
                             }
 

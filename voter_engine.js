@@ -36,9 +36,11 @@ const TRANSLIT_MAP = {
     'meghwal': 'मेघवाल',
     'ahir': 'अहीर',
     'rao': 'राव',
-        'prince': 'प्रिंस',
+    'prince': 'प्रिंस',
     'pirnce': 'प्रिंस',
     'princ': 'प्रिंस',
+    'rince': 'प्रिंस',
+    'rinc': 'प्रिंस',
     'abhay': 'अभय',
     'abay': 'अभय',
     'abhe': 'अभय',
@@ -521,6 +523,41 @@ function getVoterByWardAndSr(ward, srNo) {
     return VOTERS.find(v => v.ward === parseInt(ward) && v.sr_no === parseInt(srNo));
 }
 
+function formatShortSlipResponse(voter) {
+    const name = voter.name_hi || voter.name_raw || voter.n || 'मतदाता';
+    const relType = (voter.rel_type === 'H' || voter.rt === 'पति') ? 'पति' : 'पिता';
+    const relName = voter.rel_name_hi || voter.rn || '—';
+    const ward = voter.ward || voter.w || '—';
+    const srNo = voter.sr_no || voter.s || '—';
+    const epic = voter.epic || voter.e || '--';
+    const houseNo = voter.house_no || voter.h || '—';
+    const boothName = getBoothDetails(ward);
+
+    return (
+        `🗳️ *डिजिटल मतदाता पर्ची - सिहाली खुर्द* 🏛️\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 *नाम:* ${name}\n` +
+        `👨‍👦 *${relType}:* ${relName}\n` +
+        `📍 *वार्ड नं:* ${ward}  |  *क्रमांक (Sr No):* [ ${srNo} ]\n` +
+        `🆔 *पहचान पत्र (EPIC):* ${epic}\n` +
+        `🏠 *मकान नं:* ${houseNo}\n` +
+        `🏫 *मतदान केंद्र:* ${boothName}\n` +
+        `🗓️ *मतदान:* सोमवार, 16 नवम्बर 2026 (प्रातः 7:30 से सायं 5:30)\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `🚩 *बाबा अभय सिंह (मोटी आंगली वाले)* — क्रम सं. 1`
+    );
+}
+
+function formatDisambiguationPrompt(matches, queryName) {
+    let text = `भैया, वोटर लिस्ट में *'${queryName}'* नाम से ${matches.length} मतदाता मिले हैं:\n\n`;
+    matches.forEach((m, idx) => {
+        const relType = m.rel_type === 'H' ? 'पति' : 'पिता';
+        text += `${idx + 1}️⃣ *${m.name_hi}* (${relType}: ${m.rel_name_hi}) — *वार्ड ${m.ward}*, क्र. [ ${m.sr_no} ] (मकान नं. ${m.house_no})\n`;
+    });
+    text += `\nआपके पिताजी का नाम क्या है भैया? सही पर्ची के लिए *'1'*, *'2'* या अपने *पिता का नाम* लिखकर भेजें! 😊🚩`;
+    return text;
+}
+
 function formatSlipResponse(voter) {
     const family = getFamilyMembers(voter);
 
@@ -577,6 +614,8 @@ module.exports = {
     searchVoters,
     getFamilyMembers,
     formatSlipResponse,
+    formatShortSlipResponse,
+    formatDisambiguationPrompt,
     formatVoterSlip: formatSlipResponse,
     formatFallbackResponse,
     isLikelyNameOrVoterQuery,
