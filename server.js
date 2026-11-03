@@ -266,7 +266,7 @@ function extractMessageText(message) {
 // Persistent LID to Phone Number Mapping Store
 const LID_MAP_FILE = path.join(__dirname, 'lid_mappings.json');
 let LID_MAP = {
-    '90959605924011': '918764870431' // Pre-mapped from verified chat
+    '90959605924011': '916367810227' // Pre-mapped from verified chat
 };
 try {
     if (fs.existsSync(LID_MAP_FILE)) {
@@ -322,24 +322,26 @@ function healContactSession(sessionId, jid) {
 
 // Wrapper for sock.sendMessage that caches outgoing messages for WhatsApp retries
 // Multi-Number 3-in-1 Campaign Contact Card (Anti-Ban Protection)
-function getCampaignVCard() {
+function getCampaignVCard(senderPhone = null) {
+    const isAux = senderPhone && senderPhone.includes('9509352067');
+    const primaryWaid = isAux ? '919509352067' : '916367810227';
+    const primaryDisplay = isAux ? '+91 95093 52067' : '+91 63678 10227';
+
     return [
         'BEGIN:VCARD',
         'VERSION:3.0',
         'FN:बाबा अभय सिंह (मोटी आंगली वाले)',
-        'ORG:ग्राम पंचायत सिहाली खुर्द जनसेवा कार्यालय',
+        'ORG:ग्राम पंचायत सिहाली खुर्द',
         'TITLE:सरपंच पद प्रत्याशी 2026',
-        'TEL;type=Primary,pref;type=VOICE;waid=916367810227:+91 63678 10227',
-        'TEL;type=Abhay Singh (Secondary);type=VOICE;waid=919509352067:+91 95093 52067',
-        'TEL;type=Campaign Incharge (Prince);type=VOICE;waid=918764870431:+91 87648 70431',
-        'TEL;type=Helpline (Overseas);type=VOICE;waid=15878415712:+1 (587) 841-5712',
-        'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत 2026 सेवा केंद्र। 24/7 मतदाता पर्ची व जनसमस्या हेल्पलाइन।',
+        `TEL;type=Primary,pref;type=VOICE;waid=${primaryWaid}:${primaryDisplay}`,
+        'TEL;type=Helpline (Overseas);type=VOICE;waid=14502790497:+1 (450) 279-0497',
+        'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत 2026। 24/7 मतदाता पर्ची व जनसमस्या सहायता।',
         'END:VCARD'
     ].join('\n');
 }
 
-async function sendMultiContactCard(sock, jid) {
-    const vcard = getCampaignVCard();
+async function sendMultiContactCard(sock, jid, senderPhone = null) {
+    const vcard = getCampaignVCard(senderPhone);
     return await sock.sendMessage(jid, {
         contacts: {
             displayName: 'बाबा अभय सिंह (मोटी आंगली वाले)',
@@ -583,7 +585,7 @@ async function startSession(sessionObj) {
                             existingUser.lastHandshakeTime = Date.now();
                             userMemory.save();
                         }
-                        const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
+                        const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह जनसंपर्क (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
                         await sendSafeMessage(sock, replyJid, { text: handshakeText });
                         console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${replyJid}`);
                         userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
@@ -633,11 +635,51 @@ async function startSession(sessionObj) {
                     if (isConsentPromptActive && isConsentYes) {
                         user.consented = true;
                         user.consentStatus = 'ACCEPTED';
+                        user.conversationStage = 'ASKED_LANGUAGE';
                         userMemory.save();
-                        replyText = `राम राम ${user.name || 'भाई जी'}! 🙏\nबाबा अभय सिंह डिजिटल सेवा केंद्र में आपका स्वागत है।\nकृपया यह नंबर ज़रूर सेव कर लें ताकि मतदाता पर्ची आप तक आसानी से पहुँच सके! 📲\n\nअपनी या परिवार की अधिकृत डिजिटल वोटर पर्ची देखने के लिए अपना शुभ नाम लिखकर भेजें! 🚩`;
+                        replyText = `राम राम ${user.name || 'भाई जी'}! 🙏\nहम बाबा अभय सिंह (मोटी आंगली वाले) के साथ जुड़े हैं।\nकृपया यह नंबर 'बाबा अभय सिंह' नाम से ज़रूर सेव कर लें ताकि मतदाता पर्ची आप तक आसानी से पहुँच सके! 📲\n\nआप बातचीत हिंदी (देवनागरी) में पसंद करेंगे या Hinglish (English अक्षरों) में?\n1️⃣ Hinglish (ABC format)\n2️⃣ Hindi (देवनागरी)\n\n*(या सीधे अपनी वोटर पर्ची देखने के लिए अपना शुभ नाम लिखकर भेजें! 🚩)*`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         userMemory.recordMessage(senderPhone, 'bot', replyText, 'consent_ack', sessionObj.name);
                         logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: replyText, status: 'CONSENT_ACCEPTED' });
+                        continue;
+                    }
+
+                    // Dynamic Language Preference Choice
+                    if (user && user.conversationStage === 'ASKED_LANGUAGE') {
+                        if (lower === '1' || lower === '1.' || lower.includes('hinglish') || lower.includes('english')) {
+                            user.languagePreference = 'hinglish';
+                            user.conversationStage = 'ASKED_OCCUPATION';
+                            userMemory.save();
+                            replyText = `Bahut badhiya ${user.name || 'bhai ji'}! Ab se aapse Hinglish (ABC format) me hi baat hogi. 😊\nAap kya karte ho — student, kisan, army, police ya apna koi kaam? 🚩`;
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_choice', sessionObj.name);
+                            continue;
+                        } else if (lower === '2' || lower === '2.' || lower.includes('hindi') || lower.includes('हिंदी')) {
+                            user.languagePreference = 'hi';
+                            user.conversationStage = 'ASKED_OCCUPATION';
+                            userMemory.save();
+                            replyText = `बहुत बढ़िया ${user.name || 'भैया'}! अब से आपसे हिंदी (देवनागरी) में बातचीत होगी। 😊\nआप क्या करते हैं — पढ़ाई, किसानी, फौज, पुलिस या अपना कोई काम? 🚩`;
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_choice', sessionObj.name);
+                            continue;
+                        }
+                    }
+
+                    // On-the-fly Language Switch
+                    if (lower.includes('hinglish me') || lower.includes('english me')) {
+                        user.languagePreference = 'hinglish';
+                        userMemory.save();
+                        replyText = `Theek hai bhaiya! Ab se aapse Hinglish (ABC format) me hi baat karenge. 😊 Bataiye, aaj gaon me kya mahol hai? 🚩`;
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_switch', sessionObj.name);
+                        continue;
+                    }
+                    if (lower.includes('hindi me') || lower.includes('हिंदी में')) {
+                        user.languagePreference = 'hi';
+                        userMemory.save();
+                        replyText = `जी बिल्कुल भैया! अब से आपसे हिंदी (देवनागरी) में बातचीत होगी। 😊 बताइए, आज गाँव में क्या माहौल है? 🚩`;
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_switch', sessionObj.name);
                         continue;
                     }
 
@@ -725,7 +767,7 @@ async function startSession(sessionObj) {
                             aspect: '9:16'
                         });
 
-                        replyText = `राम राम ${voterName} जी! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर जरूर लगाएं! 🚩`;
+                        replyText = `राम राम ${voterName} जी! 🙏\nबाबा अभय सिंह टीम द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर जरूर लगाएं! 🚩`;
 
                         await sendSafeMessage(sock, replyJid, {
                             image: statusPosterBuffer,
@@ -1034,7 +1076,7 @@ async function startSession(sessionObj) {
 
                                 const isElder = (u.age && u.age >= 50) || body.toLowerCase().includes('bacha') || body.toLowerCase().includes('tau') || body.toLowerCase().includes('chacha');
                                 const honorific = u.gender === 'F' ? 'दीदी' : (isElder ? 'ताऊजी' : 'भैया');
-                                const savePrompt = `राम राम ${honorific}! 🙏 ये बाबा अभय सिंह सेवा केंद्र का अधिकृत संपर्क कार्ड है।\nऊपर **'Add to Contacts' / 'संपर्क में जोड़ें'** दबाकर सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची, विकास कार्य व जरूरी अपडेट आपको सीधे मिलते रहें और कोई सूचना छूटे ना। 🚩`;
+                                const savePrompt = `राम राम ${honorific}! 🙏 ये बाबा अभय सिंह जनसंपर्क का अधिकृत संपर्क कार्ड है।\nऊपर **'Add to Contacts' / 'संपर्क में जोड़ें'** दबाकर सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची, विकास कार्य व जरूरी अपडेट आपको सीधे मिलते रहें और कोई सूचना छूटे ना। 🚩`;
 
                                 await sendSafeMessage(sock, replyJid, { text: savePrompt });
                                 userMemory.recordMessage(senderPhone, 'bot', '📇 [Auto Anti-Ban Contact Card Sent]', null, sessionObj.name);
@@ -1106,17 +1148,17 @@ app.post('/api/send-message', async (req, res) => {
         const { mediaOption, voterId } = req.body;
 
         if (template === 'consent_check') {
-            messageText = `राम राम ${voterDisplayName}! 🙏\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र — सिहाली खुर्द।\n\nक्या आप सिहाली खुर्द चुनाव की ताज़ा जानकारी व अपनी डिजिटल मतदाता पर्ची WhatsApp पर पाना चाहते हैं?\n\n1️⃣ हाँ (Yes - मुझे जानकारी भेजें)\n2️⃣ नहीं (No - मुझे न भेजें)\n\n📲 (कृपया '1' लिखकर भेजें, और यह नंबर सेव कर लें ताकि मतदाता पर्ची आप तक सीधे पहुँच सके! 🚩)`;
+            messageText = `राम राम ${voterDisplayName}! 🙏\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) जनसंपर्क टीम — सिहाली खुर्द।\n\nक्या आप सिहाली खुर्द चुनाव की ताज़ा जानकारी व अपनी डिजिटल मतदाता पर्ची WhatsApp पर पाना चाहते हैं?\n\n1️⃣ हाँ (Yes - मुझे जानकारी भेजें)\n2️⃣ नहीं (No - मुझे न भेजें)\n\n📲 (कृपया '1' लिखकर भेजें, और यह नंबर सेव कर लें ताकि मतदाता पर्ची आप तक सीधे पहुँच सके! 🚩)`;
         } else if (template === 'permission_casual') {
-            messageText = `राम राम ${voterDisplayName}! 🙏 सब कुशल मंगल?\n\nमैं बाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) से हूँ।\nक्या हम आपको पंचायत आम चुनाव 2026 के जरूरी अपडेट, विकास कार्यों व जरूरी सूचनाओं की जानकारी WhatsApp पर भेज सकते हैं? 😊🚩`;
+            messageText = `राम राम ${voterDisplayName}! 🙏 सब कुशल मंगल?\n\nमैं बाबा अभय सिंह जनसंपर्क (ग्राम पंचायत सिहाली खुर्द) से हूँ।\nक्या हम आपको पंचायत आम चुनाव 2026 के जरूरी अपडेट, विकास कार्यों व जरूरी सूचनाओं की जानकारी WhatsApp पर भेज सकते हैं? 😊🚩`;
         } else if (template === 'offer_parchi') {
             messageText = `राम राम ${voterDisplayName}! 🚩\n\nग्राम पंचायत सिहाली खुर्द का चुनाव सोमवार, 16 नवम्बर 2026 को है।\nक्या मैं आपकी और आपके पूरे परिवार की अधिकृत डिजिटल वोटर पर्ची (मतदान केंद्र, कमरा नं, भाग संख्या) निकाल कर भेज दूँ भैया? बस हाँ लिख कर भेजें! 🗳️`;
         } else if (template === 'ground_feedback') {
-            messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
+            messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह जनसंपर्क में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
         } else if (template === 'direct_appeal') {
             messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को अभय सिंह (मोटी आंगली वाले) के पक्ष में स्वस्तिक (卐) पर मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nकाम बोला है, काम बोलेगा! ✨`;
         } else if (template === 'welcome') {
-            messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले) डिजिटल सेवा केंद्र में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
+            messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले) जनसंपर्क टीम में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
         } else if (template === 'slogan') {
             const slogan = userMemory.getNextSlogan(cleanedPhone);
             messageText = `राम राम भाई जी! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
@@ -1464,19 +1506,19 @@ app.post('/api/ai-draft', async (req, res) => {
         const voterName = (user && user.name) ? user.name : 'भैया';
         const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
 
-        const systemInstruction = `आप बाबा अभय सिंह सेवा केंद्र से उनकी डिजिटल सारथी व सेवा सहायिका हैं।
+        const systemInstruction = `आप बाबा अभय सिंह जनसंपर्क से उनकी डिजिटल सारथी व सेवा सहायिका हैं।
 प्रबंधक प्रिंस ने आपको मतदाता '${voterName}' के लिए यह संदेश तैयार करने को कहा है:
 "${instruction.trim()}"
 
 🎯 नियम:
-1. एडमिन के इस निर्देश को बाबा अभय सिंह सेवा केंद्र की मीठी, आत्मीय व विनम्र आवाज़ में 1 से 2 छोटी असरदार WhatsApp पंक्तियों में बदलो।
+1. एडमिन के इस निर्देश को बाबा अभय सिंह जनसंपर्क की मीठी, आत्मीय व विनम्र आवाज़ में 1 से 2 छोटी असरदार WhatsApp पंक्तियों में बदलो।
 2. कोई भारी-भरकम किताबी भाषण नहीं।
 3. सीधे वही संदेश आउटपुट करो जो WhatsApp पर भेजा जाना है (Zero Meta-talk, Zero Quotes).`;
 
         let draft = '';
         try {
             draft = await aiService.getAIResponse(instruction, NVIDIA_API_KEY, [{ role: 'system', content: systemInstruction }], phone);
-            if (!draft || draft.includes('डिजिटल सेवा केंद्र में आपका स्वागत')) {
+            if (!draft || draft.includes('जनसंपर्क टीम में आपका स्वागत')) {
                 draft = `राम राम ${voterName}! 🙏 ${instruction} 😊🚩`;
             }
         } catch (e) {
@@ -1552,7 +1594,7 @@ app.post('/api/quick-action', async (req, res) => {
 
         if (action === 'contact_card') {
             await sendMultiContactCard(sock, jid);
-            const cardMsg = 'राम राम जी! 🙏 ये बाबा अभय सिंह सेवा केंद्र का संपर्क कार्ड है। नीचे "Add to Contacts" (संपर्क में जोड़ें) पर क्लिक करके सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची और जरूरी अपडेट आपको सीधे मिलते रहें। 🚩';
+            const cardMsg = 'राम राम जी! 🙏 ये बाबा अभय सिंह जनसंपर्क का संपर्क कार्ड है। नीचे "Add to Contacts" (संपर्क में जोड़ें) पर क्लिक करके सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची और जरूरी अपडेट आपको सीधे मिलते रहें। 🚩';
             await sock.sendMessage(jid, { text: cardMsg });
 
             userMemory.recordMessage(cleanedPhone, 'bot', '📇 [Contact Card Sent]');
@@ -1585,7 +1627,7 @@ app.post('/api/quick-action', async (req, res) => {
             if (matches && matches.length > 0) {
                 replyText = voterEngine.formatSlipResponse(matches[0]);
             } else {
-                replyText = `राम राम जी! 🙏\nआपकी वोटर पर्ची निकालने के लिए कृपया अपना सही नाम या वोटर आईडी (EPIC) नंबर लिखकर भेजें।\nबाबा अभय सिंह डिजिटल सेवा केंद्र 🚩`;
+                replyText = `राम राम जी! 🙏\nआपकी वोटर पर्ची निकालने के लिए कृपया अपना सही नाम या वोटर आईडी (EPIC) नंबर लिखकर भेजें।\nबाबा अभय सिंह जनसंपर्क टीम 🚩`;
             }
             await sock.sendMessage(jid, { text: replyText });
             mediaType = 'voterSlip';
@@ -2294,7 +2336,7 @@ app.get('/', (req, res) => {
                                 <option value="canada">Canada Line</option>
                             </select>
                             <input type="tel" id="diag-phone" placeholder="Enter recipient mobile (e.g. 9876543210)" class="input-field" style="width: 240px; background: white; color: #0f172a; border: 1px solid #cbd5e1;">
-                            <input type="text" id="diag-msg" placeholder="Test message text..." class="input-field" style="flex: 1; min-width: 200px; background: white; color: #0f172a; border: 1px solid #cbd5e1;" value="राम राम भाई जी! यह बाबा अभय सिंह सेवा केंद्र का लाइव टेस्ट मैसेज है। 🚩">
+                            <input type="text" id="diag-msg" placeholder="Test message text..." class="input-field" style="flex: 1; min-width: 200px; background: white; color: #0f172a; border: 1px solid #cbd5e1;" value="राम राम भाई जी! यह बाबा अभय सिंह जनसंपर्क का लाइव टेस्ट मैसेज है। 🚩">
                             <button onclick="sendDiagnosticTest()" style="background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer;">
                                 🚀 Send Test
                             </button>
@@ -2405,7 +2447,7 @@ app.get('/', (req, res) => {
                             <div style="border: 1px solid #cbd5e1; border-radius: 12px; height: 380px; display: flex; flex-direction: column; background: #efeae2; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
                                 <div id="ai-chat-ui" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;">
                                     <div class="bubble bubble-bot">
-                                        राम राम विक्रम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। बताइए भैया, घर-परिवार में सब कुशल मंगल? आज अपने मोहल्ले में क्या चुनावी माहौल लग रहा है? 😊🚩
+                                        राम राम विक्रम भैया! 🙏 बाबा अभय सिंह जनसंपर्क में आपका स्वागत है। बताइए भैया, घर-परिवार में सब कुशल मंगल? आज अपने मोहल्ले में क्या चुनावी माहौल लग रहा है? 😊🚩
                                     </div>
                                 </div>
 
@@ -2897,7 +2939,7 @@ app.get('/', (req, res) => {
                                 phone: phone,
                                 name: name,
                                 mediaOption: 'custom_poster',
-                                customText: 'राम राम ' + (name ? name + ' जी' : 'भाई जी') + '! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर ज़रूर लगाएं! 🚩'
+                                customText: 'राम राम ' + (name ? name + ' जी' : 'भाई जी') + '! 🙏\nबाबा अभय सिंह टीम द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर ज़रूर लगाएं! 🚩'
                             })
                         });
                         const data = await res.json();
@@ -3493,7 +3535,7 @@ app.get('/', (req, res) => {
                                     senderLabel = '👨‍💻 एडमिन सीधा संदेश (' + h.session + ')';
                                 } else {
                                     bubbleClass = 'wa-bubble-bot';
-                                    senderLabel = '🚩 बाबा अभय सिंह सेवा केंद्र';
+                                    senderLabel = '🚩 बाबा अभय सिंह जनसंपर्क';
                                 }
                             }
 

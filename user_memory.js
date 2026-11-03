@@ -111,6 +111,7 @@ class UserMemory {
             if (this.users[phone].consented === undefined) this.users[phone].consented = null;
             if (this.users[phone].consentStatus === undefined) this.users[phone].consentStatus = 'PENDING';
             if (this.users[phone].lastUploadedPhotoPath === undefined) this.users[phone].lastUploadedPhotoPath = null;
+            if (!this.users[phone].languagePreference) this.users[phone].languagePreference = 'auto';
             if (this.users[phone].botPersonaGender === undefined) {
                 this.users[phone].botPersonaGender = (this.users[phone].gender === 'F' ? 'M' : 'F');
             }
@@ -515,7 +516,7 @@ class UserMemory {
         if (user.name && user.name.trim()) {
             const cleanName = user.name.trim();
             const greetingsWithName = [
-                `राम राम ${cleanName} भैया! 🙏🚩 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। बताइए परिवार में सब कुशल-मंगल?`,
+                `राम राम ${cleanName} भैया! 🙏🚩 बाबा अभय सिंह टीम में आपका स्वागत है। बताइए परिवार में सब कुशल-मंगल?`,
                 `प्रणाम ${cleanName} जी! 🙏 आशा है आप सकुशल हैं। बताइए आज बाबा के प्रचार या अपने मोहल्ले के विकास पर क्या विचार हैं?`,
                 `जय बाबा की ${cleanName} भैया! 🚩 सिहाली खुर्द के विकास में आपका स्नेह व आशीर्वाद सदा साथ रहता है। आज कैसे याद किया भैया? 😊`,
                 `राम राम भाई ${cleanName}! 🙏 घर-परिवार में सब ठीक-ठाक हैं न भैया? भाभी जी और बच्चे कैसे हैं? 😊`,
@@ -526,10 +527,10 @@ class UserMemory {
             return greetingsWithName[idx];
         } else {
             const greetingsWithoutName = [
-                "राम राम भाई जी! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। भैया, आपका शुभ नाम जान सकते हैं ताकि लिस्ट में आपकी वोटर पर्ची देख सकें? 😊",
-                "प्रणाम भाई जी! 🙏 बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र में आपका स्वागत है। भैया, आपका नाम क्या है? ताकि लिस्ट में आपकी वोटर पर्ची भी देख सकूँ!",
-                "राम राम भैया! 🚩 सिहाली खुर्द 2026 चुनाव सेवा केंद्र। भैया, अपना नाम या वार्ड नंबर बता दीजिए न, ताकि आपसे आत्मीयता से बात हो सके! 😊",
-                "प्रणाम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। भैया, आपका शुभ नाम बता दीजिए, ताकि आगे से आपको नाम से पुकार सकूँ! 🚩"
+                "राम राम भाई जी! 🙏 बाबा अभय सिंह टीम में आपका स्वागत है। भैया, आपका शुभ नाम जान सकते हैं ताकि लिस्ट में आपकी वोटर पर्ची देख सकें? 😊",
+                "प्रणाम भाई जी! 🙏 बाबा अभय सिंह (मोटी आंगली वाले बाबा) टीम में आपका स्वागत है। भैया, आपका नाम क्या है? ताकि लिस्ट में आपकी वोटर पर्ची भी देख सकूँ!",
+                "राम राम भैया! 🚩 सिहाली खुर्द 2026 चुनाव टीम। भैया, अपना नाम या वार्ड नंबर बता दीजिए न, ताकि आपसे आत्मीयता से बात हो सके! 😊",
+                "प्रणाम भैया! 🙏 बाबा अभय सिंह टीम में आपका स्वागत है। भैया, आपका शुभ नाम बता दीजिए, ताकि आगे से आपको नाम से पुकार सकूँ! 🚩"
             ];
             const idx = (user.interactionCount || 0) % greetingsWithoutName.length;
             return greetingsWithoutName[idx];
