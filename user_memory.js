@@ -72,6 +72,9 @@ class UserMemory {
                 occupation: '',
                 wantsVisit: null,
                 voteIntent: null, // 'yes' | 'no' | 'doubtful' | null
+                consented: null,
+                consentStatus: 'PENDING',
+                lastUploadedPhotoPath: null,
                 botPersonaGender: 'F', // Opposite of voter: Female persona for male voters, Male persona for female voters
                 sentQuestions: [],
                 sentTopics: [],
@@ -105,6 +108,9 @@ class UserMemory {
             if (this.users[phone].occupation === undefined) this.users[phone].occupation = '';
             if (this.users[phone].wantsVisit === undefined) this.users[phone].wantsVisit = null;
             if (this.users[phone].voteIntent === undefined) this.users[phone].voteIntent = null;
+            if (this.users[phone].consented === undefined) this.users[phone].consented = null;
+            if (this.users[phone].consentStatus === undefined) this.users[phone].consentStatus = 'PENDING';
+            if (this.users[phone].lastUploadedPhotoPath === undefined) this.users[phone].lastUploadedPhotoPath = null;
             if (this.users[phone].botPersonaGender === undefined) {
                 this.users[phone].botPersonaGender = (this.users[phone].gender === 'F' ? 'M' : 'F');
             }

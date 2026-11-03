@@ -234,7 +234,7 @@ app.use((req, res, next) => {
 // Configured WhatsApp Sessions
 const SESSIONS = [
     { id: 'sim_636', name: 'Primary Line (6367810227)', status: 'DISCONNECTED', qr: null, sock: null },
-    { id: 'baba_aux', name: 'Baba Aux Line (Secondary)', status: 'DISCONNECTED', qr: null, sock: null },
+    { id: 'baba_aux', name: 'Baba Aux Line (9509352067)', status: 'DISCONNECTED', qr: null, sock: null },
     { id: 'canada', name: 'Canada Line (+1 Rented)', status: 'DISCONNECTED', qr: null, sock: null }
 ];
 
@@ -321,6 +321,33 @@ function healContactSession(sessionId, jid) {
 }
 
 // Wrapper for sock.sendMessage that caches outgoing messages for WhatsApp retries
+// Multi-Number 3-in-1 Campaign Contact Card (Anti-Ban Protection)
+function getCampaignVCard() {
+    return [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        'FN:बाबा अभय सिंह (मोटी आंगली वाले)',
+        'ORG:ग्राम पंचायत सिहाली खुर्द जनसेवा कार्यालय',
+        'TITLE:सरपंच पद प्रत्याशी 2026',
+        'TEL;type=Primary,pref;type=VOICE;waid=916367810227:+91 63678 10227',
+        'TEL;type=Abhay Singh (Secondary);type=VOICE;waid=919509352067:+91 95093 52067',
+        'TEL;type=Campaign Incharge (Prince);type=VOICE;waid=918764870431:+91 87648 70431',
+        'TEL;type=Helpline (Overseas);type=VOICE;waid=15878415712:+1 (587) 841-5712',
+        'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत 2026 सेवा केंद्र। 24/7 मतदाता पर्ची व जनसमस्या हेल्पलाइन।',
+        'END:VCARD'
+    ].join('\n');
+}
+
+async function sendMultiContactCard(sock, jid) {
+    const vcard = getCampaignVCard();
+    return await sock.sendMessage(jid, {
+        contacts: {
+            displayName: 'बाबा अभय सिंह (मोटी आंगली वाले)',
+            contacts: [{ vcard }]
+        }
+    });
+}
+
 async function sendSafeMessage(sock, jid, content, options = {}) {
     try {
         const sent = await sock.sendMessage(jid, content, options);
@@ -512,6 +539,13 @@ async function startSession(sessionObj) {
                             try { fs.writeFileSync(uploadPath, imgBuffer); } catch(e) {}
                             imageAnalysis = await visionService.analyzeImage(imgBuffer);
                             if (imageAnalysis) imageAnalysis.localUrl = `/media/uploads/${uploadFilename}`;
+                            try {
+                                const uObj = userMemory.getUser(senderPhone);
+                                if (uObj) {
+                                    uObj.lastUploadedPhotoPath = uploadPath;
+                                    userMemory.save();
+                                }
+                            } catch (e) {}
                             console.log(`[${sessionObj.id}] 📷 Vision Analysis for ${senderPhone}:`, imageAnalysis);
                         }
                     } catch (imgErr) {
@@ -590,6 +624,34 @@ async function startSession(sessionObj) {
 
                 try {
                     const lower = body.toLowerCase().trim();
+
+                    // Anti-Spam Consent Gate (Option 1: Haan / Option 2: Nahi)
+                    const isConsentPromptActive = (user && user.consentStatus === 'PROMPTED');
+                    const isConsentYes = lower === '1' || lower === '1.' || lower === 'haan' || lower === 'ha' || lower === 'हाँ' || lower === 'yes';
+                    const isConsentNo = lower === '2' || lower === '2.' || lower === 'nahi' || lower === 'nhi' || lower === 'नहीं' || lower === 'no';
+
+                    if (isConsentPromptActive && isConsentYes) {
+                        user.consented = true;
+                        user.consentStatus = 'ACCEPTED';
+                        userMemory.save();
+                        replyText = `राम राम ${user.name || 'भाई जी'}! 🙏\nबाबा अभय सिंह डिजिटल सेवा केंद्र में आपका स्वागत है।\nकृपया यह नंबर ज़रूर सेव कर लें ताकि मतदाता पर्ची आप तक आसानी से पहुँच सके! 📲\n\nअपनी या परिवार की अधिकृत डिजिटल वोटर पर्ची देखने के लिए अपना शुभ नाम लिखकर भेजें! 🚩`;
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        userMemory.recordMessage(senderPhone, 'bot', replyText, 'consent_ack', sessionObj.name);
+                        logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: replyText, status: 'CONSENT_ACCEPTED' });
+                        continue;
+                    }
+
+                    if (isConsentPromptActive && isConsentNo) {
+                        user.consented = false;
+                        user.consentStatus = 'REJECTED';
+                        user.autoPilot = false; // Stop automated outreach permanently
+                        userMemory.save();
+                        replyText = `जी भाई जी, आपके निर्णय का पूरा सम्मान है। आपको आगे कोई चुनावी संदेश नहीं भेजा जाएगा। बहुत-बहुत धन्यवाद! 🙏`;
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        userMemory.recordMessage(senderPhone, 'bot', replyText, 'consent_rejected', sessionObj.name);
+                        logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: replyText, status: 'CONSENT_REJECTED' });
+                        continue;
+                    }
 
                     // Extract Ward if mentioned
                     const user = userMemory.getUser(senderPhone);
@@ -939,6 +1001,37 @@ async function startSession(sessionObj) {
                 // Record bot reply in memory
                 userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
 
+                // Anti-Ban Shield: Auto-send 3-in-1 Campaign Contact Card during early interactions (turns 1 to 3)
+                try {
+                    const u = userMemory.getUser(senderPhone);
+                    const userMsgCount = (u.history || []).filter(h => h.role === 'user').length;
+
+                    // Send on interaction 1, 2, or 3 if not already sent
+                    if (!u.contactCardSent && userMsgCount >= 1 && userMsgCount <= 3) {
+                        u.contactCardSent = true;
+                        u.contactCardSentAt = new Date().toISOString();
+                        userMemory.save();
+
+                        setTimeout(async () => {
+                            try {
+                                console.log(`[AntiBan] Auto-sending 3-in-1 Contact Card to ${senderPhone} (turn ${userMsgCount})...`);
+                                await sendMultiContactCard(sock, replyJid);
+
+                                const isElder = (u.age && u.age >= 50) || body.toLowerCase().includes('bacha') || body.toLowerCase().includes('tau') || body.toLowerCase().includes('chacha');
+                                const honorific = u.gender === 'F' ? 'दीदी' : (isElder ? 'ताऊजी' : 'भैया');
+                                const savePrompt = `राम राम ${honorific}! 🙏 ये बाबा अभय सिंह सेवा केंद्र का अधिकृत संपर्क कार्ड है।\nऊपर **'Add to Contacts' / 'संपर्क में जोड़ें'** दबाकर सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची, विकास कार्य व जरूरी अपडेट आपको सीधे मिलते रहें और कोई सूचना छूटे ना। 🚩`;
+
+                                await sendSafeMessage(sock, replyJid, { text: savePrompt });
+                                userMemory.recordMessage(senderPhone, 'bot', '📇 [Auto Anti-Ban Contact Card Sent]', null, sessionObj.name);
+                            } catch (cardErr) {
+                                console.warn(`[AntiBan] Error auto-sending contact card to ${replyJid}:`, cardErr?.message);
+                            }
+                        }, 1500);
+                    }
+                } catch (cardHookErr) {
+                    console.warn('[AntiBan Hook Error]:', cardHookErr?.message);
+                }
+
                 // Log to live dashboard feed
                 logMessage({
                     session: sessionObj.name,
@@ -997,7 +1090,9 @@ app.post('/api/send-message', async (req, res) => {
         const voterDisplayName = name ? `${name} जी` : 'भाई जी';
         const { mediaOption, voterId } = req.body;
 
-        if (template === 'permission_casual') {
+        if (template === 'consent_check') {
+            messageText = `राम राम ${voterDisplayName}! 🙏\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र — सिहाली खुर्द।\n\nक्या आप सिहाली खुर्द चुनाव की ताज़ा जानकारी व अपनी डिजिटल मतदाता पर्ची WhatsApp पर पाना चाहते हैं?\n\n1️⃣ हाँ (Yes - मुझे जानकारी भेजें)\n2️⃣ नहीं (No - मुझे न भेजें)\n\n📲 (कृपया '1' लिखकर भेजें, और यह नंबर सेव कर लें ताकि मतदाता पर्ची आप तक सीधे पहुँच सके! 🚩)`;
+        } else if (template === 'permission_casual') {
             messageText = `राम राम ${voterDisplayName}! 🙏 सब कुशल मंगल?\n\nमैं बाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) से हूँ।\nक्या हम आपको पंचायत आम चुनाव 2026 के जरूरी अपडेट, विकास कार्यों व जरूरी सूचनाओं की जानकारी WhatsApp पर भेज सकते हैं? 😊🚩`;
         } else if (template === 'offer_parchi') {
             messageText = `राम राम ${voterDisplayName}! 🚩\n\nग्राम पंचायत सिहाली खुर्द का चुनाव सोमवार, 16 नवम्बर 2026 को है।\nक्या मैं आपकी और आपके पूरे परिवार की अधिकृत डिजिटल वोटर पर्ची (मतदान केंद्र, कमरा नं, भाग संख्या) निकाल कर भेज दूँ भैया? बस हाँ लिख कर भेजें! 🗳️`;
@@ -1441,26 +1536,7 @@ app.post('/api/quick-action', async (req, res) => {
         let mediaType = null;
 
         if (action === 'contact_card') {
-            const vcard = [
-                'BEGIN:VCARD',
-                'VERSION:3.0',
-                'FN:बाबा अभय सिंह (मोटी आंगली वाले)',
-                'ORG:ग्राम पंचायत सिहाली खुर्द जनसेवा कार्यालय',
-                'TITLE:सरपंच पद प्रत्याशी 2026',
-                'TEL;type=Primary,pref;type=VOICE;waid=916367810227:+91 63678 10227',
-                'TEL;type=Campaign Office;type=VOICE;waid=918764870431:+91 87648 70431',
-                'TEL;type=Helpline;type=VOICE;waid=15878415712:+1 (587) 841-5712',
-                'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत सेवा केंद्र। 24/7 हेल्पलाइन व मतदाता पर्ची।',
-                'END:VCARD'
-            ].join('\n');
-
-            await sock.sendMessage(jid, {
-                contacts: {
-                    displayName: 'बाबा अभय सिंह (मोटी आंगली वाले)',
-                    contacts: [{ vcard }]
-                }
-            });
-
+            await sendMultiContactCard(sock, jid);
             const cardMsg = 'राम राम जी! 🙏 ये बाबा अभय सिंह सेवा केंद्र का संपर्क कार्ड है। नीचे "Add to Contacts" (संपर्क में जोड़ें) पर क्लिक करके सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची और जरूरी अपडेट आपको सीधे मिलते रहें। 🚩';
             await sock.sendMessage(jid, { text: cardMsg });
 
@@ -2043,6 +2119,7 @@ app.get('/', (req, res) => {
                             <div class="form-group">
                                 <label>💬 Action Template (Soft & Casual)</label>
                                 <select id="v-template" class="input-field" onchange="onTemplateChange(this.value)">
+                                    <option value="consent_check">🛡️ 0. एंटी-स्पैम सहमति (1. हाँ / 2. नहीं Consent Check)</option>
                                     <option value="permission_casual">🤝 1. सहमति व हाल-चाल (Soft Permission - Non-spam)</option>
                                     <option value="offer_parchi">🎫 2. वोटर पर्ची की पेशकश (Voter Slip Offer)</option>
                                     <option value="ground_feedback">📢 3. वार्ड समस्या व चर्चा (Ward Feedback)</option>
@@ -2712,6 +2789,32 @@ app.get('/', (req, res) => {
                 <!-- TAB 5: Media Bank & Direct Uploader -->
                 <div id="tab-media" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
+                    <!-- Daily Media Drip Schedule (4 Active Slots) -->
+                    <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: #0f172a;">⏰ दैनिक 4-स्लॉट ऑटोमैटिक शेड्यूल (Daily Drip Slots)</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+                            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                                <div style="font-weight: 700; color: #ea580c; font-size: 13px;">🌅 सुबह का स्लॉट</div>
+                                <div style="font-size: 11px; color: #64748b;">08:30 AM - 10:30 AM</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">डेली एजेंडा पोस्टर + माहौल हुक</div>
+                            </div>
+                            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                                <div style="font-weight: 700; color: #0284c7; font-size: 13px;">☀️ दोपहर का स्लॉट</div>
+                                <div style="font-size: 11px; color: #64748b;">01:30 PM - 03:30 PM</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">विकास कार्य फैक्ट रिपोर्ट कार्ड</div>
+                            </div>
+                            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                                <div style="font-weight: 700; color: #16a34a; font-size: 13px;">🌇 शाम का स्लॉट</div>
+                                <div style="font-size: 11px; color: #64748b;">05:30 PM - 07:30 PM</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">संकल्प व स्टेटस पोस्टर</div>
+                            </div>
+                            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                                <div style="font-weight: 700; color: #7c3aed; font-size: 13px;">🌙 रात का स्लॉट</div>
+                                <div style="font-size: 11px; color: #64748b;">08:00 PM - 09:30 PM</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">3D विकास संकल्प वीडियो रील</div>
+                            </div>
+                        </div>
+                    </div>
                     <p style="color: #64748b; font-size: 14px;">Upload new campaign photos or videos directly from your mobile gallery or PC. Updates the bot instantly!</p>
                     
                     <!-- Direct Uploader Box -->
@@ -2755,6 +2858,46 @@ app.get('/', (req, res) => {
                 let selectedVoterPhone = null;
                 let currentPosterBlob = null;
                 let aiHistory = [];
+
+                async function sendCustomPosterDirect() {
+                    const phone = document.getElementById('p-voter-phone').value.trim();
+                    const name = document.getElementById('p-name').value.trim();
+                    const aspect = document.getElementById('p-aspect').value || '9:16';
+                    const slogan = document.getElementById('p-slogan').value.trim();
+                    const statusEl = document.getElementById('p-send-status');
+
+                    if (!phone || phone.length < 10) {
+                        alert('कृपया मतदाता का सही 10 अंकों का मोबाइल नंबर दर्ज करें!');
+                        return;
+                    }
+
+                    statusEl.style.color = '#2563eb';
+                    statusEl.textContent = '⏳ नाम सहित कस्टम पोस्टर जनरेट करके WhatsApp पर भेजा जा रहा है...';
+
+                    try {
+                        const res = await fetch('/api/send-message', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                phone: phone,
+                                name: name,
+                                mediaOption: 'custom_poster',
+                                customText: 'राम राम ' + (name ? name + ' जी' : 'भाई जी') + '! 🙏\nबाबा अभय सिंह सेवा केंद्र द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर ज़रूर लगाएं! 🚩'
+                            })
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            statusEl.style.color = '#16a34a';
+                            statusEl.textContent = '✅ पोस्टर सफलता पूर्वक ' + phone + ' को भेज दिया गया है!';
+                        } else {
+                            statusEl.style.color = '#dc2626';
+                            statusEl.textContent = '❌ त्रुटि: ' + (data.error || 'भेजने में विफल');
+                        }
+                    } catch (err) {
+                        statusEl.style.color = '#dc2626';
+                        statusEl.textContent = '❌ नेटवर्क त्रुटि: ' + err.message;
+                    }
+                }
 
                 function switchTab(tabId, btn) {
                     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -3907,14 +4050,39 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Background Auto-Sync Watchdog (checks GitHub every 60s for new commits)
-setInterval(() => {
-    exec('git fetch origin main > /dev/null 2>&1 && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] && git pull origin main && pm2 restart whatsapp-bot', (err, stdout, stderr) => {
-        if (!err && stdout && stdout.trim()) {
-            console.log('[AutoSync] Pulled updates from GitHub & reloaded bot:', stdout.trim());
-        }
-    });
-}, 60000);
+// Background Auto-Sync Watchdog (Checks GitHub every 35s, resets cleanly, installs fonts, reloads PM2)
+if (process.platform === 'linux') {
+    console.log('[AutoSync] 🛡️ Continuous GitHub Auto-Update Watchdog Active (every 35s)');
+    setInterval(() => {
+        exec('git fetch origin main > /dev/null 2>&1', (err) => {
+            if (err) return;
+            exec('git rev-parse HEAD && git rev-parse origin/main', (err2, stdout2) => {
+                if (err2 || !stdout2) return;
+                const hashes = stdout2.trim().split(/\s+/);
+                if (hashes.length >= 2 && hashes[0] !== hashes[1]) {
+                    console.log(`[AutoSync] 🚀 New GitHub commit detected (${hashes[0].slice(0,7)} -> ${hashes[1].slice(0,7)})! Auto-updating...`);
+                    const updateCmd = [
+                        'git reset --hard origin/main',
+                        'mkdir -p ~/.fonts ~/.local/share/fonts',
+                        'cp media/*.ttf ~/.fonts/ 2>/dev/null || true',
+                        'cp media/*.ttf ~/.local/share/fonts/ 2>/dev/null || true',
+                        'fc-cache -f ~/.fonts 2>/dev/null || true',
+                        'rm -rf parchi_cache/*',
+                        'pm2 restart all'
+                    ].join(' && ');
+
+                    exec(updateCmd, (updateErr, updateOut) => {
+                        if (updateErr) {
+                            console.error('[AutoSync] Error during auto-deploy:', updateErr.message);
+                        } else {
+                            console.log('[AutoSync] ✅ Auto-update and PM2 restart completed successfully!');
+                        }
+                    });
+                }
+            });
+        });
+    }, 35000);
+}
 
 
     // Start Proactive Daytime Nudge Interval (Every 15 mins)
