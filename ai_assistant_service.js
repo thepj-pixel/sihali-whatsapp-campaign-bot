@@ -101,9 +101,22 @@ ${JSON.stringify(KB, null, 2)}
 // Fast Local Village Answer Engine (<0.001s, 100% Reliable Offline Fallback)
 function getFastLocalAnswer(query, phone = null) {
     const q = (query || '').toLowerCase().trim();
+    const user = phone ? userMemory.getUser(phone) : null;
+    const isFemale = user?.gender === 'F';
+    const honorific = isFemale ? 'दीदी' : 'भैया';
+    const botVerb = isFemale ? 'करता हूँ' : 'करती हूँ';
 
-    // Prince Recognition
-    if (q.includes('prince')) {
+    // 0. Oppositional Slurs & Abuses Guardrail (Zero Debate, Pure Dignity)
+    if (
+        q.includes('mc') || q.includes('bc') || q.includes('bhadwe') || q.includes('kutte') ||
+        q.includes('pagal') || q.includes('chor') || q.includes('bhosad') || q.includes('bakwas') ||
+        q.includes('farji') || q.includes('dhongi') || q.includes('harayenge')
+    ) {
+        return `आपके विचारों का पूरा सम्मान है ${honorific}, पर हम किसी अपशब्द या बहस में नहीं पड़ना चाहते। हम तो केवल गाँव की सेवा और बाबा के विकास कार्यों की जानकारी के लिए हैं। आपके व आपके परिवार के लिए हमारी तरफ से बहुत-बहुत शुभकामनाएँ! 🙏`;
+    }
+
+    // 1. Prince Campaign Lead Recognition
+    if (q.includes('prince') || q.includes('admin')) {
         return (
             "राम राम प्रिंस भाई जी! 🙏\n" +
             "आप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\n" +
@@ -112,134 +125,182 @@ function getFastLocalAnswer(query, phone = null) {
         );
     }
 
-    // Health / Wellbeing / How are you
-    if (q.includes('haal') || q.includes('hal') || q.includes('kaise ho') || q.includes('kasa') || q.includes('kaisa') || q.includes('kese ho')) {
-        return "राम राम भैया! 🙏 बाबा अभय सिंह के आशीर्वाद और आप सभी के प्यार-स्नेह से सब बढ़िया है। आप बताओ भैया, घर-परिवार में सब कुशल मंगल? भाभी जी और बच्चे कैसे हैं? आपकी शादी हो गई या तैयारी चल रही है? 😊🚩";
+    // 2. Direct Vote Commitment Answers (YES / NO / DOUBTFUL)
+    const isDirectReject = q.includes('nahi denge') || q.includes('nhi denge') || q.includes('kisi aur ko') || q.includes('rajesh ko') || q.includes('vote nahi') || q.includes('vote nhi');
+    const isVoteQuery = isDirectReject || q.includes('vote') || q.includes('वोट') || q.includes('समर्थन') || q.includes('support') || user?.conversationStage === 'ASKED_VOTE_INTENT';
+
+    if (isDirectReject || (isVoteQuery && (q.includes('nahi') || q.includes('nhi') || q.includes('no') || q.includes('kisi aur') || q.includes('rajesh') || q.includes('mat do')))) {
+        if (user) {
+            user.voteIntent = 'no';
+            user.conversationStage = 'VOTE_DOUBTFUL';
+            userMemory.save();
+        }
+        return `अरे कोई बात नहीं ${honorific}... हम आपकी बात का पूरा सम्मान करते हैं। क्या हमारे काम में कोई कमी लगी, या कोई पारिवारिक दबाव है ${honorific}? हम आपके और गाँव के लिए क्या सुधार कर सकते हैं, ज़रूर बताइएगा! 🙏`;
     }
 
-    // Bot status / Working check
-    if (q.includes('working') || q.includes('chal raha') || q.includes('online')) {
-        return "राम राम भैया! 🙏 हाँ जी, बाबा अभय सिंह डिजिटल सेवा केंद्र 24 घंटे बिल्कुल लाइव व एक्टिव है! अपनी या परिवार की वोटर पर्ची देखने के लिए नाम लिखकर भेजें। 🚩";
+    if (isVoteQuery && (q.includes('haan') || q.includes('ha') || q.includes('हाँ') || q.includes('yes') || q.includes('baba ko') || q.includes('denge') || q.includes('pakka') || q.includes('full') || q.includes('saath h'))) {
+        if (user) {
+            user.voteIntent = 'yes';
+            user.conversationStage = 'VOTE_COMMITTED';
+            userMemory.save();
+        }
+        return `अरे दिल जीत लिया आपने! ❤️🙏🚩 आपका यही विश्वास और आशीर्वाद बाबा अभय सिंह जी की असली ताकत है। इस बार सिहाली खुर्द के विकास की जीत पक्की है! अपने परिवार और दोस्तों को भी साथ जोड़िएगा ${honorific}! 😊`;
     }
 
-    // Help / Seva
-    if (q.includes('help') || q.includes('madad') || q.includes('मदद') || q.includes('सेवा')) {
+    // 3. Occupation Hook Answers ("kya karte ho tum?")
+    const occKeywords = ['student', 'padhai', 'study', 'college', 'school', 'tayari', 'kisan', 'kheti', 'army', 'fauj', 'fauji', 'police', 'teacher', 'master', 'lawyer', 'vakil', 'vakeel', 'driver', 'dukan', 'shop', 'business', 'job', 'company'];
+    const matchedOcc = occKeywords.some(k => q.includes(k));
+    if (matchedOcc || user?.conversationStage === 'ASKED_OCCUPATION') {
+        if (user) {
+            user.conversationStage = 'OFFERED_VISIT';
+            userMemory.save();
+        }
+        return `अरे वाह! एक नंबर! 👏 बहुत सम्मान है आपकी इस मेहनत का ${honorific}! गर्व है हमें आप पर। अच्छा एक बात बताइए, क्या आप चाहते हैं कि बाबा अभय सिंह जी आपके घर आएं आपसे मिलने? बाबा जी के दरवाज़े तो पूरे गाँव के लिए 24 घंटे खुले हैं! 😊🚩`;
+    }
+
+    // 4. Home Visit Invitation Responses ("ghar aao", "milna", "meeting")
+    if (q.includes('ghar aao') || q.includes('milna') || q.includes('baba se mil') || q.includes('aayein') || q.includes('zaroor aao') || user?.conversationStage === 'OFFERED_VISIT') {
+        if (user) {
+            user.conversationStage = 'ASKED_PROBLEM';
+            user.wantsVisit = true;
+            userMemory.save();
+        }
+        return `जी बिल्कुल ${honorific}! आपकी बात मैंने बाबा जी की डायरी में नोट कर ली है, जल्द ही आपके यहाँ चाय पीने ज़रूर पहुँचेंगे! ☕🚩 अच्छा, गाँव में या आपके जीवन में कोई खास समस्या जिसका ध्यान रखना चाहिए ${honorific}?`;
+    }
+
+    // 5. Problems & Grievances Hook -> Leaning to Vote Commitment (No false promises, grounded assurance)
+    if (q.includes('samasya') || q.includes('samashya') || q.includes('shikayat') || q.includes('problem') || q.includes('gaddha') || q.includes('kichad') || q.includes('keechad') || user?.conversationStage === 'ASKED_PROBLEM') {
+        if (user) {
+            user.conversationStage = 'ASKED_VOTE_INTENT';
+            userMemory.save();
+        }
+        return `भैया, आपकी यह बात मैंने सीधे बाबा अभय सिंह जी के ध्यान में डाल दी है। कोई झूठा या हवाई वादा तो नहीं करेंगे, पर जो भी संभव होगा वो बाबा जी पूरी निष्ठा से करवा देंगे! 📝🚩 वैसे सच बताना ${honorific}... क्या आपका मन है इस बार बाबा जी को वोट देने का? 🚩`;
+    }
+
+    // 6. Future Works / Sankalp Sheet (15 Certified Resolutions)
+    if (q.includes('sankalp') || q.includes('संकल्प') || q.includes('vada') || q.includes('vaada') || q.includes('वादा') || q.includes('aage kya') || q.includes('manifesto') || q.includes('ghoshna')) {
         return (
-            "राम राम भैया! 🙏 बाबा अभय सिंह सेवा केंद्र आपकी पूरी सेवा में हाजिर है:\n" +
-            "• वोटर पर्ची देखने के लिए अपना नाम भेजें\n" +
-            "• विकास कार्यों की जानकारी के लिए 'काम' लिखें\n" +
-            "• अपने नाम का स्टेटस पोस्टर बनाने के लिए 'पोस्टर बनाओ' लिखें! 🚩"
+            `राम राम ${honorific}! 📜\n` +
+            `बाबा अभय सिंह के आगामी 5 वर्षों के 15 प्रमुख संकल्प:\n` +
+            `• खेल मैदानों में ओपन जिम, रनिंग ट्रैक व मिनी स्टेडियम का निर्माण 🏃\n` +
+            `• मुख्य रास्तों व चौराहों पर सुरक्षा हेतु नाइट-विजन CCTV कैमरे 📹\n` +
+            `• अस्पताल में नियमित एमबीबीएस डॉक्टर व 24 घंटे आपातकालीन एम्बुलेंस 🏥\n` +
+            `• ग्राम पंचायत में ही पटवार घर व सस्ती जेनेरिक दवाओं का जन औषधि केंद्र 💊\n\n` +
+            `साफ़ नीयत, सच्चा इरादा — ना कोई गाँव छूटा, ना कोई वादा झूठा! 🚩`
         );
     }
 
-    // Identity / Who are you queries
-    if (q.includes('kon ho') || q.includes('kaun ho') || q.includes('कौन हो') || q.includes('kiska bot') || q.includes('kiske admi') || q.includes('who are you')) {
-        return (
-            "राम राम भैया! 🙏\n" +
-            "मैं बाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र से आपकी सहायता में उपस्थित हूँ।\n" +
-            "बाबा अभय सिंह के विकास कार्यों की जानकारी, समस्याओं और आपकी वोटर पर्ची देखने के लिए यहाँ उपलब्ध हूँ। बताइए, क्या सेवा करूँ? 😊🚩"
-        );
-    }
-
-    // Hospital / Health / Doctor queries
+    // 7. Category-Wise Quick Facts in Seconds
+    // A. Health / Hospital
     if (q.includes('hospital') || q.includes('aspatal') || q.includes('doctor') || q.includes('chikitsa') || q.includes('अस्पताल') || q.includes('डॉक्टर') || q.includes('दवा') || q.includes('इलाज') || q.includes('दवाई') || q.includes('एम्बुलेंस') || q.includes('ambulance')) {
         return (
-            "राम राम जी! 🙏\n" +
-            "चिकित्सा एवं स्वास्थ्य के क्षेत्र में बाबा अभय सिंह का योगदान ऐतिहासिक है:\n" +
-            "• बाबा अभय सिंह जी ने स्वयं अपनी निजी 4 बीघा बेशकीमती जमीन दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र भवन बनवाया है!\n" +
-            "• साथ ही सिहाली कलां में सुरजन परिवार से भूमिदान करवाकर राजकीय पशु चिकित्सालय भवन का निर्माण करवाया।\n" +
-            "• आगामी 5 वर्षों के संकल्प में अस्पताल में नियमित एमबीबीएस डॉक्टर की पदस्थापना, हाड़ाहेड़ी में नया उपस्वास्थ्य केंद्र, और 24 घंटे आपातकालीन एम्बुलेंस सुविधा उपलब्ध कराना सर्वोच्च प्राथमिकता है! 🏥🚩"
+            `राम राम ${honorific}! 🏥\n` +
+            `चिकित्सा क्षेत्र में बाबा अभय सिंह का योगदान ऐतिहासिक है:\n` +
+            `• स्वयं अपनी निजी भूमि दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र भवन बनवाया!\n` +
+            `• सिहाली कलां में सुरजन परिवार से भूमिदान करवाकर राजकीय पशु चिकित्सालय भवन बनवाया।\n` +
+            `• आगे का संकल्प: नियमित डॉक्टर की तैनाती व 24 घंटे एम्बुलेंस सेवा! 🚩`
         );
     }
 
-    // Sports Ground / Open Gym / Youth Running Track queries
+    // B. Sports & Gym
     if (q.includes('khel') || q.includes('ground') || q.includes('gym') || q.includes('running') || q.includes('track') || q.includes('मैदान') || q.includes('खेल') || q.includes('ओपन जिम') || q.includes('स्टेडियम') || q.includes('युवा')) {
         return (
-            "राम राम भाई जी! 🚩\n" +
-            "गाँव के युवाओं व खिलाड़ियों के लिए बाबा अभय सिंह ने ऐतिहासिक कार्य किया है:\n" +
-            "• सिहाली खुर्द खेल मैदान में 75% पक्की चारदीवारी, समर्पित रनिंग ट्रैक, बास्केटबॉल व खेल कोर्ट का समतलीकरण और आधुनिक ओपन जिम (Open Gym) का निर्माण करवाया।\n" +
-            "• आगामी 5 वर्षों में हाड़ाहेड़ी व सिहाली कलां में भी नए खेल मैदान, ओपन जिम व रनिंग ट्रैक का पूर्ण विस्तार करने का संकल्प है! खेलो और आगे बढ़ो भाई! 🏃‍♂️🏆"
+            `राम राम ${honorific}! 🏃‍♂️\n` +
+            `युवाओं व खिलाड़ियों के लिए बाबा अभय सिंह ने ऐतिहासिक कार्य किया है:\n` +
+            `• सिहाली खुर्द खेल मैदान में 75% पक्की चारदीवारी, रनिंग ट्रैक, बास्केटबॉल कोर्ट और आधुनिक ओपन जिम (Open Gym) का निर्माण!\n` +
+            `• आगे का संकल्प: हाड़ाहेड़ी व सिहाली कलां में भी नए खेल मैदान व रनिंग ट्रैक का पूर्ण विस्तार! 🏆🚩`
         );
     }
 
-    // Library / Modern Modular Library queries
-    if (q.includes('library') || q.includes('लाइब्रेरी') || q.includes('किताब') || q.includes('reading room') || q.includes('study')) {
+    // C. Education & Modular Library
+    if (q.includes('library') || q.includes('लाइब्रेरी') || q.includes('किताब') || q.includes('school') || q.includes('topper') || q.includes('padhai') || q.includes('shiksha') || q.includes('टॉपर') || q.includes('स्कूल')) {
         return (
-            "राम राम भाई जी! 📚\n" +
-            "प्रतियोगी परीक्षाओं की तैयारी कर रहे छात्र-छात्राओं के लिए सिहाली खुर्द में अत्याधुनिक मॉड्यूलर / डिजिटल लाइब्रेरी का निर्माण करवाया गया है।\n" +
-            "आने वाले कार्यकाल में सिहाली खुर्द की तर्ज पर हाड़ाहेड़ी व सिहाली कलां में भी युवाओं के अध्ययन हेतु आधुनिक मॉड्यूलर लाइब्रेरी खोली जाएगी! 🎓🚩"
+            `राम राम ${honorific}! 📚\n` +
+            `शिक्षा व छात्र-छात्राओं के लिए बाबा अभय सिंह के मुख्य कार्य:\n` +
+            `• सिहाली खुर्द में छात्र-छात्राओं हेतु आधुनिक मॉड्यूलर / डिजिटल लाइब्रेरी का निर्माण!\n` +
+            `• पिछले 15 वर्षों से 10वीं-12वीं बोर्ड टॉपर्स को नकद पुरस्कार, मोमेंटो व सम्मान पत्र देकर प्रोत्साहन!\n` +
+            `• आगे हाड़ाहेड़ी व सिहाली कलां में भी आधुनिक लाइब्रेरी का विस्तार होगा। 🎓🚩`
         );
     }
 
-    // Drinking Water / JJM / Borewell queries
+    // D. Drinking Water / JJM
     if (q.includes('pani') || q.includes('paani') || q.includes('nal') || q.includes('borewell') || q.includes('jjm') || q.includes('पानी') || q.includes('नल') || q.includes('बोरवेल') || q.includes('जल') || q.includes('टंकी')) {
         return (
-            "राम राम जी! 💧\n" +
-            "पेयजल आपूर्ति के लिए जल जीवन मिशन (JJM) के तहत गाँव में नई पानी की टंकियाँ, घर-घर नल कनेक्शन और सिहाली से हाड़ाहेड़ी के सीम संधे पर नए गहरे बोरवेल लगवाए गए हैं।\n" +
-            "हमारा पक्का संकल्प है कि शेष बची सभी ढाणियों और घरों तक भी मीठे पानी की स्थायी लाइन जल्द से जल्द पहुँचाई जाएगी! 🚩"
+            `राम राम ${honorific}! 💧\n` +
+            `पेयजल व्यवस्था (JJM) के तहत बाबा अभय सिंह द्वारा करवाए गए कार्य:\n` +
+            `• उच्च व निम्न पानी की टंकियां और घर-घर शुद्ध मीठे पानी के नल कनेक्शन!\n` +
+            `• सिहाली से हाड़ाहेड़ी के सीम संधे पर नए गहरे बोरवेल अधिष्ठापन!\n` +
+            `• शेष बची ढाणियों तक मीठे पानी की स्थायी लाइन पहुँचाना सर्वोच्च प्राथमिकता है। 🚩`
         );
     }
 
-    // Elder / Tauji / Respect / Chaupal queries
-    if (q.includes('tauji') || q.includes('tau') || q.includes('kaka') || q.includes('budhe') || q.includes('bujurg') || q.includes('pension') || q.includes('ताऊ') || q.includes('काका') || q.includes('बुजुर्ग') || q.includes('पेंशन') || q.includes('चौपाल')) {
+    // E. Roads & Infrastructure (CC Roads / Interlocking / Asphalt)
+    if (q.includes('road') || q.includes('sadak') || q.includes('cc road') || q.includes('damar') || q.includes('interlocking') || q.includes('सड़क') || q.includes('डामर')) {
         return (
-            "राम राम ताऊ जी! 🙏\n" +
-            "बुजुर्गों का आशीर्वाद ही हमारी सबसे बड़ी ताकत है। बाबा अभय सिंह ने हमेशा बड़े-बुजुर्गों के मान-सम्मान और स्वास्थ्य को प्राथमिकता दी है।\n" +
-            "वरिष्ठ नागरिकों के विश्राम व आपसी विचार-विमर्श के लिए छायादार, पंखे व पेयजल युक्त आधुनिक सामुदायिक चौपाल और पंचायत में ही पटवार घर बनवाना हमारा प्रमुख संकल्प है ताकि आपको मुंडावर न भटकना पड़े! 🚩"
+            `राम राम ${honorific}! 🛣️\n` +
+            `सड़क व रास्तों के मुख्य विकास कार्य:\n` +
+            `• सिहाली कलां से हाड़ाहेड़ी मुख्य संपर्क डामर सड़क व आश्रम मार्ग का चौड़ीकरण व पुनः निर्माण!\n` +
+            `• तीनों गाँवों की आंतरिक गलियों में 45+ पक्की सी.सी. सड़कें व इंटरलॉकिंग मय पक्की नालियां!\n` +
+            `• आगे सिहाली खुर्द-हाड़ाहेड़ी लिंक रोड का उच्च-गुणवत्ता चौड़ीकरण संकल्प है। 🚩`
         );
     }
 
-    // Opposition / Bribe / Alcohol queries
+    // F. Crematorium / Mokshdham & Johads
+    if (q.includes('mokshdham') || q.includes('shmashan') || q.includes('johad') || q.includes('तालाब') || q.includes('श्मशान') || q.includes('मोक्षधाम') || q.includes('जोहड़')) {
+        return (
+            `राम राम ${honorific}! 🕊️\n` +
+            `मोक्षधाम व पर्यावरण संरक्षण के कार्य:\n` +
+            `• मोक्षधाम का संपूर्ण मिट्टी भरत, समतलीकरण, इंटरलॉकिंग मय पक्की नाली व 2 नए बोरवेल अधिष्ठापन!\n` +
+            `• पारंपरिक जोहड़ों की गहरी खुदाई व सघन छायादार वृक्षारोपण कार्य। 🌳🚩`
+        );
+    }
+
+    // 8. General Major Works Fact Sheet (The 12 Core Highlights Summary)
+    if (q.includes('kaam') || q.includes('काम') || q.includes('kam') || q.includes('karwaya') || q.includes('vikas') || q.includes('विकास') || q.includes('कार्य')) {
+        return (
+            `राम राम ${honorific}! 🙏\n` +
+            `बाबा अभय सिंह द्वारा करवाए गए प्रमाणित मुख्य कार्य (Locked Facts):\n` +
+            `• उप-स्वास्थ्य केंद्र हेतु स्वयं निजी भूमिदान व सिहाली कलां में पशु चिकित्सालय निर्माण\n` +
+            `• JJM घर-घर मीठा पेयजल व नए बोरवेल\n` +
+            `• 45+ पक्की सी.सी. सड़कें, आश्रम डामर सड़क व 1000+ फुट भूमिगत सीवरेज लाइन\n` +
+            `• अत्याधुनिक डिजिटल लाइब्रेरी व ओपन जिम युक्त खेल मैदान!\n\n` +
+            `अगर किसी खास काम या योजना के बारे में विस्तार से जानना हो तो बताइए ${honorific}! 😊🚩`
+        );
+    }
+
+    // 9. Opposition / Bribe / Alcohol queries
     if (q.includes('virodhi') || q.includes('विरोधी') || q.includes('daaru') || q.includes('daru') || q.includes('दारू') || q.includes('पैसे') || q.includes('पैसा') || q.includes('शराब') || q.includes('bribe')) {
         return (
-            "अरे भैया, 5 दिन की दारू-मुर्गे या 500 के नोट से 5 साल का गांव थोड़े ही संवरता है! " +
-            "जो चुनाव आते ही प्रलोभन बांटते हैं वे 5 साल फिर नजर भी नहीं आते। हमें तो अपने वही ईमानदार बाबा अभय सिंह चाहिए जो आधी रात को भी सुख-दुख में साथ खड़े मिले! बाकी आप खुद समझदार हो भैया! 😊🚩"
+            `अरे ${honorific}, 5 दिन की दारू-मुर्गे या 500 के नोट से 5 साल का गांव थोड़े ही संवरता है! ` +
+            `जो चुनाव आते ही प्रलोभन बांटते हैं वे 5 साल फिर नजर भी नहीं आते। हमें तो अपने वही ईमानदार बाबा अभय सिंह चाहिए जो आधी रात को भी सुख-दुख में साथ खड़े मिले! बाकी आप खुद समझदार हो ${honorific}! 😊🚩`
         );
     }
 
-    // Slogan request
+    // 10. Polling date / booth
+    if (q.includes('election') || q.includes('vote') || q.includes('chunav') || q.includes('चुनाव') || q.includes('तारीख') || q.includes('tarikh') || q.includes('kab') || q.includes('booth') || q.includes('बूथ')) {
+        return (
+            `इलेक्शन सोमवार, 16 नवम्बर 2026 को है ${honorific}! 🗓️\n` +
+            `मतदान: राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द (बूथ 95, 96, 97, 98)।\n\n` +
+            `अगर परिवार की वोटर पर्ची चेक करनी हो तो बस नाम लिख कर भेज देना! 🙏`
+        );
+    }
+
+    // 11. How are you / Health / Well-being
+    if (q.includes('haal') || q.includes('hal') || q.includes('kaise ho') || q.includes('kasa') || q.includes('kaisa') || q.includes('kese ho')) {
+        return `राम राम ${honorific}! 🙏 बाबा अभय सिंह के आशीर्वाद और आप सभी के प्यार-स्नेह से सब बढ़िया है। आप बताओ ${honorific}, घर-परिवार में सब कुशल मंगल? अपने मोहल्ले और वार्ड में इस बार क्या माहौल लग रहा है? 😊🚩`;
+    }
+
+    // 12. Slogan request
     if (q.includes('slogan') || q.includes('नारा') || q.includes('shayari') || q.includes('शायरी')) {
         const slogan = userMemory.getNextSlogan(phone);
-        return `राम राम भैया! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
+        return `राम राम ${honorific}! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
     }
 
-    // Polling date / booth
-    if (q.includes('election') || q.includes('vote') || q.includes('voting') || q.includes('chunav') || q.includes('चुनाव') || q.includes('तारीख') || q.includes('tarikh') || q.includes('कब') || q.includes('kab') || q.includes('booth') || q.includes('बूथ') || q.includes('date') || q.includes('when')) {
-        return (
-            "इलेक्शन सोमवार, 16 नवम्बर 2026 को है भैया! 🗓️\n" +
-            "वोटिंग राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द (बूथ 95 व 96) में होगी।\n\n" +
-            "अगर परिवार की वोटर पर्ची चेक करनी हो तो बस नाम लिख कर भेज देना! 🙏"
-        );
-    }
-
-    // Development / Work Done
-    if (q.includes('kaam') || q.includes('काम') || q.includes('kam') || q.includes('karwaya') || q.includes('karwayen') || q.includes('karvaya') || q.includes('karvaye') || q.includes('vikas') || q.includes('विकास') || q.includes('योजना') || q.includes('karya') || q.includes('कार्य') || q.includes('road') || q.includes('sadak') || q.includes('pani') || q.includes('paani')) {
-        return (
-            "राम राम भैया! 🙏\n" +
-            "बाबा अभय सिंह ने पिछले 5 सालों में गांव के लिए ये प्रमुख काम करवाए हैं:\n" +
-            "• JJM के तहत पानी की टंकियां और घर-घर शुद्ध पेयजल\n" +
-            "• मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स\n" +
-            "• सिहाली खुर्द-हाड़ाहेड़ी पक्की डामर सड़क व जोहड़ों का पुनरुद्धार\n" +
-            "• सरकारी स्कूलों के 10वीं-12वीं टॉपर्स को 15 वर्षों से निरंतर प्रतिभा सम्मान\n\n" +
-            "अगर अपनी वोटर पर्ची देखनी हो तो नाम लिख कर भेज देना!"
-        );
-    }
-
-    // Education / School / Topper queries
-    if (q.includes('school') || q.includes('topper') || q.includes('padhai') || q.includes('shiksha') || q.includes('टॉपर') || q.includes('स्कूल') || q.includes('शिक्षा') || q.includes('छात्र') || q.includes('विद्यार्थी') || q.includes('10th') || q.includes('12th')) {
-        return (
-            "राम राम भैया! 🙏\n" +
-            "शिक्षा और हमारे गाँव के बच्चों के भविष्य को लेकर बाबा अभय सिंह का बहुत बड़ा संकल्प रहा है:\n" +
-            "• पिछले 10-15 वर्षों से लगातार ग्राम पंचायत के सभी सरकारी स्कूलों में 10वीं व 12वीं बोर्ड परीक्षा के टॉपर्स को बाबा अभय सिंह जी द्वारा नकद पुरस्कार, मोमेंटो व सम्मान पत्र देकर सम्मानित व प्रोत्साहित किया जा रहा है!\n" +
-            "• साथ ही सरकारी स्कूलों में खेल मैदान, आधुनिक मॉड्यूलर लाइब्रेरी और कक्षाओं का कायाकल्प भी करवाया गया है। 🎓🚩"
-        );
-    }
-
-    // Default warm welcome
+    // 13. Default Dynamic Welcome Hook
     return (
-        "राम राम भैया! 🙏\n" +
-        "बाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र।\n" +
-        "अगर आपको अपनी या परिवार की वोटर पर्ची चेक करनी हो तो अपना नाम या वार्ड नंबर लिखकर भेजें! 🚩"
+        `राम राम ${honorific}! 🙏\n` +
+        `बाबा अभय सिंह (मोटी आंगली वाले बाबा) सेवा केंद्र।\n` +
+        `वोटर पर्ची देखने के लिए अपना शुभ नाम लिखकर भेजें, या गाँव के विकास कार्यों पर चर्चा करें! 🚩`
     );
 }
 

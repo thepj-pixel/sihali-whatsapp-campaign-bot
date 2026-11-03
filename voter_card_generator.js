@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const { execSync } = require('child_process');
 
-const BABA_PHOTO_PATH = path.join(__dirname, 'media', 'baba_face.jpg');
+const BABA_PHOTO_PATH = path.join(__dirname, 'media', 'baba_33_transparent.png');
 const FONT_PATH = path.join(__dirname, 'media', 'NotoSansDevanagari-Bold.ttf');
 const CARD_CACHE_DIR = path.join(__dirname, 'parchi_cache');
 
@@ -12,35 +12,60 @@ if (!fs.existsSync(CARD_CACHE_DIR)) {
     try { fs.mkdirSync(CARD_CACHE_DIR, { recursive: true }); } catch (e) {}
 }
 
-// On Linux, automatically copy our bundled NotoSansDevanagari-Bold.ttf into user's font directories
-// so Fontconfig and librsvg pick it up without manual intervention
-let fontsInstalled = false;
-function ensureLinuxFonts() {
-    if (fontsInstalled || process.platform !== 'linux') return;
+// Self-healing font installation for Linux environments (GCP VM / Debian)
+function ensureFontsInstalled() {
+    if (process.platform !== 'linux') return;
     try {
         const home = os.homedir();
-        const userFonts = path.join(home, '.local', 'share', 'fonts');
-        const legacyFonts = path.join(home, '.fonts');
-        [userFonts, legacyFonts].forEach(dir => {
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        });
+        const fontDirs = [
+            path.join(home, '.fonts'),
+            path.join(home, '.local', 'share', 'fonts')
+        ];
+        const mediaDir = path.join(__dirname, 'media');
+        const fontFiles = ['NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf'];
 
-        if (fs.existsSync(FONT_PATH)) {
-            const dest1 = path.join(userFonts, 'NotoSansDevanagari-Bold.ttf');
-            const dest2 = path.join(legacyFonts, 'NotoSansDevanagari-Bold.ttf');
-            if (!fs.existsSync(dest1)) fs.copyFileSync(FONT_PATH, dest1);
-            if (!fs.existsSync(dest2)) fs.copyFileSync(FONT_PATH, dest2);
+        let copied = false;
+        for (const fDir of fontDirs) {
+            if (!fs.existsSync(fDir)) {
+                try { fs.mkdirSync(fDir, { recursive: true }); } catch (e) {}
+            }
+            for (const fName of fontFiles) {
+                const src = path.join(mediaDir, fName);
+                const dst = path.join(fDir, fName);
+                if (fs.existsSync(src) && !fs.existsSync(dst)) {
+                    fs.copyFileSync(src, dst);
+                    copied = true;
+                    console.log(`[VoterCardGen] Installed ${fName} to ${dst}`);
+                }
+            }
+        }
+        if (copied) {
             try {
-                execSync('fc-cache -f ' + userFonts + ' ' + legacyFonts, { stdio: 'ignore', timeout: 5000 });
-                console.log('[VoterCardGen] Installed NotoSansDevanagari-Bold into user font directories & ran fc-cache');
+                execSync('fc-cache -f ~/.fonts 2>/dev/null || fc-cache -f 2>/dev/null || true', { stdio: 'ignore' });
+                console.log('[VoterCardGen] fc-cache updated successfully.');
             } catch (e) {}
         }
-        fontsInstalled = true;
     } catch (e) {
-        console.warn('[VoterCardGen] Note on auto-font install:', e.message);
+        console.warn('[VoterCardGen] Font auto-install error:', e.message);
     }
 }
-ensureLinuxFonts();
+ensureFontsInstalled();
+
+function clearCardCache() {
+    try {
+        if (fs.existsSync(CARD_CACHE_DIR)) {
+            const files = fs.readdirSync(CARD_CACHE_DIR);
+            for (const f of files) {
+                if (f.endsWith('.jpg') || f.endsWith('.png')) {
+                    fs.unlinkSync(path.join(CARD_CACHE_DIR, f));
+                }
+            }
+            console.log(`[VoterCardGen] Cleared ${files.length} cached cards.`);
+        }
+    } catch (e) {
+        console.error('[VoterCardGen] Error clearing cache:', e.message);
+    }
+}
 
 let FONT_B64 = '';
 if (fs.existsSync(FONT_PATH)) {
@@ -63,16 +88,24 @@ async function generateVoterCard(voter) {
     const width = 1080;
     const height = 1240;
 
-    const nameHi = voter.name_hi || voter.name || 'ग्रामवासी';
-    const nameEn = voter.name_en || voter.name || '';
-    const relName = voter.rel_name_hi || voter.rel_name || '';
-    const relType = voter.rel_type === 'H' ? 'पति' : 'पिता';
+    const nameHi = voter.name_hi || voter.name || voter.n || 'ग्रामवासी';
+    const nameEn = voter.name_en || voter.ne || voter.name || '';
+    const relName = voter.rel_name_hi || voter.rel_name || voter.r || '';
+    const rtRaw = String(voter.rt || voter.rel_type || 'F').trim();
+    const relType = (rtRaw === 'H' || rtRaw === 'पति' || rtRaw === 'h') ? 'पति' : ((rtRaw === 'M' || rtRaw === 'माता') ? 'माता' : 'पिता');
     const ward = voter.ward || voter.w || 1;
     const serial = voter.sr_no || voter.s || 1;
     const epic = voter.epic || voter.e || '--';
-    const house = voter.house_no || voter.h || '--';
-    const age = voter.age || voter.a || '--';
-    const gender = voter.gender_hi || (voter.gender === 'F' ? 'महिला' : 'पुरुष');
+    
+    let house = String(voter.house_no || voter.h || '--').trim();
+    let age = parseInt(voter.age || voter.a || 0);
+    // Auto-correct any inverted age / house number (e.g. 168 years old in house 33)
+    if (age > 105 && parseInt(house) > 0 && parseInt(house) < 95) {
+        const temp = age;
+        age = parseInt(house);
+        house = String(temp);
+    }
+    const gender = voter.gender_hi || (voter.gender === 'F' || voter.g === 'F' ? 'महिला' : 'पुरुष');
     const booth = voter.booth || `बूथ 95 (कमरा नं 1)`;
 
     const fontStyleMarkup = FONT_B64 ? `
@@ -126,86 +159,94 @@ async function generateVoterCard(voter) {
 
       <!-- Top Header -->
       <rect x="30" y="35" width="1020" height="85" fill="#f8fafc" rx="24"/>
-      <text x="540" y="78" font-size="28" font-weight="900" fill="#0f172a" text-anchor="middle" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
+      <text x="540" y="78" font-size="28" font-weight="900" fill="#0f172a" text-anchor="middle">
         🏛️ ग्राम पंचायत सिहाली खुर्द • पंचायत आम चुनाव 2026
       </text>
-      <text x="540" y="108" font-size="19" font-weight="700" fill="#ea580c" text-anchor="middle" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif" letter-spacing="1">
+      <text x="540" y="108" font-size="19" font-weight="700" fill="#ea580c" text-anchor="middle" letter-spacing="1">
         ★ अधिकृत डिजिटल मतदाता पर्ची (DIGITAL VOTER SLIP) ★
       </text>
 
       <!-- Candidate Box -->
       <rect x="55" y="135" width="970" height="195" fill="url(#candidateBg)" rx="18"/>
-      <circle cx="165" cy="232" r="76" fill="none" stroke="url(#gold)" stroke-width="6"/>
+      <circle cx="165" cy="232" r="78" fill="#1e293b" stroke="url(#gold)" stroke-width="5"/>
 
-      <!-- Candidate Details -->
-      <text x="265" y="188" font-size="20" font-weight="700" fill="#f59e0b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
-        सरपंच पद प्रत्याशी • मतपत्र क्रम संख्या: 1
+      <!-- Candidate Details (No Kram Sankhya 1 or 2, just Abhay Singh & Moti Angli Wale) -->
+      <text x="265" y="186" font-size="21" font-weight="800" fill="#f59e0b">
+        ⭐ सरपंच पद प्रत्याशी
       </text>
-      <text x="265" y="232" font-size="38" font-weight="900" fill="#ffffff" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
-        बाबा अभय सिंह
+      <text x="265" y="234" font-size="44" font-weight="900" fill="#ffffff">
+        अभय सिंह
       </text>
-      <text x="265" y="268" font-size="22" font-weight="700" fill="#fed7aa" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
-        (मोटी आंगली वाले बाबा)  |  प्रतीक: 卐 (स्वस्तिक)
+      <text x="265" y="272" font-size="24" font-weight="800" fill="#fed7aa">
+        (मोटी आंगली वाले)
       </text>
-      <text x="265" y="302" font-size="17" font-weight="600" fill="#94a3b8" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
+      <text x="265" y="304" font-size="16" font-weight="600" fill="#94a3b8">
         40 वर्षों से निष्पक्ष सेवा, विकास व जन-कल्याण को समर्पित
       </text>
+
+      <!-- Official Electoral Swastik Voting Stamp (Mohar) Only -->
+      <g transform="translate(885, 232) rotate(-8)">
+        <circle cx="0" cy="0" r="58" fill="#ffffff" stroke="#6d28d9" stroke-width="3.5" stroke-dasharray="6,3"/>
+        <circle cx="0" cy="0" r="50" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+        <text x="0" y="14" font-size="52" font-weight="900" fill="#6d28d9" text-anchor="middle">卐</text>
+        <text x="0" y="38" font-size="13" font-weight="900" fill="#5b21b6" text-anchor="middle" letter-spacing="2">★ मुहर ★</text>
+      </g>
 
       <!-- Voter Details Grid -->
       <rect x="55" y="348" width="970" height="730" fill="#f8fafc" rx="16" stroke="#e2e8f0" stroke-width="2"/>
       <rect x="55" y="348" width="970" height="52" fill="#e2e8f0" rx="16"/>
-      <text x="80" y="383" font-size="20" font-weight="800" fill="#334155" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
+      <text x="80" y="383" font-size="20" font-weight="800" fill="#334155">
         📋 मतदाता का विवरण (VOTER DETAILS)
       </text>
 
       <!-- Name Row -->
-      <text x="85" y="445" font-size="22" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">मतदाता का नाम:</text>
-      <text x="320" y="448" font-size="36" font-weight="900" fill="#0f172a" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">${nameHi}</text>
-      <text x="740" y="445" font-size="22" font-weight="700" fill="#475569" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">(${nameEn})</text>
+      <text x="85" y="445" font-size="22" font-weight="700" fill="#64748b">मतदाता का नाम:</text>
+      <text x="320" y="448" font-size="36" font-weight="900" fill="#0f172a">${nameHi}</text>
+      <text x="740" y="445" font-size="22" font-weight="700" fill="#475569">(${nameEn})</text>
       <line x1="85" y1="472" x2="995" y2="472" stroke="#e2e8f0" stroke-width="1.5"/>
 
       <!-- Relative Row -->
-      <text x="85" y="520" font-size="22" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">${relType} का नाम:</text>
-      <text x="320" y="520" font-size="28" font-weight="800" fill="#1e293b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">${relName}</text>
+      <text x="85" y="520" font-size="22" font-weight="700" fill="#64748b">${relType} का नाम:</text>
+      <text x="320" y="520" font-size="28" font-weight="800" fill="#1e293b">${relName}</text>
       <line x1="85" y1="545" x2="995" y2="545" stroke="#e2e8f0" stroke-width="1.5"/>
 
       <!-- Ward & Sr No Dual Box -->
       <rect x="85" y="568" width="435" height="100" fill="#eff6ff" rx="12" stroke="#bfdbfe" stroke-width="1.5"/>
-      <text x="110" y="605" font-size="18" font-weight="700" fill="#1e40af" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">वार्ड संख्या (Ward No):</text>
-      <text x="110" y="650" font-size="38" font-weight="900" fill="#1e3a8a" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">वार्ड नं. ${ward}</text>
+      <text x="110" y="605" font-size="18" font-weight="700" fill="#1e40af">वार्ड संख्या (Ward No):</text>
+      <text x="110" y="650" font-size="38" font-weight="900" fill="#1e3a8a">वार्ड नं. ${ward}</text>
 
       <rect x="545" y="568" width="450" height="100" fill="#fef3c7" rx="12" stroke="#fde68a" stroke-width="1.5"/>
-      <text x="570" y="605" font-size="18" font-weight="700" fill="#92400e" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">क्रमांक संख्या (Sr No):</text>
-      <text x="570" y="655" font-size="44" font-weight="900" fill="#b45309" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif"># ${serial}</text>
+      <text x="570" y="605" font-size="18" font-weight="700" fill="#92400e">क्रमांक संख्या (Sr No):</text>
+      <text x="570" y="655" font-size="44" font-weight="900" fill="#b45309"># ${serial}</text>
 
       <!-- EPIC & House No -->
       <rect x="85" y="688" width="435" height="90" fill="#ffffff" rx="12" stroke="#cbd5e1" stroke-width="1.5"/>
-      <text x="110" y="722" font-size="17" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">पहचान पत्र (EPIC No):</text>
-      <text x="110" y="760" font-size="26" font-weight="900" fill="#0f172a" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">${epic}</text>
+      <text x="110" y="722" font-size="17" font-weight="700" fill="#64748b">पहचान पत्र (EPIC No):</text>
+      <text x="110" y="760" font-size="26" font-weight="900" fill="#0f172a">${epic}</text>
 
       <rect x="545" y="688" width="450" height="90" fill="#ffffff" rx="12" stroke="#cbd5e1" stroke-width="1.5"/>
-      <text x="570" y="722" font-size="17" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">मकान संख्या (House No):</text>
-      <text x="570" y="760" font-size="26" font-weight="900" fill="#0f172a" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">मकान नं. ${house}</text>
+      <text x="570" y="722" font-size="17" font-weight="700" fill="#64748b">मकान संख्या (House No):</text>
+      <text x="570" y="760" font-size="26" font-weight="900" fill="#0f172a">मकान नं. ${house}</text>
 
       <!-- Age & Gender -->
-      <text x="85" y="830" font-size="22" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">आयु एवं लिंग:</text>
-      <text x="320" y="830" font-size="26" font-weight="800" fill="#1e293b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">${age} वर्ष  |  ${gender}</text>
+      <text x="85" y="830" font-size="22" font-weight="700" fill="#64748b">आयु एवं लिंग:</text>
+      <text x="320" y="830" font-size="26" font-weight="800" fill="#1e293b">${age} वर्ष  |  ${gender}</text>
       <line x1="85" y1="855" x2="995" y2="855" stroke="#e2e8f0" stroke-width="1.5"/>
 
       <!-- Polling Station -->
-      <text x="85" y="905" font-size="21" font-weight="700" fill="#64748b" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">मतदान केंद्र:</text>
-      <text x="320" y="905" font-size="23" font-weight="800" fill="#0f172a" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">रा.उ.मा.वि. सिहाली खुर्द (${booth})</text>
+      <text x="85" y="905" font-size="21" font-weight="700" fill="#64748b">मतदान केंद्र:</text>
+      <text x="320" y="905" font-size="23" font-weight="800" fill="#0f172a">${booth}</text>
       <line x1="85" y1="930" x2="995" y2="930" stroke="#e2e8f0" stroke-width="1.5"/>
 
-      <!-- Date Banner -->
-      <rect x="85" y="955" width="910" height="85" fill="#f0fdf4" rx="12" stroke="#bbf7d0" stroke-width="1.5"/>
-      <text x="110" y="990" font-size="18" font-weight="700" fill="#166534" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">🗓️ मतदान दिनांक व समय:</text>
-      <text x="110" y="1022" font-size="22" font-weight="900" fill="#15803d" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">सोमवार, 16 नवम्बर 2026  •  प्रातः 7:30 बजे से सायं 5:30 बजे तक</text>
+      <!-- Polling Date & Timing Box -->
+      <rect x="85" y="955" width="910" height="95" fill="#f0fdf4" rx="12" stroke="#bbf7d0" stroke-width="1.5"/>
+      <text x="110" y="990" font-size="17" font-weight="700" fill="#15803d">🗓️ मतदान दिनांक व समय:</text>
+      <text x="110" y="1025" font-size="24" font-weight="900" fill="#166534">सोमवार, 16 नवम्बर 2026  •  प्रातः 7:30 बजे से सायं 5:30 बजे तक</text>
 
-      <!-- Footer Appeal -->
+      <!-- Footer Appeal: "थारी आंगली से मोटी आंगली वाले के आगे मुहर लगाओ!" -->
       <rect x="55" y="1098" width="970" height="80" fill="#ea580c" rx="16"/>
-      <text x="540" y="1148" font-size="24" font-weight="900" fill="#ffffff" text-anchor="middle" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', 'Gargi', 'Nirmala UI', 'Mangal', sans-serif">
-        ★ 16 नवम्बर को क्रम सं. 1 पर बाबा अभय सिंह के आगे मुहर लगाएं! ★
+      <text x="540" y="1148" font-size="24" font-weight="900" fill="#ffffff" text-anchor="middle">
+        ★ थारी आंगली से मोटी आंगली वाले के आगे मुहर लगाओ! ★
       </text>
     </svg>
     `;
@@ -219,22 +260,42 @@ async function generateVoterCard(voter) {
         left: 0
     });
 
-    // 2. Circular candidate photo overlaid on top inside the gold frame
+    // 2. Candidate 33 transparent cutout contained cleanly inside the gold frame (shifted down slightly for perfect vertical balance)
     if (fs.existsSync(BABA_PHOTO_PATH)) {
-        const photoSize = 144;
+        const photoSize = 152;
         const circleMask = Buffer.from(
             `<svg width="${photoSize}" height="${photoSize}"><circle cx="${photoSize/2}" cy="${photoSize/2}" r="${photoSize/2}" fill="#fff"/></svg>`
         );
-        const circularPhoto = await sharp(BABA_PHOTO_PATH)
-            .resize(photoSize, photoSize, { fit: 'cover' })
-            .composite([{ input: circleMask, blend: 'dest-in' }])
-            .png()
+        const targetW = 146;
+        const babaMeta = await sharp(BABA_PHOTO_PATH).metadata();
+        const targetH = Math.round(babaMeta.height * (targetW / babaMeta.width));
+        const resizedBaba = await sharp(BABA_PHOTO_PATH)
+            .resize(targetW, targetH)
             .toBuffer();
 
+        const shiftY = 12; // Shift slightly down so safa plume has breathing room & chest anchors at bottom
+        const ox = Math.round((photoSize - targetW) / 2);
+        const oy = Math.round((photoSize - targetH) / 2) + shiftY;
+
+        const containedBaba = await sharp({
+            create: {
+                width: photoSize,
+                height: photoSize,
+                channels: 4,
+                background: { r: 30, g: 41, b: 59, alpha: 1 }
+            }
+        })
+        .composite([
+            { input: resizedBaba, top: oy, left: ox },
+            { input: circleMask, blend: 'dest-in' }
+        ])
+        .png()
+        .toBuffer();
+
         composites.push({
-            input: circularPhoto,
-            top: 160,
-            left: 93
+            input: containedBaba,
+            top: 232 - Math.round(photoSize / 2),
+            left: 165 - Math.round(photoSize / 2)
         });
     }
 
@@ -257,4 +318,4 @@ async function generateVoterCard(voter) {
     return finalJpg;
 }
 
-module.exports = { generateVoterCard };
+module.exports = { generateVoterCard, clearCardCache, CARD_CACHE_DIR };

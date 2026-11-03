@@ -31,7 +31,7 @@ Baba Abhay Singh has laid down a strict separation between **Public Broadcasts**
 Every day of the campaign until 16 November 2026, release the following:
 1. **Status Poster (Aspect Ratio 9:16):** Full-screen mobile status with Baba's photo, Election Date (16 Nov 2026), Ballot Sr No. 1, Swastik symbol (卐), and an inspiring couplet/appeal.
 2. **"Kaam Ka Poster" (Ground Proof):** Focus on 1 certified development achievement per day:
-   - 4-Bigha Hospital Land donation (worth crores) by Baba's family.
+   - Hospital Land donation by Baba's family for Sub-Health Center.
    - Har Ghar Jal (JJM) pipeline network connecting Sihali Khurd, Sihali Kalan & Hadahedi.
    - High School Upgradation to 12th standard with Science/Commerce streams.
    - High-mast lights, CC Roads & Interlocking tile streets.
@@ -62,7 +62,7 @@ While public ads remain 100% dignified, **WhatsApp private chats allow strategic
   - If opposition promises unrealistic miracles: Politely highlight who has actually stayed in the village through sickness and joy for 40 years versus seasonal election tourists.
 - **Expose Malpractices Tactfully:**
   - If a voter mentions opponents offering inducements (liquor, money, false promises):
-    *"भाई जी, शराब और पैसे 1 रात में खत्म हो जाते हैं, पर 5 साल का विकास और गाँव का सम्मान 5 साल तक भुगतना पड़ता है। बाबा ने कभी एक पैसे का भ्रष्टाचार नहीं किया और अपनी 4 बीघा जमीन अस्पताल के लिए दान कर दी। जो अपनी जमीन गाँव को दे सकता है, वो गाँव का हक कभी नहीं छीनेगा।"*
+    *"भाई जी, शराब और पैसे 1 रात में खत्म हो जाते हैं, पर 5 साल का विकास और गाँव का सम्मान 5 साल तक भुगतना पड़ता है। बाबा ने कभी एक पैसे का भ्रष्टाचार नहीं किया और अपनी निजी जमीन अस्पताल के लिए दान कर दी। जो अपनी जमीन गाँव को दे सकता है, वो गाँव का हक कभी नहीं छीनेगा।"*
 
 #### B. Dynamic Personalization (Male & Female Voter Energy):
 - **To Senior Citizens / Elders:** Deep respect (*"राम राम काका जी / ताऊ जी"*, focus on pension, hospital, peace, and clean village atmosphere).

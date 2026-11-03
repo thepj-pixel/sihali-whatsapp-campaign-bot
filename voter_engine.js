@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Load master cleaned voter data
-const votersPath = path.join(__dirname, 'voters_cleaned.json');
+const votersPath = path.join(__dirname, 'voters.json');
 let VOTERS = [];
 
 try {
@@ -10,7 +10,7 @@ try {
     VOTERS = JSON.parse(raw);
     console.log(`[VoterEngine] Loaded ${VOTERS.length} voters for Sihali Khurd.`);
 } catch (e) {
-    console.error('[VoterEngine] Error loading voters_cleaned.json:', e);
+    console.error('[VoterEngine] Error loading voters.json:', e);
 }
 
 // Comprehensive Hinglish to Hindi transliteration mapping for local names and surnames
@@ -544,7 +544,7 @@ function formatShortSlipResponse(voter) {
         `🏫 *मतदान केंद्र:* ${boothName}\n` +
         `🗓️ *मतदान:* सोमवार, 16 नवम्बर 2026 (प्रातः 7:30 से सायं 5:30)\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `🚩 *बाबा अभय सिंह (मोटी आंगली वाले)* — क्रम सं. 1`
+        `🚩 *अभय सिंह (मोटी आंगली वाले)* — सरपंच पद प्रत्याशी`
     );
 }
 
@@ -579,7 +579,7 @@ function formatSlipResponse(voter) {
     slip += `🆔 *पहचान पत्र (EPIC):* ${epic}\n`;
     slip += `🏠 *मकान नं:* ${houseNo}  |  *आयु:* ${age} वर्ष\n`;
     slip += `🏫 *मतदान केंद्र:* ${boothName}\n`;
-    slip += `🗓️ *मतदान तिथि:* सोमवार, 16 नवम्बर 2026 (प्रातः 8 से सायं 5)\n`;
+    slip += `🗓️ *मतदान तिथि:* सोमवार, 16 नवम्बर 2026 (प्रातः 7:30 से सायं 5:30)\n`;
     slip += `━━━━━━━━━━━━━━━━━━━\n`;
 
     if (family.length > 0) {
@@ -604,7 +604,7 @@ function formatFallbackResponse() {
         `राम राम भाई जी! 🙏\n\n` +
         `ग्राम पंचायत सिहाली खुर्द चुनाव सहायता केंद्र।\n\n` +
         `कृपया अपना नाम और वार्ड नंबर सही से लिखकर भेजें (उदाहरण: *सतीश वार्ड 1* या *Satish Kumar* या अपना *EPIC नंबर*) ताकि हम तुरंत आपकी और परिवार की वोटर पर्ची निकाल सकें।\n\n` +
-        `— बाबा अभय सिंह सेवा केंद्र (मोटी आंगली वाले बाबा) 🚩`
+        `— अभय सिंह सेवा केंद्र (मोटी आंगली वाले) 🚩`
     );
 }
 

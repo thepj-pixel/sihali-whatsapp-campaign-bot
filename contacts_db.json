@@ -1,5 +1,31 @@
 [
   {
+    "id": "c_1793692575857_d2n1u",
+    "name": "Kamla Devi",
+    "phone": "919829654321",
+    "ward": 5,
+    "village": "सिहाली खुर्द",
+    "line": "sim_636",
+    "notes": "",
+    "tags": [
+      "📊 CSV Import"
+    ],
+    "updatedAt": "2026-11-03T07:56:15.857Z"
+  },
+  {
+    "id": "c_1793692575855_5xz34",
+    "name": "Rajesh Sharma",
+    "phone": "919829123456",
+    "ward": 3,
+    "village": "सिहाली खुर्द",
+    "line": "sim_636",
+    "notes": "",
+    "tags": [
+      "📊 CSV Import"
+    ],
+    "updatedAt": "2026-11-03T07:56:15.855Z"
+  },
+  {
     "id": "c_1793642963641_665",
     "name": "प्रिंस यादव",
     "phone": "918764870431",

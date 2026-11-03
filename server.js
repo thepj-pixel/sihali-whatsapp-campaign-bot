@@ -22,7 +22,7 @@ function runProactiveNudges(sock) {
                 const nudges = [
                     `अरे भैया, सुनिए ना... 🙏 आपने बताया नहीं, घर पर सब ठीक-ठाक हैं न? भाभी जी और बच्चे कैसे हैं? सोचा एक बार हाल-चाल पूछ लूं! 😊`,
                     `राम राम भैया! 🚩 आज बाबा अभय सिंह के चुनाव प्रचार का बहुत सुंदर WhatsApp स्टेटस बना है। अगर आप कहें तो आपके नाम का एक प्यारा सा पोस्टर बना कर भेज दूं? अपने स्टेटस पर जरूर लगाना भैया! 📲`,
-                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा अभय सिंह (मोटी आंगली वाले बाबा) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
+                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा अभय सिंह (मोटी आंगली वाले) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
                 ];
                 const pickedNudge = nudges[(u.proactivePingCount || 0) % nudges.length];
                 const replyJid = `${u.phone}@s.whatsapp.net`;
@@ -913,7 +913,7 @@ async function startSession(sessionObj) {
                             console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
                         }
                     } else if (body.toLowerCase().trim() === 'prince' || body.toLowerCase().trim() === 'admin') {
-                        replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले बाबा) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
+                        replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Recognized Campaign Lead Prince (${senderPhone})`);
                     } else {
@@ -1004,9 +1004,9 @@ app.post('/api/send-message', async (req, res) => {
         } else if (template === 'ground_feedback') {
             messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
         } else if (template === 'direct_appeal') {
-            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को मतपत्र के क्रम सं. 1 पर बाबा अभय सिंह (मोटी आंगली वाले बाबा) के पक्ष में स्वस्तिक (卐) पर मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nकाम बोला है, काम बोलेगा! ✨`;
+            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को अभय सिंह (मोटी आंगली वाले) के पक्ष में स्वस्तिक (卐) पर मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nकाम बोला है, काम बोलेगा! ✨`;
         } else if (template === 'welcome') {
-            messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
+            messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले) डिजिटल सेवा केंद्र में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
         } else if (template === 'slogan') {
             const slogan = userMemory.getNextSlogan(cleanedPhone);
             messageText = `राम राम भाई जी! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
@@ -1655,9 +1655,21 @@ app.post('/webhook/meta-ads', async (req, res) => {
 });
 
 // Auto-Update Endpoint: Pulls latest code from GitHub and reloads PM2
+// API: Clear generated card cache (forces fresh rendering with installed fonts)
+app.get('/api/clear-card-cache', (req, res) => {
+    try {
+        if (voterCardGen && voterCardGen.clearCardCache) {
+            voterCardGen.clearCardCache();
+        }
+        res.json({ success: true, message: 'Voter card cache cleared' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/update', (req, res) => {
     console.log('[AutoDeploy] Pulling latest code from GitHub...');
-    exec('git pull origin main && pm2 restart whatsapp-bot', (err, stdout, stderr) => {
+    exec('git pull origin main && mkdir -p ~/.fonts && cp media/*.ttf ~/.fonts/ 2>/dev/null || true && fc-cache -f ~/.fonts 2>/dev/null || true && rm -rf parchi_cache/* && pm2 restart all', (err, stdout, stderr) => {
         if (err) {
             console.error('[AutoDeploy Error]:', stderr);
             return res.status(500).send(`
@@ -2008,7 +2020,7 @@ app.get('/', (req, res) => {
                                     <option value="permission_casual">🤝 1. सहमति व हाल-चाल (Soft Permission - Non-spam)</option>
                                     <option value="offer_parchi">🎫 2. वोटर पर्ची की पेशकश (Voter Slip Offer)</option>
                                     <option value="ground_feedback">📢 3. वार्ड समस्या व चर्चा (Ward Feedback)</option>
-                                    <option value="direct_appeal">🗳️ 4. क्रम सं. 1 स्वस्तिक सीधा संदेश (Direct 16 Nov Appeal)</option>
+                                    <option value="direct_appeal">🗳️ 4. स्वस्तिक मुहर सीधा संदेश (Direct 16 Nov Appeal)</option>
                                     <option value="welcome">👋 5. त्वरित स्वागत ("Aapko jod liya h...")</option>
                                     <option value="custom">✍️ 6. कस्टम संदेश (Custom message...)</option>
                                 </select>

@@ -68,6 +68,13 @@ class UserMemory {
                 babaNotes: '',
                 askedLifeQuestion: false,
                 gender: 'M',
+                conversationStage: 'INIT', // INIT | ASKED_MAHOOL | ASKED_OCCUPATION | OFFERED_VISIT | ASKED_PROBLEM | ASKED_VOTE_INTENT | VOTE_COMMITTED | VOTE_DOUBTFUL
+                occupation: '',
+                wantsVisit: null,
+                voteIntent: null, // 'yes' | 'no' | 'doubtful' | null
+                botPersonaGender: 'F', // Opposite of voter: Female persona for male voters, Male persona for female voters
+                sentQuestions: [],
+                sentTopics: [],
                 lastFoundVoter: null,
                 lastSearchResults: [],
                 proactivePingCount: 0,
@@ -94,6 +101,15 @@ class UserMemory {
             if (this.users[phone].familyNotes === undefined) this.users[phone].familyNotes = '';
             if (this.users[phone].mahoolNotes === undefined) this.users[phone].mahoolNotes = '';
             if (this.users[phone].babaNotes === undefined) this.users[phone].babaNotes = '';
+            if (this.users[phone].conversationStage === undefined) this.users[phone].conversationStage = 'INIT';
+            if (this.users[phone].occupation === undefined) this.users[phone].occupation = '';
+            if (this.users[phone].wantsVisit === undefined) this.users[phone].wantsVisit = null;
+            if (this.users[phone].voteIntent === undefined) this.users[phone].voteIntent = null;
+            if (this.users[phone].botPersonaGender === undefined) {
+                this.users[phone].botPersonaGender = (this.users[phone].gender === 'F' ? 'M' : 'F');
+            }
+            if (!this.users[phone].sentQuestions) this.users[phone].sentQuestions = [];
+            if (!this.users[phone].sentTopics) this.users[phone].sentTopics = [];
             if (this.users[phone].sentMedia && this.users[phone].sentMedia.demoPoster === undefined) {
                 this.users[phone].sentMedia.demoPoster = false;
             }
@@ -121,6 +137,14 @@ class UserMemory {
 
         user.lastSeen = new Date().toISOString();
         user.interactionCount += 1;
+        user.lastSession = sessionName;
+        if (sessionName && (sessionName.includes('Canada') || sessionName.includes('+1'))) {
+            user.lastSessionId = 'canada';
+        } else if (sessionName && sessionName.includes('Aux')) {
+            user.lastSessionId = 'baba_aux';
+        } else {
+            user.lastSessionId = 'sim_636';
+        }
 
         if (mediaType && user.sentMedia.hasOwnProperty(mediaType)) {
             user.sentMedia[mediaType] = true;
@@ -327,6 +351,39 @@ class UserMemory {
                 user.tags = user.tags.filter(t => t !== '⚪ सामान्य संपर्क');
                 for (const t of newTags) {
                     if (!user.tags.includes(t)) user.tags.push(t);
+                }
+            }
+
+            // Automatic Occupation Detection
+            const occMap = {
+                'farmer': ['kisan', 'kisaan', 'kheti', 'zamindar', 'fasal'],
+                'student': ['student', 'padhai', 'study', 'college', 'school', 'tayari', 'prep'],
+                'army': ['army', 'fauj', 'fauji', 'defense', 'sena', 'commando'],
+                'police': ['police', 'daroga', 'constable', 'thana'],
+                'teacher': ['teacher', 'master', 'adhyapak', 'shikshak', 'shiksha'],
+                'lawyer': ['lawyer', 'vakil', 'vakeel', 'court', 'advocate'],
+                'driver': ['driver', 'gaadi', 'trolla', 'dumper'],
+                'business': ['dukan', 'shop', 'vyapar', 'dhandha', 'business'],
+                'private_job': ['company', 'job', 'private', 'naukri', 'gurgaon', 'delhi', 'jaipur', 'bhiwadi']
+            };
+            for (const [prof, kws] of Object.entries(occMap)) {
+                if (kws.some(k => lower.includes(k))) {
+                    user.occupation = prof;
+                    break;
+                }
+            }
+
+            // Automatic Vote Intent Detection
+            if (user.conversationStage === 'ASKED_VOTE_INTENT' || lower.includes('vote') || lower.includes('वोट')) {
+                if (lower.includes('haan') || lower.includes('ha') || lower.includes('yes') || lower.includes('baba ko') || lower.includes('denge') || lower.includes('pakka') || lower.includes('full support')) {
+                    user.voteIntent = 'yes';
+                    user.conversationStage = 'VOTE_COMMITTED';
+                } else if (lower.includes('nahi') || lower.includes('nhi') || lower.includes('no') || lower.includes('kisi aur') || lower.includes('rajesh')) {
+                    user.voteIntent = 'no';
+                    user.conversationStage = 'VOTE_DOUBTFUL';
+                } else if (lower.includes('dekhenge') || lower.includes('soch') || lower.includes('confuse') || lower.includes('baad me')) {
+                    user.voteIntent = 'doubtful';
+                    user.conversationStage = 'VOTE_DOUBTFUL';
                 }
             }
         }

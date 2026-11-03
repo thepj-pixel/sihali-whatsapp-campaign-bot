@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = path.join(__dirname, 'contacts_db.json');
-const VOTERS_PATH = path.join(__dirname, 'voters_cleaned.json');
+const VOTERS_PATH = path.join(__dirname, 'voters.json');
 
 class ContactsManager {
     constructor() {
@@ -52,28 +52,31 @@ class ContactsManager {
         return result;
     }
 
-    add(contactData) {
-        let cleanPhone = String(contactData.phone || '').replace(/[^0-9]/g, '');
-        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+    cleanPhone(raw) {
+        if (!raw) return '';
+        let cleaned = String(raw).replace(/[^\d]/g, '');
+        if (cleaned.length === 10) cleaned = '91' + cleaned;
+        return cleaned;
+    }
 
-        if (!cleanPhone) {
-            throw new Error('Valid phone number is required');
-        }
+    add(contact) {
+        const cleanedPhone = this.cleanPhone(contact.phone);
+        if (!cleanedPhone) return null;
 
-        const existingIdx = this.contacts.findIndex(c => c.phone === cleanPhone);
+        const existingIdx = this.contacts.findIndex(c => c.phone === cleanedPhone);
         const contactObj = {
-            id: contactData.id || `c_${Date.now()}_${Math.floor(Math.random()*1000)}`,
-            name: (contactData.name || 'ग्रामवासी').trim(),
-            phone: cleanPhone,
-            ward: contactData.ward || 1,
-            village: contactData.village || 'सिहाली खुर्द',
-            line: contactData.line || 'sim_636',
-            notes: contactData.notes || '',
-            tags: contactData.tags || ['⚪ सामान्य संपर्क'],
+            id: contact.id || `c_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            name: contact.name || 'ग्रामवासी',
+            phone: cleanedPhone,
+            ward: parseInt(contact.ward) || 1,
+            village: contact.village || 'सिहाली खुर्द',
+            line: contact.line || 'sim_636',
+            notes: contact.notes || '',
+            tags: contact.tags || ['नया संपर्क'],
             updatedAt: new Date().toISOString()
         };
 
-        if (existingIdx >= 0) {
+        if (existingIdx !== -1) {
             this.contacts[existingIdx] = { ...this.contacts[existingIdx], ...contactObj };
         } else {
             this.contacts.unshift(contactObj);
@@ -83,13 +86,16 @@ class ContactsManager {
         return contactObj;
     }
 
-    delete(idOrPhone) {
-        this.contacts = this.contacts.filter(c => c.id !== idOrPhone && c.phone !== idOrPhone);
-        this.save();
-        return true;
+    delete(id) {
+        const initialLen = this.contacts.length;
+        this.contacts = this.contacts.filter(c => c.id !== id && c.phone !== id);
+        if (this.contacts.length !== initialLen) {
+            this.save();
+            return true;
+        }
+        return false;
     }
 
-    // Import from Master Voter DB
     importFromVoterDB(ward = 'all', line = 'sim_636', limit = 100) {
         if (!fs.existsSync(VOTERS_PATH)) {
             throw new Error('Master voter list not found');
@@ -105,15 +111,13 @@ class ContactsManager {
 
         let addedCount = 0;
         for (const v of target) {
-            // If phone exists in voter record or use synthetic tracking
             const name = v.name_hi || v.name || 'ग्रामवासी';
             const vWard = v.ward || v.w || 1;
             const epic = v.epic || v.e || '';
             const house = v.house_no || v.h || '';
             const relName = v.rel_name_hi || v.rel_name || '';
 
-            // If voter doesn't have mobile in DB, create entry ready for field number entry
-            const pseudoPhone = v.phone || `VOTER_W${String(vWard).padStart(2,'0')}_${String(v.sr_no||v.s).padStart(4,'0')}`;
+            const pseudoPhone = v.phone || `9198${String(vWard).padStart(2,'0')}${String(v.sr_no||v.s).padStart(4,'0')}`;
             
             this.add({
                 name: name,
@@ -126,11 +130,9 @@ class ContactsManager {
             });
             addedCount++;
         }
-        this.save();
         return addedCount;
     }
 
-    // Parse VCF content
     parseVCF(vcfText) {
         const cards = vcfText.split(/BEGIN:VCARD/i).filter(c => c.trim().length > 0);
         const imported = [];
@@ -161,7 +163,59 @@ class ContactsManager {
         return imported;
     }
 
-    // Generate VCF (vCard 3.0) for Android / iPhone contacts import
+    parseCSV(csvText) {
+        if (!csvText) return [];
+        const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length === 0) return [];
+
+        const imported = [];
+        const headerLine = lines[0].toLowerCase();
+        const isHeader = headerLine.includes('name') || headerLine.includes('phone') || headerLine.includes('naam') || headerLine.includes('mobile');
+        const startIdx = isHeader ? 1 : 0;
+
+        for (let i = startIdx; i < lines.length; i++) {
+            const row = lines[i].split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+            if (row.length === 0) continue;
+
+            let name = '';
+            let phone = '';
+            let ward = 1;
+            let notes = '';
+
+            if (row.length === 1) {
+                phone = row[0].replace(/[^\d]/g, '');
+                name = 'ग्रामवासी';
+            } else if (row.length >= 2) {
+                const p1 = row[0].replace(/[^\d]/g, '');
+                const p2 = row[1].replace(/[^\d]/g, '');
+                if (p1.length >= 10) {
+                    phone = p1;
+                    name = row[1];
+                } else {
+                    name = row[0];
+                    phone = p2;
+                }
+                if (row.length >= 3 && !isNaN(parseInt(row[2]))) {
+                    ward = parseInt(row[2]);
+                }
+                if (row.length >= 4) {
+                    notes = row.slice(3).join(' | ');
+                }
+            }
+
+            if (phone && phone.length >= 10) {
+                imported.push(this.add({
+                    name: name || 'ग्रामवासी',
+                    phone: phone,
+                    ward: ward || 1,
+                    notes: notes,
+                    tags: ['📊 CSV Import']
+                }));
+            }
+        }
+        return imported;
+    }
+
     generateVCF(filter = {}) {
         const list = this.getAll(filter);
         let vcf = '';
@@ -174,30 +228,23 @@ class ContactsManager {
             vcf += `FN:${displayName}\r\n`;
             vcf += `N:${c.name};;;;\r\n`;
             vcf += `TEL;TYPE=CELL:${formattedPhone}\r\n`;
-            if (c.notes) vcf += `NOTE:${c.notes}\r\n`;
-            vcf += `ORG:सिहाली खुर्द चुनाव 2026 (बाबा अभय सिंह)\r\n`;
+            vcf += `NOTE:वार्ड ${c.ward} | ${c.notes || ''} | बाबा अभय सिंह समर्थक\r\n`;
+            vcf += `CATEGORIES:सिहाली खुर्द चुनाव 2026,बाबा अभय सिंह\r\n`;
             vcf += `END:VCARD\r\n`;
         }
 
         return vcf;
     }
 
-    // Generate CSV export
     generateCSV(filter = {}) {
         const list = this.getAll(filter);
-        let csv = 'Name,Phone,Ward,Village,Line,Notes,Tags,UpdatedAt\n';
+        let csv = 'Name,Phone,Ward,Village,Line,Notes,Tags\n';
 
         for (const c of list) {
             const safeName = `"${(c.name || '').replace(/"/g, '""')}"`;
-            const safePhone = `"${c.phone || ''}"`;
-            const safeWard = c.ward || '';
-            const safeVillage = `"${(c.village || '').replace(/"/g, '""')}"`;
-            const safeLine = `"${c.line || ''}"`;
             const safeNotes = `"${(c.notes || '').replace(/"/g, '""')}"`;
             const safeTags = `"${(c.tags || []).join('; ')}"`;
-            const safeDate = c.updatedAt || '';
-
-            csv += `${safeName},${safePhone},${safeWard},${safeVillage},${safeLine},${safeNotes},${safeTags},${safeDate}\n`;
+            csv += `${safeName},+${c.phone},${c.ward || 1},${c.village || 'सिहाली खुर्द'},${c.line || 'sim_636'},${safeNotes},${safeTags}\n`;
         }
 
         return csv;

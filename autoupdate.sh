@@ -22,6 +22,13 @@ if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
     echo "[$TIMESTAMP] 🚀 New GitHub commit detected! ($LOCAL -> $REMOTE)"
     rm -f messages_feed.json
     git reset --hard origin/main
+    # Auto-install fonts into user directory and refresh font cache
+    mkdir -p ~/.fonts ~/.local/share/fonts
+    cp media/*.ttf ~/.fonts/ 2>/dev/null || true
+    cp media/*.ttf ~/.local/share/fonts/ 2>/dev/null || true
+    fc-cache -f ~/.fonts 2>/dev/null || true
+    # Clear card cache so corrupted/tofu cards are wiped
+    rm -rf parchi_cache/*
     pm2 restart all
     echo "[$TIMESTAMP] ✅ Bot updated and PM2 reloaded successfully!"
 fi
