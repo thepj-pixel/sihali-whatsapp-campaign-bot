@@ -1440,7 +1440,33 @@ app.post('/api/quick-action', async (req, res) => {
         let replyText = '';
         let mediaType = null;
 
-        if (action === 'demo_poster') {
+        if (action === 'contact_card') {
+            const vcard = [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                'FN:बाबा अभय सिंह (मोटी आंगली वाले)',
+                'ORG:ग्राम पंचायत सिहाली खुर्द जनसेवा कार्यालय',
+                'TITLE:सरपंच पद प्रत्याशी 2026',
+                'TEL;type=Primary,pref;type=VOICE;waid=916367810227:+91 63678 10227',
+                'TEL;type=Campaign Office;type=VOICE;waid=918764870431:+91 87648 70431',
+                'TEL;type=Helpline;type=VOICE;waid=15878415712:+1 (587) 841-5712',
+                'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत सेवा केंद्र। 24/7 हेल्पलाइन व मतदाता पर्ची।',
+                'END:VCARD'
+            ].join('\n');
+
+            await sock.sendMessage(jid, {
+                contacts: {
+                    displayName: 'बाबा अभय सिंह (मोटी आंगली वाले)',
+                    contacts: [{ vcard }]
+                }
+            });
+
+            const cardMsg = 'राम राम जी! 🙏 ये बाबा अभय सिंह सेवा केंद्र का संपर्क कार्ड है। नीचे "Add to Contacts" (संपर्क में जोड़ें) पर क्लिक करके सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची और जरूरी अपडेट आपको सीधे मिलते रहें। 🚩';
+            await sock.sendMessage(jid, { text: cardMsg });
+
+            userMemory.recordMessage(cleanedPhone, 'bot', '📇 [Contact Card Sent]');
+            return res.json({ success: true, message: 'Contact card sent successfully!' });
+        } else if (action === 'demo_poster') {
             const poster = mediaCatalog.getDemoPoster();
             replyText = poster.caption;
             if (poster.localPath && fs.existsSync(poster.localPath)) {
@@ -2523,6 +2549,7 @@ app.get('/', (req, res) => {
 
                             <!-- Quick Action Bar -->
                             <div class="wa-quick-actions" id="wa-quick-actions" style="display: none;">
+                                <button class="wa-action-btn" style="background: #0284c7; color: white; border-color: #0369a1; font-weight: 700;" onclick="sendQuickAction('contact_card')">📇 संपर्क कार्ड (Anti-Ban)</button>
                                 <button class="wa-action-btn" onclick="sendQuickAction('ramram')">🙏 राम राम</button>
                                 <button class="wa-action-btn" onclick="sendQuickAction('demo_poster')">📸 डेमो पोस्टर भेजें</button>
                                 <button class="wa-action-btn" onclick="sendQuickAction('video')">📹 3D वीडियो रील</button>
