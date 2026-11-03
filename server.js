@@ -711,6 +711,65 @@ async function startSession(sessionObj) {
                     } else if (isVoterSlipIntent) {
                         let targetVoter = null;
 
+                        // Check if voter is actively confirming a pending single-voter father check
+                        const isYesConfirmation = lower === 'ha' || lower === 'haan' || lower === 'हाँ' || lower === 'yes' || lower === 'sahi h' || lower === 'sahi hai' || lower === 'yahi h' || lower === 'yahi he' || lower === 'shi h' || lower === 'ji' || lower === 'theek h' || lower === 'thik h';
+
+                        if (user && user.pendingParchiCandidate && isYesConfirmation) {
+                            targetVoter = user.pendingParchiCandidate;
+                            delete user.pendingParchiCandidate;
+                            user.ward = targetVoter.ward;
+                            user.lastFoundVoter = targetVoter;
+                            userMemory.save();
+
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter) +
+                                `\n\n👨‍👩‍👧 *क्या आपको अपने परिवार के अन्य सदस्यों (माताजी, पिताजी, भाई, भाभी) की भी वोटर पर्ची चाहिए भैया? बस उनका नाम लिखकर भेज दीजिए!* 🚩\n\n*(अगर किसी बात में थोड़ी बहुत गलती हो जाए तो छोटा मानकर माफ करना भैया... बाकी हमारी नीयत में कोई खोट नहीं है, हम तो बस पूरे गाँव की सेवा में हाजिर हैं! 🙏)*`;
+
+                            let cardBuffer = null;
+                            try {
+                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
+                            } catch (e) {
+                                console.error(`[${sessionObj.id}] Error generating voter card:`, e.message);
+                            }
+
+                            if (cardBuffer) {
+                                await sendSafeMessage(sock, replyJid, {
+                                    image: cardBuffer,
+                                    caption: replyText
+                                });
+                                mediaTypeSent = 'voterSlipCard';
+                                console.log(`[${sessionObj.id}] ✅ Delivered confirmed voter slip JPG card to ${senderPhone} (${targetVoter.name_hi})`);
+                            } else {
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                mediaTypeSent = 'voterSlip';
+                            }
+                            userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
+                            logMessage({
+                                session: sessionObj.name,
+                                phone: senderPhone,
+                                incoming: body,
+                                reply: replyText,
+                                status: 'CONFIRMED_PARCHI_DELIVERED'
+                            });
+                            continue;
+                        }
+
+                        // Check if voter asked for parchi without any name or EPIC
+                        const cleanParchiQuery = effectiveSearchText.replace(/parchi|voter|slip|card|id|bhej|do|bhejo|nikalo|mera|meri|mujhe|पर्ची|कार्ड|आईडी|भेज|दो|भेजो|निकालो|मेरी|मेरा|मुझे/gi, '').trim();
+                        if (!cleanParchiQuery && (hasExplicitParchiKeyword || hasParchiPhrase)) {
+                            replyText = `राम राम भाई जी! 🙏\nअधिकृत डिजिटल मतदाता पर्ची देखने के लिए कृपया अपना *शुभ नाम* (या पहचान पत्र / EPIC नंबर) लिखकर भेजें! 🚩\n\n*(उदा: 'प्रिंस यादव' या 'IED1610633')*`;
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            mediaTypeSent = 'parchiNamePrompt';
+                            userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
+                            logMessage({
+                                session: sessionObj.name,
+                                phone: senderPhone,
+                                incoming: body,
+                                reply: replyText,
+                                status: 'ASKED_VOTER_NAME'
+                            });
+                            continue;
+                        }
+
                         // Check if voter is answering an active disambiguation prompt (e.g. typing "1", "2", or father's name)
                         if (user && user.disambiguationMatches && user.disambiguationMatches.length > 0) {
                             const choiceNum = parseInt(body.trim());
@@ -758,6 +817,38 @@ async function startSession(sessionObj) {
                             }
                         }
 
+                        // If single candidate found: ask father confirmation first (and pre-generate card in background)
+                        if (!targetVoter && matches && matches.length === 1) {
+                            targetVoter = matches[0];
+                            const relNameLow = (targetVoter.rel_name_hi || '').toLowerCase();
+                            const alreadySpecifiedFather = lower.includes(relNameLow) || (targetVoter.rel_name_en && lower.includes(targetVoter.rel_name_en.toLowerCase()));
+
+                            if (!alreadySpecifiedFather) {
+                                user.lastSearchedQuery = effectiveSearchText;
+                                user.lastSearchedName = targetVoter.name;
+                                user.pendingParchiCandidate = targetVoter;
+                                userMemory.save();
+
+                                // Pre-generate card in background so it is ready instantaneously
+                                voterCardGen.generateVoterCard(targetVoter).catch(() => {});
+
+                                const relLabel = targetVoter.rel_type === 'H' ? 'पति' : 'पिताजी';
+                                replyText = `राम राम भाई जी! 🙏 वोटर लिस्ट में *${targetVoter.name_hi}* नाम मिल गया है: 📋\n\nक्या आपके ${relLabel} का नाम *${targetVoter.rel_name_hi}* (वार्ड नं. ${targetVoter.ward}, मकान नं. ${targetVoter.house_no}) है?\n\nकृपया *'हाँ'* या *'सही है'* लिखकर बताएं, ताकि मैं आपकी अधिकृत डिजिटल पर्ची तुरंत भेज सकूँ! 😊🚩\n*(अगर कोई अन्य नाम है तो सही नाम लिखकर भेजें)*`;
+
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                mediaTypeSent = 'parchiConfirmation';
+                                userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
+                                logMessage({
+                                    session: sessionObj.name,
+                                    phone: senderPhone,
+                                    incoming: body,
+                                    reply: replyText,
+                                    status: 'FATHER_CONFIRMATION_ASKED'
+                                });
+                                continue;
+                            }
+                        }
+
                         if (matches && matches.length > 0) {
                             targetVoter = targetVoter || matches[0];
                             user.lastSearchedQuery = effectiveSearchText;
@@ -767,7 +858,8 @@ async function startSession(sessionObj) {
                             if (!user.name) user.name = targetVoter.name;
                             userMemory.save();
 
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter);
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter) +
+                                `\n\n👨‍👩‍👧 *क्या आपको अपने परिवार के अन्य सदस्यों की भी वोटर पर्ची चाहिए भैया? बस उनका नाम लिखकर भेज दीजिए!* 🚩\n\n*(अगर किसी बात में थोड़ी बहुत गलती हो जाए तो छोटा मानकर माफ करना भैया... बाकी हमारी नीयत में कोई खोट नहीं है! 🙏)*`;
 
                             // Generate Official JPG Voter Card with Baba's Photo
                             let cardBuffer = null;
@@ -902,53 +994,85 @@ app.post('/api/send-message', async (req, res) => {
         const posterPath = path.join(__dirname, 'media', 'poster.jpg');
         const videoPath = path.join(__dirname, 'media', 'campaign_reel.mp4');
 
-        if (template === 'welcome') {
-            const greetingName = name ? ` ${name} जी` : ' भाई जी';
-            messageText = `राम राम${greetingName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र में आपको जोड़ लिया गया है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
-            await sock.sendMessage(jid, { text: messageText });
-            mediaType = 'welcome';
-        } else if (template === 'poster') {
-            messageText = `राम राम${name ? ' ' + name + ' जी' : ' भाई जी'}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) - ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!`;
+        const voterDisplayName = name ? `${name} जी` : 'भाई जी';
+        const { mediaOption, voterId } = req.body;
+
+        if (template === 'permission_casual') {
+            messageText = `राम राम ${voterDisplayName}! 🙏 सब कुशल मंगल?\n\nमैं बाबा अभय सिंह सेवा केंद्र (ग्राम पंचायत सिहाली खुर्द) से हूँ।\nक्या हम आपको पंचायत आम चुनाव 2026 के जरूरी अपडेट, विकास कार्यों व जरूरी सूचनाओं की जानकारी WhatsApp पर भेज सकते हैं? 😊🚩`;
+        } else if (template === 'offer_parchi') {
+            messageText = `राम राम ${voterDisplayName}! 🚩\n\nग्राम पंचायत सिहाली खुर्द का चुनाव सोमवार, 16 नवम्बर 2026 को है।\nक्या मैं आपकी और आपके पूरे परिवार की अधिकृत डिजिटल वोटर पर्ची (मतदान केंद्र, कमरा नं, भाग संख्या) निकाल कर भेज दूँ भैया? बस हाँ लिख कर भेजें! 🗳️`;
+        } else if (template === 'ground_feedback') {
+            messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह सेवा केंद्र में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
+        } else if (template === 'direct_appeal') {
+            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को मतपत्र के क्रम सं. 1 पर बाबा अभय सिंह (मोटी आंगली वाले बाबा) के पक्ष में स्वस्तिक (卐) पर मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nकाम बोला है, काम बोलेगा! ✨`;
+        } else if (template === 'welcome') {
+            messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) डिजिटल सेवा केंद्र में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
+        } else if (template === 'slogan') {
+            const slogan = userMemory.getNextSlogan(cleanedPhone);
+            messageText = `राम राम भाई जी! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
+        } else {
+            messageText = customText || `राम राम ${voterDisplayName}! 🙏`;
+        }
+
+        // Determine media to send (via mediaOption radio or legacy template)
+        const chosenMedia = mediaOption || (template === 'poster' ? 'poster' : (template === 'video' ? 'video' : (template === 'custom_poster' ? 'custom_poster' : 'none')));
+
+        if (chosenMedia === 'slip') {
+            // Find voter and generate real JPG card
+            let targetVoter = null;
+            if (voterId) {
+                targetVoter = voterEngine.getVoterById(voterId);
+            }
+            if (!targetVoter && name) {
+                const s = voterEngine.searchVoters(name, 1);
+                if (s && s.length > 0) targetVoter = s[0];
+            }
+            if (targetVoter) {
+                const cardBuf = await voterCardGen.generateVoterCard(targetVoter);
+                const caption = messageText + '\n\n' + voterEngine.formatShortSlipResponse(targetVoter);
+                await sock.sendMessage(jid, { image: cardBuf, caption: caption });
+                mediaType = 'voterSlipCard';
+            } else {
+                await sock.sendMessage(jid, { text: messageText });
+            }
+        } else if (chosenMedia === 'poster') {
             if (fs.existsSync(posterPath)) {
-                await sock.sendMessage(jid, {
-                    image: fs.readFileSync(posterPath),
-                    caption: messageText
-                });
+                await sock.sendMessage(jid, { image: fs.readFileSync(posterPath), caption: messageText });
                 mediaType = 'poster';
             } else {
                 await sock.sendMessage(jid, { text: messageText });
             }
-        } else if (template === 'custom_poster') {
-            // Generate on the fly poster with voter name
+        } else if (chosenMedia === 'custom_poster') {
             const buf = await posterEngine.generatePoster({ name: name || 'ग्रामवासी', aspect: '9:16' });
-            messageText = `राम राम${name ? ' ' + name + ' जी' : ' भाई जी'}! 🙏\nआपके नाम का सिहाली खुर्द 2026 स्टेटस पोस्टर तैयार है।\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) 🚩`;
-            await sock.sendMessage(jid, {
-                image: buf,
-                caption: messageText
-            });
+            await sock.sendMessage(jid, { image: buf, caption: messageText });
             mediaType = 'customPoster';
-        } else if (template === 'video') {
-            messageText = `सिहाली खुर्द के विकास का संकल्प - बाबा अभय सिंह 🚩📹\n16 नवम्बर 2026 को भारी मतों से विजयी बनाएं!`;
+        } else if (chosenMedia === 'video') {
             if (fs.existsSync(videoPath)) {
-                await sock.sendMessage(jid, {
-                    video: (aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL) ? { url: aiService.CONFIG?.media_urls?.campaign_reel_video || process.env.GITHUB_VIDEO_URL } : fs.readFileSync(videoPath),
-                    caption: messageText
-                });
+                await sock.sendMessage(jid, { video: fs.readFileSync(videoPath), caption: messageText });
                 mediaType = 'video';
             } else {
                 await sock.sendMessage(jid, { text: messageText });
             }
-        } else if (template === 'slogan') {
-            const slogan = userMemory.getNextSlogan(cleanedPhone);
-            messageText = `राम राम भाई जी! 🙏\n\n"${slogan}"\n\n16 नवम्बर 2026 — बाबा अभय सिंह 🚩`;
-            await sock.sendMessage(jid, { text: messageText });
         } else {
-            messageText = customText || 'राम राम भाई जी! 🙏';
             await sock.sendMessage(jid, { text: messageText });
         }
 
-        userMemory.getUser(cleanedPhone, name);
+        const savedUser = userMemory.getUser(cleanedPhone, name);
+        if (req.body.linkedWard) savedUser.ward = parseInt(req.body.linkedWard);
+        if (req.body.linkedEpic) savedUser.epic = req.body.linkedEpic;
         userMemory.recordMessage(cleanedPhone, 'bot', messageText, mediaType, sessionName);
+        userMemory.save();
+
+        try {
+            contactsManager.add({
+                name: name || 'ग्रामवासी',
+                phone: cleanedPhone,
+                ward: req.body.linkedWard || 1,
+                line: lineId || 'sim_636',
+                notes: req.body.linkedEpic ? `EPIC: ${req.body.linkedEpic} | Field Connect` : 'Field Connect',
+                tags: ['🤝 फील्ड संपर्क', req.body.linkedWard ? `वार्ड ${req.body.linkedWard}` : 'वार्ड 1']
+            });
+        } catch(e) {}
 
         logMessage({
             session: sessionName,
@@ -1858,15 +1982,20 @@ app.get('/', (req, res) => {
                     <form id="quick-add-form" onsubmit="sendInstantMessage(event)">
                         <div class="quick-grid">
                             <div class="form-group">
-                                <label>Voter Mobile Number *</label>
-                                <input type="tel" id="v-phone" class="input-field" placeholder="e.g. 9829xxxxxx or 6367810227" required autocomplete="off">
+                                <label>📱 Voter Mobile Number *</label>
+                                <input type="tel" id="v-phone" class="input-field" placeholder="उदा: 9829xxxxxx या 6367810227" required autocomplete="off">
+                            </div>
+                            <div class="form-group" style="position: relative;">
+                                <label>🔍 Search & Link Voter (List में नाम)</label>
+                                <input type="text" id="v-name" class="input-field" placeholder="नाम या EPIC टाइप करें..." autocomplete="off" oninput="onVoterSearchInput(this.value)">
+                                <div id="voter-search-dropdown" style="position: absolute; left: 0; right: 0; top: 100%; z-index: 999; background: white; border: 1px solid #cbd5e1; border-radius: 8px; max-height: 220px; overflow-y: auto; display: none; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.15);"></div>
+                                <div id="voter-linked-badge" style="display: none; margin-top: 6px; padding: 6px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 12px; color: #065f46; font-weight: 700;"></div>
+                                <input type="hidden" id="v-voter-id">
+                                <input type="hidden" id="v-linked-ward">
+                                <input type="hidden" id="v-linked-epic">
                             </div>
                             <div class="form-group">
-                                <label>Voter Name (Optional)</label>
-                                <input type="text" id="v-name" class="input-field" placeholder="e.g. Ramesh Sharma" autocomplete="off">
-                            </div>
-                            <div class="form-group">
-                                <label>Sending WhatsApp Line</label>
+                                <label>📡 WhatsApp Sending Line</label>
                                 <select id="v-line" class="input-field">
                                     <option value="sim_636">Primary Line (6367810227)</option>
                                     <option value="baba_aux">Baba Aux Line (Secondary)</option>
@@ -1874,23 +2003,42 @@ app.get('/', (req, res) => {
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>Action Template</label>
-                                <select id="v-template" class="input-field" onchange="toggleCustomText(this.value)">
-                                    <option value="welcome">Instant Connect ("Aapko jod liya h...")</option>
-                                    <option value="custom_poster">Personalized Name Poster 🎨</option>
-                                    <option value="poster">Official Campaign Poster 📸</option>
-                                    <option value="video">3D Campaign Video Reel 📹</option>
-                                    <option value="slogan">Rotating Campaign Slogan 🚩</option>
-                                    <option value="custom">Custom Message...</option>
+                                <label>💬 Action Template (Soft & Casual)</label>
+                                <select id="v-template" class="input-field" onchange="onTemplateChange(this.value)">
+                                    <option value="permission_casual">🤝 1. सहमति व हाल-चाल (Soft Permission - Non-spam)</option>
+                                    <option value="offer_parchi">🎫 2. वोटर पर्ची की पेशकश (Voter Slip Offer)</option>
+                                    <option value="ground_feedback">📢 3. वार्ड समस्या व चर्चा (Ward Feedback)</option>
+                                    <option value="direct_appeal">🗳️ 4. क्रम सं. 1 स्वस्तिक सीधा संदेश (Direct 16 Nov Appeal)</option>
+                                    <option value="welcome">👋 5. त्वरित स्वागत ("Aapko jod liya h...")</option>
+                                    <option value="custom">✍️ 6. कस्टम संदेश (Custom message...)</option>
                                 </select>
                             </div>
                             <div class="form-group" style="grid-column: 1 / -1; display: none;" id="custom-text-group">
-                                <label>Custom WhatsApp Message</label>
-                                <input type="text" id="v-custom-text" class="input-field" placeholder="Type custom message to send...">
+                                <label>कस्टम संदेश लिखें (Custom Message)</label>
+                                <input type="text" id="v-custom-text" class="input-field" placeholder="संदेश टाइप करें...">
+                            </div>
+
+                            <!-- Media Attachment Radios -->
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label style="margin-bottom: 6px; display: block; font-size: 12px; font-weight: 700; color: #cbd5e1;">📎 मीडिया अटैचमेंट (Media Option):</label>
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                    <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
+                                        <input type="radio" name="mediaOption" value="none" checked> 💬 केवल टेक्स्ट (Text Only)
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
+                                        <input type="radio" name="mediaOption" value="slip" id="media-opt-slip"> 🎫 वोटर पर्ची JPG कार्ड
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
+                                        <input type="radio" name="mediaOption" value="poster"> 📸 चुनाव प्रचार पोस्टर
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
+                                        <input type="radio" name="mediaOption" value="video"> 📹 3D वीडियो रील
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
-                        <button type="submit" class="btn-add" id="btn-submit">
+                        <button type="submit" class="btn-add" id="btn-submit" style="margin-top: 10px; font-size: 15px; font-weight: 800; padding: 12px;">
                             📲 Jod Lo & Send WhatsApp Instantly
                         </button>
                     </form>
@@ -1898,13 +2046,13 @@ app.get('/', (req, res) => {
 
                 <!-- Tabbed Navigation -->
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="switchTab('feed', this)">💬 Live Voter Chat</button>
-                    <button class="tab-btn" onclick="switchTab('diagnostics', this)">🛠️ Diagnostics & Self-Test Log</button>
-                    <button class="tab-btn" onclick="switchTab('studio', this)">🎨 Live Poster Studio</button>
-                    <button class="tab-btn" onclick="switchTab('playground', this)">🤖 AI Playground & Lab</button>
-                    <button class="tab-btn" onclick="switchTab('voters', this)">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
-                    <button class="tab-btn" onclick="switchTab('contacts', this)">📇 Voter Contacts & VCF/CSV (<span id="contacts-count">0</span>)</button>
-                    <button class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
+                    <button id="tab-btn-feed" class="tab-btn active" onclick="switchTab('feed', this)">💬 Live Voter Chat</button>
+                    <button id="tab-btn-diagnostics" class="tab-btn" onclick="switchTab('diagnostics', this)">🛠️ Diagnostics & Self-Test Log</button>
+                    <button id="tab-btn-studio" class="tab-btn" onclick="switchTab('studio', this)">🎨 Live Poster Studio</button>
+                    <button id="tab-btn-playground" class="tab-btn" onclick="switchTab('playground', this)">🤖 AI Playground & Lab</button>
+                    <button id="tab-btn-voters" class="tab-btn" onclick="switchTab('voters', this)">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
+                    <button id="tab-btn-contacts" class="tab-btn" onclick="switchTab('contacts', this)">📇 Voter Contacts & VCF/CSV (<span id="contacts-count">0</span>)</button>
+                    <button id="tab-btn-media" class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -2574,29 +2722,113 @@ app.get('/', (req, res) => {
                     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
                     const target = document.getElementById('tab-' + tabId);
                     if (target) target.style.display = 'block';
-                    if (btn && btn.classList) {
-                        btn.classList.add('active');
-                    } else if (window.event) {
-                        const b = (window.event.currentTarget && window.event.currentTarget.classList) ? window.event.currentTarget : window.event.target.closest('.tab-btn');
-                        if (b) b.classList.add('active');
-                    }
+                    const activeBtn = btn || document.getElementById('tab-btn-' + tabId);
+                    if (activeBtn) activeBtn.classList.add('active');
                     if (tabId === 'voters') loadVoters();
                     if (tabId === 'contacts') loadContacts();
                     if (tabId === 'playground' && typeof loadCampaignAgendaUI === 'function') loadCampaignAgendaUI();
                 }
 
                 function toggleCustomText(val) {
-                    document.getElementById('custom-text-group').style.display = val === 'custom' ? 'block' : 'none';
+                    const grp = document.getElementById('custom-text-group');
+                    if (grp) grp.style.display = val === 'custom' ? 'block' : 'none';
                 }
+
+                let searchDebounceTimer = null;
+                function onVoterSearchInput(query) {
+                    clearTimeout(searchDebounceTimer);
+                    const dropdown = document.getElementById('voter-search-dropdown');
+                    const q = (query || '').trim();
+                    if (!q || q.length < 2) {
+                        dropdown.style.display = 'none';
+                        dropdown.innerHTML = '';
+                        return;
+                    }
+                    searchDebounceTimer = setTimeout(async () => {
+                        try {
+                            const res = await fetch('/api/search-voters?q=' + encodeURIComponent(q));
+                            const data = await res.json();
+                            if (!data.results || data.results.length === 0) {
+                                dropdown.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #64748b; text-align: center;">कोई मतदाता नहीं मिला</div>';
+                                dropdown.style.display = 'block';
+                                return;
+                            }
+                            let html = '';
+                            data.results.slice(0, 8).forEach(v => {
+                                const rel = v.rel_type === 'H' ? 'पति' : 'पिता';
+                                const vJson = encodeURIComponent(JSON.stringify(v));
+                                html += '<div onclick="selectVoterForField(\' + vJson + \')" style="padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; text-align: left; background: white;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'white\'">' +
+                                    '<div style="font-weight: 700; color: #0f172a; font-size: 13px;">' + (v.name_hi || v.name) + ' (' + (v.name_en || '') + ')</div>' +
+                                    '<div style="font-size: 11px; color: #64748b;">' + rel + ': ' + (v.rel_name_hi || v.rel_name || '--') + ' | वार्ड: ' + (v.ward || '--') + ' | क्रम #' + (v.sr_no || '--') + ' | EPIC: ' + (v.epic || '--') + '</div>' +
+                                '</div>';
+                            });
+                            dropdown.innerHTML = html;
+                            dropdown.style.display = 'block';
+                        } catch (e) {
+                            console.error('Voter search failed:', e);
+                        }
+                    }, 250);
+                }
+
+                function selectVoterForField(vJsonEncoded) {
+                    const v = JSON.parse(decodeURIComponent(vJsonEncoded));
+                    document.getElementById('v-voter-id').value = v.id || v.sr_no;
+                    document.getElementById('v-name').value = v.name_hi || v.name;
+                    document.getElementById('v-linked-ward').value = v.ward || '';
+                    document.getElementById('v-linked-epic').value = v.epic || '';
+                    document.getElementById('voter-search-dropdown').style.display = 'none';
+
+                    const badge = document.getElementById('voter-linked-badge');
+                    const rel = v.rel_type === 'H' ? 'पति' : 'पिता';
+                    badge.innerHTML = '✅ <strong>' + (v.name_hi || v.name) + '</strong> (' + rel + ': ' + (v.rel_name_hi || '--') + ', वार्ड ' + v.ward + ', #' + v.sr_no + ', EPIC: ' + v.epic + ') <button type="button" onclick="clearLinkedVoter()" style="background: none; border: none; color: #dc2626; cursor: pointer; margin-left: 8px; font-weight: 700;">✕ Unlink</button>';
+                    badge.style.display = 'block';
+
+                    const slipRadio = document.getElementById('media-opt-slip');
+                    if (slipRadio) slipRadio.checked = true;
+                }
+
+                function clearLinkedVoter() {
+                    document.getElementById('v-voter-id').value = '';
+                    document.getElementById('v-linked-ward').value = '';
+                    document.getElementById('v-linked-epic').value = '';
+                    const badge = document.getElementById('voter-linked-badge');
+                    if (badge) {
+                        badge.style.display = 'none';
+                        badge.innerHTML = '';
+                    }
+                }
+
+                function onTemplateChange(val) {
+                    toggleCustomText(val);
+                    if (val === 'offer_parchi') {
+                        const slipRadio = document.getElementById('media-opt-slip');
+                        if (slipRadio) slipRadio.checked = true;
+                    }
+                }
+
+                document.addEventListener('click', function(e) {
+                    const dropdown = document.getElementById('voter-search-dropdown');
+                    const searchInput = document.getElementById('v-name');
+                    if (dropdown && !dropdown.contains(e.target) && e.target !== searchInput) {
+                        dropdown.style.display = 'none';
+                    }
+                });
 
                 // Send Instant WhatsApp Message from Field Mode Form
                 async function sendInstantMessage(e) {
                     e.preventDefault();
-                    const phone = document.getElementById('v-phone').value;
-                    const name = document.getElementById('v-name').value;
+                    const phone = document.getElementById('v-phone').value.trim();
+                    const name = document.getElementById('v-name').value.trim();
                     const lineId = document.getElementById('v-line').value;
                     const template = document.getElementById('v-template').value;
                     const customText = document.getElementById('v-custom-text').value;
+                    const voterId = document.getElementById('v-voter-id').value;
+                    const linkedWard = document.getElementById('v-linked-ward').value;
+                    const linkedEpic = document.getElementById('v-linked-epic').value;
+
+                    const mediaOptEl = document.querySelector('input[name="mediaOption"]:checked');
+                    const mediaOption = mediaOptEl ? mediaOptEl.value : 'none';
+
                     const statusEl = document.getElementById('send-status');
                     const btn = document.getElementById('btn-submit');
 
@@ -2607,7 +2839,7 @@ app.get('/', (req, res) => {
                         const res = await fetch('/api/send-message', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone, name, template, customText, lineId })
+                            body: JSON.stringify({ phone, name, template, customText, lineId, voterId, linkedWard, linkedEpic, mediaOption })
                         });
                         const data = await res.json();
 
@@ -2615,10 +2847,11 @@ app.get('/', (req, res) => {
                             statusEl.style.display = 'inline-block';
                             statusEl.style.background = '#dcfce7';
                             statusEl.style.color = '#15803d';
-                            statusEl.innerText = '✅ Buzz! Sent to +' + data.phone + ' via ' + data.line;
+                            statusEl.innerText = '✅ Sent to +' + data.phone + ' via ' + data.line + (data.mediaSent ? ' (' + data.mediaSent + ')' : '');
                             document.getElementById('v-phone').value = '';
                             document.getElementById('v-name').value = '';
                             document.getElementById('v-custom-text').value = '';
+                            clearLinkedVoter();
                             setTimeout(() => { statusEl.style.display = 'none'; }, 6000);
                             updateLiveFeed();
                         } else {
