@@ -970,9 +970,24 @@ async function startSession(sessionObj) {
                                 console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip text upon follow-up to ${senderPhone}`);
                             }
                         } else {
-                            replyText = voterEngine.formatFallbackResponse();
-                            await sendSafeMessage(sock, replyJid, { text: replyText });
-                            console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
+                            if (hasExplicitParchiKeyword || hasEpicPattern || hasParchiPhrase || lower.includes("mera naam") || lower.includes("parchi")) {
+                                replyText = voterEngine.formatFallbackResponse();
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                                console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
+                            } else {
+                                // Casual chat / AI query! Fall through to conversational AI & Fast Local Engine
+                                console.log(`[${sessionObj.id}] 💬 Message "${effectiveSearchText}" had no parchi match and no explicit parchi keyword. Falling through to conversational AI.`);
+                                const history = userMemory.getUserHistory(senderPhone).slice(0, -1).map(h => ({
+                                    role: h.role === "bot" ? "assistant" : "user",
+                                    content: h.text
+                                }));
+
+                                replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone);
+                                if (!replyText || replyText.trim() === "") {
+                                    replyText = aiService.getFastLocalAnswer(body, senderPhone);
+                                }
+                                await sendSafeMessage(sock, replyJid, { text: replyText });
+                            }
                         }
                     } else if (body.toLowerCase().trim() === 'prince' || body.toLowerCase().trim() === 'admin') {
                         replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;

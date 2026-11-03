@@ -267,7 +267,10 @@ const CONVERSATIONAL_INQUIRY_WORDS = [
     'jeet', 'जीत', 'jitenge', 'jitega', 'jeetega', 'jitwayenge', 'support', 'harega', 'haroge', 'haaroge', 'haarenge',
     'school', 'स्कूल', 'topper', 'टॉपर', 'padhai', 'shiksha', 'शिक्षा',
     'apne', 'apna', 'hamare', 'humara', 'hamaare', 'hume', 'gaav', 'gaon', 'गाँव', 'गांव',
-    'mahool', 'mahol', 'hawa', 'takkar', 'kuch', 'tumne', 'tum', 'sab'
+    'mahool', 'mahol', 'hawa', 'takkar', 'kuch', 'tumne', 'tum', 'sab',
+    'theek', 'thik', 'badhiya', 'shukriya', 'dhanyawad', 'shubh', 'ratri', 'namaste', 'namaskar', 'pranam',
+    'good', 'morning', 'evening', 'night', 'student', 'college', 'fauj', 'army', 'police', 'kisan',
+    'chai', 'aao', 'milna', 'darwaze', 'khule', 'zaroor', 'bilkul', 'soch', 'batayenge'
 ];
 
 function isGreeting(text) {
@@ -303,27 +306,45 @@ function isLikelyNameOrVoterQuery(text) {
     if (isConversationalInquiry(text)) return false;
     
     const lower = text.toLowerCase().trim();
+
+    // Check EPIC pattern
+    if (/\b([A-Za-z]{3}\d{7}|RJ\/\d+\/\d+\/\d+|[Ww]\d{1,2}-\d{1,4}|IED\d+|CYN\d+)\b/i.test(text)) {
+        return true;
+    }
     
     // Explicit keywords
     if (
-        lower.includes('naam') || lower.includes('name') || lower.includes('नाम') ||
         lower.includes('parchi') || lower.includes('पर्ची') || lower.includes('voter') ||
-        lower.includes('वोटर') || lower.includes('ward') || lower.includes('वार्ड') ||
-        lower.includes('epic') || lower.includes('list') || lower.includes('लिस्ट') ||
-        lower.includes('slip')
+        lower.includes('वोटर') || lower.includes('voter slip') || lower.includes('voter card') ||
+        lower.includes('voter id') || lower.includes('पहचान पत्र') || lower.includes('epic') ||
+        lower.includes('list me naam') || lower.includes('naam list') || lower.includes('slip')
     ) {
+        return true;
+    }
+
+    // Explicit name phrasing (e.g. "mera naam Ramesh", "naam: Suresh")
+    if (/(?:mera\s*naam|naam\s*mera|naam\s*hai|naam\s*:|main\s*.*bol\s*raha)/i.test(lower)) {
         return true;
     }
     
     // Check tokens after stripping fillers
-    const nonFillerTokens = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length >= 2 && !FILLERS_SET.has(w));
-    if (nonFillerTokens.length >= 1 && nonFillerTokens.length <= 4) {
-        return true;
+    const tokens = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length >= 2 && !FILLERS_SET.has(w));
+    if (tokens.length >= 2 && tokens.length <= 4) {
+        const hasSurname = tokens.some(t => SURNAMES.has(t) || SURNAMES.has(TRANSLIT_MAP[t] || t));
+        if (hasSurname) {
+            return true;
+        }
     }
-    
-    const allWords = lower.split(/[^a-zA-Z\u0900-\u097F]+/).filter(w => w.length > 0);
-    if (allWords.length >= 1 && allWords.length <= 4) {
-        return true;
+
+    // Direct match against known voter full name in database
+    if (tokens.length >= 1 && tokens.length <= 3) {
+        const joined = tokens.join(' ');
+        const directMatch = VOTERS.some(v => 
+            (v.name_en && v.name_en.toLowerCase() === joined) ||
+            (v.name_hi && v.name_hi === joined) ||
+            (v.name && v.name.toLowerCase() === joined)
+        );
+        if (directMatch) return true;
     }
     
     return false;
@@ -334,11 +355,18 @@ const SURNAMES = new Set(['yadav', 'यादव', 'singh', 'सिंह', 'kum
 const FILLERS_SET = new Set([
     'are', 'aree', 'arey', 'dhund', 'dhundo', 'na', 'naa', 'h', 'hai', 'he', 'hie', 'hi', 'ye', 'toh',
     'papa', 'pitaji', 'pita', 'ka', 'ki', 'ke', 'ko', 'naam', 'name', 'syad', 'shayad', 'se', 'cha',
-    'raha', 'rahi', 'hu', 'hoon', 'bhai', 'apna', 'apni', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere',
+    'raha', 'rahi', 'rahe', 'hu', 'hoon', 'bhai', 'apna', 'apni', 'apne', 'aur', 'tum', 'lo', 'khud', 'mera', 'meri', 'mere',
     'check', 'karo', 'kardo', 'batao', 'bataya', 'batado', 'bata', 'bol', 'bola', 'bolna', 'parchi', 'voter',
     'slip', 'card', 'epic', 'plz', 'please', 'sir', 'ji', 'bhaiya', 'ward', 'w', 'bhej', 'bhejo', 'do',
     'dedo', 'de', 'dekhna', 'acha', 'accha', 'achha', 'm', 'main', 'baba', 'abhay', 'abhey', 'details', 'sirf',
-    'bas', 'paas'
+    'bas', 'paas', 'me', 'mein', 'pe', 'par', 'bhi', 'kya', 'kyu', 'kyun', 'kab', 'kaha', 'kahan', 'kaise',
+    'kaisa', 'kasa', 'kese', 'konsa', 'kon', 'kaun', 'tha', 'the', 'thi', 'gaya', 'gaye', 'gayi',
+    'kar', 'kare', 'karega', 'karenge', 'chal', 'chalo', 'theek', 'thik', 'badhiya', 'shukriya', 'dhanyawad',
+    'shubh', 'ratri', 'good', 'morning', 'evening', 'night', 'student', 'college', 'school', 'fauj', 'army',
+    'police', 'kisan', 'teacher', 'padhai', 'khel', 'cricket', 'gym', 'zaroor', 'bilkul', 'didi', 'bhabhi',
+    'yaar', 'yr', 'saath', 'denge', 'dena', 'mat', 'nahi', 'nhi', 'ha', 'haan', 'yes', 'no', 'namaste',
+    'namaskar', 'pranam', 'radhe', 'shyam', 'ram', 'jai', 'mahool', 'mahol', 'samajh', 'gaye', 'gaya',
+    'chalte', 'ruk', 'ruko', 'suno', 'sun'
 ]);
 
 function searchVoters(rawInput, limit = 5, fallbackWard = null) {
@@ -399,7 +427,7 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
             const nameEnWords = nameEn.split(/\s+/);
             const isExactWordHi = nameHiWords.includes(hindiT);
             const isExactWordEn = nameEnWords.includes(rawT);
-            const matchedInOwnName = isExactWordHi || isExactWordEn || nameHi.includes(hindiT) || nameHi.includes(rawT) || nameEn.includes(rawT) || searchText.includes(rawT);
+            const matchedInOwnName = isExactWordHi || isExactWordEn || (rawT.length >= 4 && (nameEnWords.some(w => w.startsWith(rawT)) || nameHiWords.some(w => w.startsWith(hindiT))));
 
             if (matchedInOwnName) {
                 if (isSurname) {
@@ -418,7 +446,9 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
             }
 
             // Relative / Father / Husband match (Hindi or English)
-            const matchedInRel = relHi.includes(hindiT) || relHi.includes(rawT) || relEn.includes(rawT);
+            const relHiWords = relHi.split(/\s+/);
+            const relEnWords = relEn.split(/\s+/);
+            const matchedInRel = relHiWords.includes(hindiT) || relEnWords.includes(rawT) || (rawT.length >= 4 && (relEnWords.some(w => w.startsWith(rawT)) || relHiWords.some(w => w.startsWith(hindiT))));
             if (matchedInRel) {
                 if (isSurname) {
                     score += 5;
