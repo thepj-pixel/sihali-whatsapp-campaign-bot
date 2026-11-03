@@ -4,6 +4,7 @@ const userMemory = require('./user_memory.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const voterEngine = require('./voter_engine.js');
 const replyQuality = require('./reply_quality.js');
+const campaignProfile = require('./campaign_profile.js');
 
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 let KB = {};
@@ -735,6 +736,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     const agendaContext = campaignAgenda ? campaignAgenda.getAgendaRAGPrompt() : '';
     let systemPromptWithRAG = SYSTEM_PROMPT;
     if (agendaContext) systemPromptWithRAG += `\n\n${agendaContext}`;
+    systemPromptWithRAG += `\n\n${campaignProfile.getPrompt()}`;
     if (ragContext) systemPromptWithRAG += `\n\n${ragContext}`;
 
     const messages = [

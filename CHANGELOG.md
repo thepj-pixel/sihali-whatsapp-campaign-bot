@@ -7,6 +7,11 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ### Added
 
+- Structured conversation memory for the latest topic, concern, question, and unanswered bot question.
+- Context-aware proactive follow-ups that refer to the voter's actual issue instead of rotating generic scripts.
+- Dashboard editor and API for verified facts and the campaign talking pattern.
+- Automatic unique-contact progress tracking for the daily goal (phone numbers are stored as short hashes).
+- Configurable `DEPLOY_BRANCH` support for VM auto-updates.
 - Production-readiness workstream and feature-status tracking.
 - Testable consent and engagement policy helpers.
 - Privacy-conscious operational event logging and dashboard status API.
@@ -16,6 +21,9 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ### Changed
 
+- Live AI prompts now include the dashboard-managed verified facts, talking style, and structured voter context.
+- A fresh voter reply resets that contact's proactive-follow-up sequence.
+- VM updates use fast-forward Git merges from the configured deployment branch instead of overwriting the working tree.
 - Contact cards contain only the number of the WhatsApp line selected for sending.
 - Proactive follow-ups are limited to contacts with explicit accepted consent.
 - Permission is requested as a natural assistance question; silence receives at most one reminder.

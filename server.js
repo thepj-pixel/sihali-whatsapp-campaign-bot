@@ -32,12 +32,8 @@ function runProactiveNudges(sock) {
             const hoursSinceLastPing = lastPingDate ? (Date.now() - lastPingDate.getTime()) / (1000 * 60 * 60) : 999;
 
             if (hoursSinceLastChat >= 2.5 && hoursSinceLastChat <= 8 && hoursSinceLastPing >= 20) {
-                const nudges = [
-                    `अरे भैया, सुनिए ना... 🙏 आपने बताया नहीं, घर पर सब ठीक-ठाक हैं न? भाभी जी और बच्चे कैसे हैं? सोचा एक बार हाल-चाल पूछ लूं! 😊`,
-                    `राम राम भैया! 🚩 आज बाबा अभय सिंह के चुनाव प्रचार का बहुत सुंदर WhatsApp स्टेटस बना है। अगर आप कहें तो आपके नाम का एक प्यारा सा पोस्टर बना कर भेज दूं? अपने स्टेटस पर जरूर लगाना भैया! 📲`,
-                    `सुनिए भैया... इस बार अपने वार्ड में गांव के विकास का क्या माहौल लग रहा है? बाबा अभय सिंह (मोटी आंगली वाले) के काम तो सबने देखे ही हैं, आपकी क्या राय है भैया? 🙏`
-                ];
-                const pickedNudge = nudges[(u.proactivePingCount || 0) % nudges.length];
+                const pickedNudge = conversationContext.buildProactiveMessage(u);
+                if (!pickedNudge) continue;
                 const replyJid = `${u.phone}@s.whatsapp.net`;
 
                 sendSafeMessage(sock, replyJid, { text: pickedNudge }).then(() => {
@@ -82,8 +78,11 @@ const contactsManager = require('./contacts_manager.js');
 const engagementPolicy = require('./engagement_policy.js');
 const operationsTracker = require('./operations_tracker.js');
 const dailyGoal = require('./daily_goal.js');
+const conversationContext = require('./conversation_context.js');
+const campaignProfile = require('./campaign_profile.js');
 
 const MEDIA_UPLOAD_TARGETS = new Set(['poster.jpg', 'campaign_reel.mp4']);
+const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'main';
 
 function syncUploadedMediaToGit(target) {
     if (process.platform !== 'linux' || process.env.MEDIA_GIT_SYNC === 'false') {
@@ -91,7 +90,7 @@ function syncUploadedMediaToGit(target) {
         return;
     }
     const relativePath = `media/${target}`;
-    const command = `git add -- "${relativePath}" && (git diff --cached --quiet || (git commit -m "chore(media): update ${target}" && git push origin HEAD:main))`;
+    const command = `git add -- "${relativePath}" && (git diff --cached --quiet || (git commit -m "chore(media): update ${target}" && git push origin HEAD:${DEPLOY_BRANCH}))`;
     exec(command, (error) => {
         if (error) {
             operationsTracker.record('media_git_sync', 'failed', { mediaType: target, reason: error.message });
@@ -99,6 +98,12 @@ function syncUploadedMediaToGit(target) {
         }
         operationsTracker.record('media_git_sync', 'ok', { mediaType: target });
     });
+}
+
+function syncCampaignProfileToGit() {
+    if (process.platform !== 'linux' || process.env.PROFILE_GIT_SYNC === 'false') return;
+    const command = `git add -- campaign_profile.json && (git diff --cached --quiet || (git commit -m "chore(profile): update verified facts and talking style" && git push origin HEAD:${DEPLOY_BRANCH}))`;
+    exec(command, error => operationsTracker.record('profile_git_sync', error ? 'failed' : 'ok', error ? { reason: error.message } : { feature: 'campaign_profile' }));
 }
 
 const app = express();
@@ -379,6 +384,11 @@ async function sendSafeMessage(sock, jid, content, options = {}) {
                 const firstKey = MSG_STORE.keys().next().value;
                 MSG_STORE.delete(firstKey);
             }
+        }
+        if (jid && jid.includes('@s.whatsapp.net')) {
+            const phone = jid.split('@')[0].replace(/[^0-9]/g, '');
+            const trackedUser = userMemory.getUser(phone);
+            if (trackedUser?.consentStatus === 'ACCEPTED') dailyGoal.markContact(phone);
         }
         return sent;
     } catch (err) {
@@ -1368,6 +1378,22 @@ app.get('/api/campaign-agenda', (req, res) => {
 app.post('/api/campaign-agenda', (req, res) => {
     const updated = campaignAgenda.updateAgenda(req.body);
     res.json({ success: true, agenda: updated });
+});
+
+app.get('/api/campaign-profile', (req, res) => {
+    res.json(campaignProfile.load());
+});
+
+app.post('/api/campaign-profile', (req, res) => {
+    try {
+        const updated = campaignProfile.update(req.body || {});
+        operationsTracker.record('campaign_profile', 'updated', { factCount: updated.verifiedFacts.length });
+        syncCampaignProfileToGit();
+        res.json({ success: true, profile: updated });
+    } catch (error) {
+        operationsTracker.record('campaign_profile', 'failed', { reason: error.message });
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // API: Direct Fuzzy Voter Search
@@ -2950,6 +2976,13 @@ app.get('/', (req, res) => {
                         <textarea id="daily-goal-instruction" rows="2" placeholder="Assistance focus for today" style="width:100%;margin-top:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
                         <button onclick="saveDailyGoalUI()" style="margin-top:10px;background:#2563eb;color:white;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;">Save Daily Goal</button>
                         <span id="daily-goal-status" style="margin-left:10px;font-size:12px;color:#475569;"></span>
+                        <div style="border-top:1px solid #e2e8f0;margin-top:14px;padding-top:14px;">
+                            <h4 style="margin:0 0 8px;color:#0f172a;">Verified Facts & Talking Pattern</h4>
+                            <textarea id="campaign-verified-facts" rows="6" placeholder="Paste one verified fact per line. The bot will not invent missing details." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
+                            <textarea id="campaign-talking-style" rows="4" placeholder="Describe the natural talking pattern, tone, word length, and phrases to avoid." style="width:100%;margin-top:8px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
+                            <button onclick="saveCampaignProfileUI()" style="margin-top:8px;background:#7c3aed;color:white;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;">Save Facts & Style</button>
+                            <span id="campaign-profile-status" style="margin-left:10px;font-size:12px;color:#475569;"></span>
+                        </div>
                     </div>
                     <!-- Daily Media Drip Schedule (4 Active Slots) -->
                     <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
@@ -3065,7 +3098,38 @@ app.get('/', (req, res) => {
                         status.textContent = e.message;
                     }
                 }
+
+                async function loadCampaignProfileUI() {
+                    try {
+                        const res = await fetch('/api/campaign-profile');
+                        const profile = await res.json();
+                        document.getElementById('campaign-verified-facts').value = (profile.verifiedFacts || []).join('\\n');
+                        document.getElementById('campaign-talking-style').value = profile.talkingStyle || '';
+                    } catch (e) {
+                        document.getElementById('campaign-profile-status').textContent = 'Profile unavailable';
+                    }
+                }
+
+                async function saveCampaignProfileUI() {
+                    const status = document.getElementById('campaign-profile-status');
+                    try {
+                        const facts = document.getElementById('campaign-verified-facts').value.split(/\\r?\\n/).map(function(v) { return v.trim(); }).filter(Boolean);
+                        const res = await fetch('/api/campaign-profile', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                verifiedFacts: facts,
+                                talkingStyle: document.getElementById('campaign-talking-style').value.trim()
+                            })
+                        });
+                        if (!res.ok) throw new Error('Save failed');
+                        status.textContent = 'Saved and active';
+                    } catch (e) {
+                        status.textContent = e.message;
+                    }
+                }
                 loadDailyGoalUI();
+                loadCampaignProfileUI();
 
                 async function sendCustomPosterDirect() {
                     const phone = document.getElementById('p-voter-phone').value.trim();
@@ -4293,15 +4357,15 @@ app.get('/health', (req, res) => {
 if (process.platform === 'linux') {
     console.log('[AutoSync] 🛡️ Continuous GitHub Auto-Update Watchdog Active (every 35s)');
     setInterval(() => {
-        exec('git fetch origin main > /dev/null 2>&1', (err) => {
+        exec(`git fetch origin ${DEPLOY_BRANCH} > /dev/null 2>&1`, (err) => {
             if (err) return;
-            exec('git rev-parse HEAD && git rev-parse origin/main', (err2, stdout2) => {
+            exec(`git rev-parse HEAD && git rev-parse origin/${DEPLOY_BRANCH}`, (err2, stdout2) => {
                 if (err2 || !stdout2) return;
                 const hashes = stdout2.trim().split(/\s+/);
                 if (hashes.length >= 2 && hashes[0] !== hashes[1]) {
                     console.log(`[AutoSync] 🚀 New GitHub commit detected (${hashes[0].slice(0,7)} -> ${hashes[1].slice(0,7)})! Auto-updating...`);
                     const updateCmd = [
-                        'git reset --hard origin/main',
+                        `git merge --ff-only origin/${DEPLOY_BRANCH}`,
                         'mkdir -p ~/.fonts ~/.local/share/fonts',
                         'cp media/*.ttf ~/.fonts/ 2>/dev/null || true',
                         'cp media/*.ttf ~/.local/share/fonts/ 2>/dev/null || true',

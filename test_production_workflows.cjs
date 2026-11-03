@@ -5,6 +5,8 @@ const replyQuality = require('./reply_quality.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const userMemory = require('./user_memory.js');
 const aiService = require('./ai_assistant_service.js');
+const conversationContext = require('./conversation_context.js');
+const campaignProfile = require('./campaign_profile.js');
 
 userMemory.save = () => {};
 
@@ -25,6 +27,7 @@ async function run() {
     const serverSource = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
     check('dashboard exposes operations status', serverSource.includes('/api/operations-status') && serverSource.includes('ops-summary'));
     check('dashboard exposes editable media times', serverSource.includes('schedule-morning-start') && serverSource.includes('dailySchedule: dailySchedule'));
+    check('dashboard exposes verified facts and talking style', serverSource.includes('/api/campaign-profile') && serverSource.includes('campaign-verified-facts'));
     check('media uploads use an allowlist and production Git sync', serverSource.includes('MEDIA_UPLOAD_TARGETS') && serverSource.includes('syncUploadedMediaToGit'));
 
     for (const lineId of ['sim_636', 'baba_aux', 'canada']) {
@@ -54,6 +57,16 @@ async function run() {
 
     const qualityUser = { languagePreference: 'hinglish', history: [{ role: 'bot', text: 'Same answer again' }] };
     check('duplicate reply is replaced', replyQuality.improve('Same answer again', 'hello', qualityUser) !== 'Same answer again');
+
+    const contextualUser = { languagePreference: 'hinglish', voteIntent: null, context: {}, proactivePingCount: 1 };
+    conversationContext.updateFromMessage(contextualUser, 'user', 'hamare ward me pani ki problem hai');
+    check('conversation context detects the latest topic', contextualUser.context.currentTopic === 'water');
+    check('new user reply resets proactive counter', contextualUser.proactivePingCount === 0);
+    const contextualNudge = conversationContext.buildProactiveMessage(contextualUser);
+    check('proactive message refers to the actual concern', /water|pani/i.test(contextualNudge));
+    const doubtfulUser = { languagePreference: 'hinglish', voteIntent: 'no', context: {} };
+    check('vote disagreement asks for the reason', /concern|issue/i.test(conversationContext.buildProactiveMessage(doubtfulUser)));
+    check('facts input is normalized line by line', campaignProfile.normalizeFacts(' Fact one \n\n Fact two ').length === 2);
 
     const testPhone = '919000009999';
     const memoryUser = userMemory.getUser(testPhone, 'Test User');

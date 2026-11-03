@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const conversationContext = require('./conversation_context.js');
 
 const MEMORY_FILE = path.join(__dirname, 'user_memory.json');
 
@@ -96,6 +97,7 @@ class UserMemory {
                     demoPoster: false
                 },
                 sentSlogans: [],
+                context: {},
                 history: []
             };
             this.save();
@@ -123,6 +125,7 @@ class UserMemory {
             }
             if (!this.users[phone].sentQuestions) this.users[phone].sentQuestions = [];
             if (!this.users[phone].sentTopics) this.users[phone].sentTopics = [];
+            if (!this.users[phone].context) this.users[phone].context = {};
             if (this.users[phone].sentMedia && this.users[phone].sentMedia.demoPoster === undefined) {
                 this.users[phone].sentMedia.demoPoster = false;
             }
@@ -140,6 +143,7 @@ class UserMemory {
         if (!phone) return;
 
         const user = this.getUser(phone);
+        conversationContext.updateFromMessage(user, role, text);
         const timestamp = new Date().toLocaleTimeString('en-IN', {
             timeZone: 'Asia/Kolkata',
             hour12: true,
@@ -557,6 +561,8 @@ class UserMemory {
         if (user.mahoolNotes) ctx += ` | Ground Mahool: ${user.mahoolNotes}`;
         if (user.babaNotes) ctx += ` | Note for Baba: ${user.babaNotes}`;
         if (user.interactionCount) ctx += ` | Total Chats: ${user.interactionCount}`;
+        const conversationSummary = conversationContext.getPromptContext(user);
+        if (conversationSummary) ctx += ` | ${conversationSummary}`;
         const recentBotTopics = (user.history || [])
             .filter(item => item.role === 'bot')
             .slice(-3)
