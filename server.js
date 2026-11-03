@@ -2744,25 +2744,39 @@ app.get('/', (req, res) => {
                         dropdown.innerHTML = '';
                         return;
                     }
-                    searchDebounceTimer = setTimeout(async () => {
+                    searchDebounceTimer = setTimeout(async function() {
                         try {
                             const res = await fetch('/api/search-voters?q=' + encodeURIComponent(q));
                             const data = await res.json();
+                            dropdown.innerHTML = '';
                             if (!data.results || data.results.length === 0) {
-                                dropdown.innerHTML = '<div style="padding: 10px; font-size: 12px; color: #64748b; text-align: center;">कोई मतदाता नहीं मिला</div>';
+                                const emptyEl = document.createElement('div');
+                                emptyEl.style.cssText = 'padding: 10px; font-size: 12px; color: #64748b; text-align: center;';
+                                emptyEl.textContent = 'कोई मतदाता नहीं मिला';
+                                dropdown.appendChild(emptyEl);
                                 dropdown.style.display = 'block';
                                 return;
                             }
-                            let html = '';
-                            data.results.slice(0, 8).forEach(v => {
+                            data.results.slice(0, 8).forEach(function(v) {
                                 const rel = v.rel_type === 'H' ? 'पति' : 'पिता';
-                                const vJson = encodeURIComponent(JSON.stringify(v));
-                                html += '<div onclick="selectVoterForField(\' + vJson + \')" style="padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; text-align: left; background: white;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'white\'">' +
-                                    '<div style="font-weight: 700; color: #0f172a; font-size: 13px;">' + (v.name_hi || v.name) + ' (' + (v.name_en || '') + ')</div>' +
-                                    '<div style="font-size: 11px; color: #64748b;">' + rel + ': ' + (v.rel_name_hi || v.rel_name || '--') + ' | वार्ड: ' + (v.ward || '--') + ' | क्रम #' + (v.sr_no || '--') + ' | EPIC: ' + (v.epic || '--') + '</div>' +
-                                '</div>';
+                                const item = document.createElement('div');
+                                item.style.cssText = 'padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; text-align: left; background: white;';
+                                item.onmouseenter = function() { this.style.background = '#f1f5f9'; };
+                                item.onmouseleave = function() { this.style.background = 'white'; };
+                                item.onclick = function() { selectVoterForField(v); };
+                                
+                                const title = document.createElement('div');
+                                title.style.cssText = 'font-weight: 700; color: #0f172a; font-size: 13px;';
+                                title.textContent = (v.name_hi || v.name || '') + ' (' + (v.name_en || '') + ')';
+                                
+                                const subtitle = document.createElement('div');
+                                subtitle.style.cssText = 'font-size: 11px; color: #64748b;';
+                                subtitle.textContent = rel + ': ' + (v.rel_name_hi || v.rel_name || '--') + ' | वार्ड: ' + (v.ward || '--') + ' | क्रम #' + (v.sr_no || '--') + ' | EPIC: ' + (v.epic || '--');
+                                
+                                item.appendChild(title);
+                                item.appendChild(subtitle);
+                                dropdown.appendChild(item);
                             });
-                            dropdown.innerHTML = html;
                             dropdown.style.display = 'block';
                         } catch (e) {
                             console.error('Voter search failed:', e);
@@ -2770,10 +2784,9 @@ app.get('/', (req, res) => {
                     }, 250);
                 }
 
-                function selectVoterForField(vJsonEncoded) {
-                    const v = JSON.parse(decodeURIComponent(vJsonEncoded));
-                    document.getElementById('v-voter-id').value = v.id || v.sr_no;
-                    document.getElementById('v-name').value = v.name_hi || v.name;
+                function selectVoterForField(v) {
+                    document.getElementById('v-voter-id').value = v.id || v.sr_no || '';
+                    document.getElementById('v-name').value = v.name_hi || v.name || '';
                     document.getElementById('v-linked-ward').value = v.ward || '';
                     document.getElementById('v-linked-epic').value = v.epic || '';
                     document.getElementById('voter-search-dropdown').style.display = 'none';
