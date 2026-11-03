@@ -24,6 +24,7 @@ This file records code and operational changes. Runtime delivery events are writ
 - Live AI prompts now include the dashboard-managed verified facts, talking style, and structured voter context.
 - A fresh voter reply resets that contact's proactive-follow-up sequence.
 - VM updates use fast-forward Git merges from the configured deployment branch instead of overwriting the working tree.
+- The VM updater restarts only when the remote branch is ahead, so a local dashboard commit cannot cause a restart loop.
 - Contact cards contain only the number of the WhatsApp line selected for sending.
 - Proactive follow-ups are limited to contacts with explicit accepted consent.
 - Permission is requested as a natural assistance question; silence receives at most one reminder.

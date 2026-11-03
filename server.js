@@ -4359,10 +4359,11 @@ if (process.platform === 'linux') {
     setInterval(() => {
         exec(`git fetch origin ${DEPLOY_BRANCH} > /dev/null 2>&1`, (err) => {
             if (err) return;
-            exec(`git rev-parse HEAD && git rev-parse origin/${DEPLOY_BRANCH}`, (err2, stdout2) => {
+            exec(`git rev-parse HEAD && git rev-parse origin/${DEPLOY_BRANCH} && git rev-list --count HEAD..origin/${DEPLOY_BRANCH}`, (err2, stdout2) => {
                 if (err2 || !stdout2) return;
                 const hashes = stdout2.trim().split(/\s+/);
-                if (hashes.length >= 2 && hashes[0] !== hashes[1]) {
+                const remoteAheadCount = Number(hashes[2] || 0);
+                if (hashes.length >= 3 && remoteAheadCount > 0) {
                     console.log(`[AutoSync] 🚀 New GitHub commit detected (${hashes[0].slice(0,7)} -> ${hashes[1].slice(0,7)})! Auto-updating...`);
                     const updateCmd = [
                         `git merge --ff-only origin/${DEPLOY_BRANCH}`,
