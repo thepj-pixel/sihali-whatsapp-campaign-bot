@@ -99,7 +99,7 @@ async function runBrutalSuite() {
 
     // Test 3.3: Prince Admin Recognition
     const adminReply = aiService.getFastLocalAnswer('prince', mockUserPhone);
-    assert('3.3 Admin "prince" recognized with respectful campaign coordinator status', adminReply.includes('प्रिंस भाई जी'));
+    assert('3.3 Admin "prince" recognized with respectful campaign coordinator status', /(प्रिंस भाई जी|Prince bhai ji)/i.test(adminReply));
 
     // -------------------------------------------------------------
     // PHASE 4: 300-MESSAGE RAPID BURST SIMULATION
@@ -203,6 +203,10 @@ async function runBrutalSuite() {
         delete userMemory.users[mockUserPhone];
         userMemory.save();
     } catch (e) {}
+    if (failedTests > 0) process.exitCode = 1;
 }
 
-runBrutalSuite().catch(console.error);
+runBrutalSuite().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

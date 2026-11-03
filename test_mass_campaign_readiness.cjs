@@ -4,6 +4,7 @@ const userMemory = require('./user_memory.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const mediaCatalog = require('./media_catalog.js');
 const fs = require('fs');
+const engagementPolicy = require('./engagement_policy.js');
 
 async function testMassCampaignReadiness() {
     console.log('================================================================');
@@ -17,17 +18,15 @@ async function testMassCampaignReadiness() {
     const serverCode = fs.readFileSync('server.js', 'utf8');
     const hasOldNumber = serverCode.includes('8764870431');
     const hasOldCanadian = serverCode.includes('5878415712');
-    const hasCorrectCanadian = serverCode.includes('+1 (450) 279-0497') && serverCode.includes('14502790497');
-    
-    // Check vcard line count
-    const vcardMatches = serverCode.match(/TEL;type=/g);
-    const telCount = vcardMatches ? vcardMatches.length : 0;
+    const cards = ['sim_636', 'baba_aux', 'canada'].map(id => engagementPolicy.buildCampaignVCard(id));
+    const hasCorrectCanadian = cards[2].includes('+1 (450) 279-0497') && cards[2].includes('14502790497');
+    const allCardsHaveOneNumber = cards.every(card => (card.match(/TEL;type=/g) || []).length === 1);
 
     console.log(`  - 8764870431 Absent: ${!hasOldNumber ? '✓ [PASS]' : '❌ [FAIL]'}`);
     console.log(`  - Canadian Number (+1 450 279-0497) Present: ${hasCorrectCanadian ? '✓ [PASS]' : '❌ [FAIL]'}`);
-    console.log(`  - Contact Card Phone Count <= 2: ${telCount <= 2 ? '✓ [PASS]' : '❌ [FAIL]'} (Total: ${telCount})`);
+    console.log(`  - Each selected line sends exactly one phone number: ${allCardsHaveOneNumber ? '✓ [PASS]' : '❌ [FAIL]'}`);
     
-    if (hasOldNumber || hasOldCanadian || !hasCorrectCanadian || telCount > 2) allPassed = false;
+    if (hasOldNumber || hasOldCanadian || !hasCorrectCanadian || !allCardsHaveOneNumber) allPassed = false;
 
     // --- TEST 2: ELIMINATION OF "सेवा केंद्र" & "ठेकेदारी" ---
     console.log('\n▶ TEST 2: Strict Terminology & Persona Audit');
@@ -95,11 +94,15 @@ async function testMassCampaignReadiness() {
     const totalVoters = voterEngine.searchVoters('yadav', 1000).length;
     console.log(`  - Loaded Official Voters Database: ${totalVoters > 3000 ? totalVoters : '3,636'} voters verified`);
     console.log(`  - User Memory Persistence: ${Object.keys(userMemory.users).length} records active`);
-    console.log(`  - Multi-session concurrency readiness: 2 active lines ready (Primary sim_636 + Aux baba_aux)`);
+    console.log(`  - Multi-session configuration: 3 lines configured (live connection must be checked on dashboard)`);
 
     console.log('\n================================================================');
     console.log(`🏁 CAMPAIGN READINESS: ${allPassed ? 'ALL SYSTEMS VERIFIED 100% READY' : 'SOME CHECKS FAILED'}`);
     console.log('================================================================\n');
+    if (!allPassed) process.exitCode = 1;
 }
 
-testMassCampaignReadiness().catch(console.error);
+testMassCampaignReadiness().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

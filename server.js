@@ -10,6 +10,19 @@ function runProactiveNudges(sock) {
         const allUsers = userMemory.getAllUsers();
         for (const u of allUsers) {
             if (!u.phone || u.phone.includes('Self Device') || u.phone.length < 10) continue;
+            if (engagementPolicy.canSendConsentReminder(u)) {
+                const reminder = engagementPolicy.buildConsentReminder(u.name);
+                const reminderJid = `${u.phone}@s.whatsapp.net`;
+                sendSafeMessage(sock, reminderJid, { text: reminder }).then(() => {
+                    u.consentReminderCount = (u.consentReminderCount || 0) + 1;
+                    u.consentReminderAt = new Date().toISOString();
+                    userMemory.recordMessage(u.phone, 'bot', reminder, 'consentReminder');
+                    userMemory.save();
+                    operationsTracker.record('consent_reminder', 'sent', { lineId: 'sim_636' });
+                }).catch(e => operationsTracker.record('consent_reminder', 'failed', { lineId: 'sim_636', reason: e.message }));
+                break;
+            }
+            if (!engagementPolicy.canSendProactive(u)) continue;
             if (u.proactivePingCount >= 2) continue;
 
             const lastSeenDate = new Date(u.lastSeen);
@@ -66,6 +79,27 @@ const mediaCatalog = require('./media_catalog.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const visionService = require('./vision_service.js');
 const contactsManager = require('./contacts_manager.js');
+const engagementPolicy = require('./engagement_policy.js');
+const operationsTracker = require('./operations_tracker.js');
+const dailyGoal = require('./daily_goal.js');
+
+const MEDIA_UPLOAD_TARGETS = new Set(['poster.jpg', 'campaign_reel.mp4']);
+
+function syncUploadedMediaToGit(target) {
+    if (process.platform !== 'linux' || process.env.MEDIA_GIT_SYNC === 'false') {
+        operationsTracker.record('media_git_sync', 'skipped', { mediaType: target, reason: 'disabled_or_non_linux' });
+        return;
+    }
+    const relativePath = `media/${target}`;
+    const command = `git add -- "${relativePath}" && (git diff --cached --quiet || (git commit -m "chore(media): update ${target}" && git push origin HEAD:main))`;
+    exec(command, (error) => {
+        if (error) {
+            operationsTracker.record('media_git_sync', 'failed', { mediaType: target, reason: error.message });
+            return;
+        }
+        operationsTracker.record('media_git_sync', 'ok', { mediaType: target });
+    });
+}
 
 const app = express();
 app.use(cors());
@@ -321,27 +355,13 @@ function healContactSession(sessionId, jid) {
 }
 
 // Wrapper for sock.sendMessage that caches outgoing messages for WhatsApp retries
-// Multi-Number 3-in-1 Campaign Contact Card (Anti-Ban Protection)
-function getCampaignVCard(senderPhone = null) {
-    const isAux = senderPhone && senderPhone.includes('9509352067');
-    const primaryWaid = isAux ? '919509352067' : '916367810227';
-    const primaryDisplay = isAux ? '+91 95093 52067' : '+91 63678 10227';
-
-    return [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        'FN:बाबा अभय सिंह (मोटी आंगली वाले)',
-        'ORG:ग्राम पंचायत सिहाली खुर्द',
-        'TITLE:सरपंच पद प्रत्याशी 2026',
-        `TEL;type=Primary,pref;type=VOICE;waid=${primaryWaid}:${primaryDisplay}`,
-        'TEL;type=Helpline (Overseas);type=VOICE;waid=14502790497:+1 (450) 279-0497',
-        'NOTE:सिहाली खुर्द, सिहाली कलां व हाड़ाहेड़ी पंचायत 2026। 24/7 मतदाता पर्ची व जनसमस्या सहायता।',
-        'END:VCARD'
-    ].join('\n');
+// One contact card per selected WhatsApp line.
+function getCampaignVCard(lineId = 'sim_636') {
+    return engagementPolicy.buildCampaignVCard(lineId);
 }
 
 async function sendMultiContactCard(sock, jid, senderPhone = null) {
-    const vcard = getCampaignVCard(senderPhone);
+    const vcard = engagementPolicy.buildCampaignVCard(senderPhone || 'sim_636');
     return await sock.sendMessage(jid, {
         contacts: {
             displayName: 'बाबा अभय सिंह (मोटी आंगली वाले)',
@@ -609,6 +629,39 @@ async function startSession(sessionObj) {
 
                 // Anti-Rogue Protection: Check if AutoPilot is PAUSED for this specific contact
                 const user = userMemory.getUser(senderPhone);
+
+                // Consent is a real state transition, not just message copy.
+                // New contacts receive the permission prompt before campaign automation starts.
+                const consentDecision = engagementPolicy.parseConsentResponse(body);
+                if (user.consentStatus === 'PENDING') {
+                    engagementPolicy.markConsentPrompted(user);
+                    userMemory.save();
+                    const consentPrompt = engagementPolicy.buildConsentPrompt(user.name);
+                    await sendSafeMessage(sock, replyJid, { text: consentPrompt });
+                    userMemory.recordMessage(senderPhone, 'bot', consentPrompt, 'consent_prompt', sessionObj.name);
+                    operationsTracker.record('consent_prompt', 'sent', { lineId: sessionObj.id });
+                    continue;
+                }
+
+                if (user.consentStatus === 'PROMPTED' && consentDecision) {
+                    engagementPolicy.applyConsentDecision(user, consentDecision);
+                    userMemory.save();
+                    const consentReply = consentDecision === 'accepted'
+                        ? `धन्यवाद! 🙏 बताइए—अपनी मतदाता पर्ची देखनी है, वार्ड की जानकारी चाहिए, या गाँव की कोई समस्या साझा करनी है?`
+                        : `जी, आपके निर्णय का सम्मान है। अब कोई स्वचालित चुनावी संदेश नहीं भेजा जाएगा। 🙏`;
+                    await sendSafeMessage(sock, replyJid, { text: consentReply });
+                    userMemory.recordMessage(senderPhone, 'bot', consentReply, `consent_${consentDecision}`, sessionObj.name);
+                    operationsTracker.record('consent', consentDecision, { lineId: sessionObj.id });
+                    continue;
+                }
+
+                if (user.consentStatus === 'PROMPTED' && !consentDecision) {
+                    const retryPrompt = engagementPolicy.buildConsentPrompt(user.name);
+                    await sendSafeMessage(sock, replyJid, { text: retryPrompt });
+                    userMemory.recordMessage(senderPhone, 'bot', retryPrompt, 'consent_retry', sessionObj.name);
+                    continue;
+                }
+
                 if (user.autoPilot === false) {
                     console.log(`[${sessionObj.id}] ⏸️ AutoPilot is PAUSED for ${senderPhone}. Admin manual takeover active.`);
                     logMessage({
@@ -1064,7 +1117,7 @@ async function startSession(sessionObj) {
                     const userMsgCount = (u.history || []).filter(h => h.role === 'user').length;
 
                     // Send on interaction 1, 2, or 3 if not already sent
-                    if (!u.contactCardSent && userMsgCount >= 1 && userMsgCount <= 3) {
+                    if (engagementPolicy.shouldSendContactCard(u, userMsgCount)) {
                         u.contactCardSent = true;
                         u.contactCardSentAt = new Date().toISOString();
                         userMemory.save();
@@ -1072,11 +1125,11 @@ async function startSession(sessionObj) {
                         setTimeout(async () => {
                             try {
                                 console.log(`[AntiBan] Auto-sending 3-in-1 Contact Card to ${senderPhone} (turn ${userMsgCount})...`);
-                                await sendMultiContactCard(sock, replyJid);
+                                await sendMultiContactCard(sock, replyJid, sessionObj.id);
 
                                 const isElder = (u.age && u.age >= 50) || body.toLowerCase().includes('bacha') || body.toLowerCase().includes('tau') || body.toLowerCase().includes('chacha');
                                 const honorific = u.gender === 'F' ? 'दीदी' : (isElder ? 'ताऊजी' : 'भैया');
-                                const savePrompt = `राम राम ${honorific}! 🙏 ये बाबा अभय सिंह जनसंपर्क का अधिकृत संपर्क कार्ड है।\nऊपर **'Add to Contacts' / 'संपर्क में जोड़ें'** दबाकर सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची, विकास कार्य व जरूरी अपडेट आपको सीधे मिलते रहें और कोई सूचना छूटे ना। 🚩`;
+                                const savePrompt = `राम राम ${honorific}! 🙏 ${engagementPolicy.buildSaveContactPrompt(sessionObj.id, u.languagePreference)}`;
 
                                 await sendSafeMessage(sock, replyJid, { text: savePrompt });
                                 userMemory.recordMessage(senderPhone, 'bot', '📇 [Auto Anti-Ban Contact Card Sent]', null, sessionObj.name);
@@ -1130,6 +1183,13 @@ app.post('/api/send-message', async (req, res) => {
 
         const cleanedPhone = userMemory.cleanPhone(phone);
         const jid = `${cleanedPhone}@s.whatsapp.net`;
+        const targetUser = userMemory.getUser(cleanedPhone, name);
+
+        if (targetUser.consentStatus === 'REJECTED') {
+            return res.status(409).json({
+                error: 'This contact declined automated outreach. Ask them to initiate a new conversation before sending again.'
+            });
+        }
 
         const active = getActiveSocket(lineId || 'sim_636');
         if (!active) {
@@ -1148,7 +1208,7 @@ app.post('/api/send-message', async (req, res) => {
         const { mediaOption, voterId } = req.body;
 
         if (template === 'consent_check') {
-            messageText = `राम राम ${voterDisplayName}! 🙏\nबाबा अभय सिंह (मोटी आंगली वाले बाबा) जनसंपर्क टीम — सिहाली खुर्द।\n\nक्या आप सिहाली खुर्द चुनाव की ताज़ा जानकारी व अपनी डिजिटल मतदाता पर्ची WhatsApp पर पाना चाहते हैं?\n\n1️⃣ हाँ (Yes - मुझे जानकारी भेजें)\n2️⃣ नहीं (No - मुझे न भेजें)\n\n📲 (कृपया '1' लिखकर भेजें, और यह नंबर सेव कर लें ताकि मतदाता पर्ची आप तक सीधे पहुँच सके! 🚩)`;
+            messageText = engagementPolicy.buildConsentPrompt(name || '');
         } else if (template === 'permission_casual') {
             messageText = `राम राम ${voterDisplayName}! 🙏 सब कुशल मंगल?\n\nमैं बाबा अभय सिंह जनसंपर्क (ग्राम पंचायत सिहाली खुर्द) से हूँ।\nक्या हम आपको पंचायत आम चुनाव 2026 के जरूरी अपडेट, विकास कार्यों व जरूरी सूचनाओं की जानकारी WhatsApp पर भेज सकते हैं? 😊🚩`;
         } else if (template === 'offer_parchi') {
@@ -1209,7 +1269,11 @@ app.post('/api/send-message', async (req, res) => {
             await sock.sendMessage(jid, { text: messageText });
         }
 
-        const savedUser = userMemory.getUser(cleanedPhone, name);
+        const savedUser = targetUser;
+        if (template === 'consent_check' || template === 'permission_casual') {
+            engagementPolicy.markConsentPrompted(savedUser);
+            operationsTracker.record('consent_prompt', 'sent', { lineId: active.session.id, template });
+        }
         if (req.body.linkedWard) savedUser.ward = parseInt(req.body.linkedWard);
         if (req.body.linkedEpic) savedUser.epic = req.body.linkedEpic;
         userMemory.recordMessage(cleanedPhone, 'bot', messageText, mediaType, sessionName);
@@ -1233,6 +1297,11 @@ app.post('/api/send-message', async (req, res) => {
             reply: messageText,
             status: mediaType ? 'MEDIA_SENT' : 'DELIVERED'
         });
+        operationsTracker.record('dashboard_send', 'ok', {
+            lineId: active.session.id,
+            mediaType: mediaType || 'text',
+            template: template || 'custom'
+        });
 
         res.json({
             success: true,
@@ -1242,6 +1311,7 @@ app.post('/api/send-message', async (req, res) => {
         });
     } catch (err) {
         console.error('Error in /api/send-message:', err);
+        operationsTracker.record('dashboard_send', 'failed', { reason: err.message });
         res.status(500).json({ error: err.message });
     }
 });
@@ -1270,15 +1340,21 @@ app.post('/api/upload-media', (req, res) => {
         if (!target || !base64Data) {
             return res.status(400).json({ error: 'Target filename and file data required' });
         }
+        if (!MEDIA_UPLOAD_TARGETS.has(target)) {
+            return res.status(400).json({ error: 'Unsupported media target' });
+        }
 
         const cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
         const targetPath = path.join(__dirname, 'media', target);
         fs.writeFileSync(targetPath, Buffer.from(cleanBase64, 'base64'));
 
         console.log(`[Upload] Uploaded new media: ${target} (${cleanBase64.length} chars)`);
-        res.json({ success: true, message: `Successfully updated ${target}!` });
+        operationsTracker.record('media_upload', 'ok', { mediaType: target });
+        syncUploadedMediaToGit(target);
+        res.json({ success: true, message: `Successfully updated ${target}!`, gitSync: process.platform === 'linux' ? 'queued' : 'skipped-local' });
     } catch (e) {
         console.error('Error in /api/upload-media:', e);
+        operationsTracker.record('media_upload', 'failed', { reason: e.message });
         res.status(500).json({ error: e.message });
     }
 });
@@ -1545,23 +1621,32 @@ app.get('/api/tunnel-status', (req, res) => {
     });
 });
 
-// Global Daily Target Poster / Campaign Goal
-let DAILY_CAMPAIGN_TARGET = {
-    targetType: 'poster_demo',
-    title: 'प्रारूप डेमो पोस्टर',
-    instruction: 'सभी मतदाताओं को डेमो पोस्टर भेजकर वोटर पर्ची चेक करने का आग्रह करना।'
-};
-
 app.post('/api/daily-target', (req, res) => {
-    const { targetType, title, instruction } = req.body;
-    if (targetType) DAILY_CAMPAIGN_TARGET.targetType = targetType;
-    if (title) DAILY_CAMPAIGN_TARGET.title = title;
-    if (instruction) DAILY_CAMPAIGN_TARGET.instruction = instruction;
-    res.json({ success: true, dailyTarget: DAILY_CAMPAIGN_TARGET });
+    try {
+        const updated = dailyGoal.update(req.body || {});
+        operationsTracker.record('daily_goal', 'updated', { feature: updated.targetType });
+        res.json({ success: true, dailyTarget: updated });
+    } catch (error) {
+        operationsTracker.record('daily_goal', 'failed', { reason: error.message });
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/daily-target', (req, res) => {
-    res.json(DAILY_CAMPAIGN_TARGET);
+    res.json(dailyGoal.get());
+});
+
+app.get('/api/operations-status', (req, res) => {
+    res.json({
+        ...operationsTracker.getStatus(),
+        dailyGoal: dailyGoal.get(),
+        sessions: SESSIONS.map(session => ({
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            contact: engagementPolicy.getLineContact(session.id).display
+        }))
+    });
 });
 
 // API: Toggle Demo Poster mode
@@ -1593,8 +1678,8 @@ app.post('/api/quick-action', async (req, res) => {
         let mediaType = null;
 
         if (action === 'contact_card') {
-            await sendMultiContactCard(sock, jid);
-            const cardMsg = 'राम राम जी! 🙏 ये बाबा अभय सिंह जनसंपर्क का संपर्क कार्ड है। नीचे "Add to Contacts" (संपर्क में जोड़ें) पर क्लिक करके सेव कर लें, ताकि सिहाली खुर्द की मतदाता पर्ची और जरूरी अपडेट आपको सीधे मिलते रहें। 🚩';
+            await sendMultiContactCard(sock, jid, active.session.id);
+            const cardMsg = engagementPolicy.buildSaveContactPrompt(active.session.id, userMemory.getUser(cleanedPhone)?.languagePreference);
             await sock.sendMessage(jid, { text: cardMsg });
 
             userMemory.recordMessage(cleanedPhone, 'bot', '📇 [Contact Card Sent]');
@@ -1652,10 +1737,16 @@ app.post('/api/quick-action', async (req, res) => {
             reply: replyText,
             status: mediaType ? 'MEDIA_SENT' : 'DELIVERED'
         });
+        operationsTracker.record('quick_action', 'ok', {
+            lineId: active.session.id,
+            mediaType: mediaType || 'text',
+            feature: action
+        });
 
         res.json({ success: true, action, message: replyText });
     } catch (e) {
         console.error('Error in /api/quick-action:', e);
+        operationsTracker.record('quick_action', 'failed', { reason: e.message });
         res.status(500).json({ error: e.message });
     }
 });
@@ -2846,9 +2937,30 @@ app.get('/', (req, res) => {
                 <!-- TAB 5: Media Bank & Direct Uploader -->
                 <div id="tab-media" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
+                    <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:16px; margin-bottom:18px;">
+                        <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <h4 style="margin:0; color:#0f172a;">Daily Goal & Operations</h4>
+                            <span id="ops-summary" style="font-size:12px; color:#475569;">Loading status...</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:12px;">
+                            <input id="daily-goal-title" class="input-field" placeholder="Daily goal title" style="background:white;color:#0f172a;border:1px solid #cbd5e1;">
+                            <input id="daily-goal-target" type="number" min="0" class="input-field" placeholder="Target contacts" style="background:white;color:#0f172a;border:1px solid #cbd5e1;">
+                            <input id="daily-goal-completed" type="number" min="0" class="input-field" placeholder="Completed" style="background:white;color:#0f172a;border:1px solid #cbd5e1;">
+                        </div>
+                        <textarea id="daily-goal-instruction" rows="2" placeholder="Assistance focus for today" style="width:100%;margin-top:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
+                        <button onclick="saveDailyGoalUI()" style="margin-top:10px;background:#2563eb;color:white;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;">Save Daily Goal</button>
+                        <span id="daily-goal-status" style="margin-left:10px;font-size:12px;color:#475569;"></span>
+                    </div>
                     <!-- Daily Media Drip Schedule (4 Active Slots) -->
                     <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
                         <h4 style="margin: 0 0 10px 0; color: #0f172a;">⏰ दैनिक 4-स्लॉट ऑटोमैटिक शेड्यूल (Daily Drip Slots)</h4>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:12px;">
+                            <label style="font-size:12px;">Morning <input id="schedule-morning-start" type="time"> to <input id="schedule-morning-end" type="time"></label>
+                            <label style="font-size:12px;">Afternoon <input id="schedule-dopahar-start" type="time"> to <input id="schedule-dopahar-end" type="time"></label>
+                            <label style="font-size:12px;">Evening <input id="schedule-evening-start" type="time"> to <input id="schedule-evening-end" type="time"></label>
+                            <label style="font-size:12px;">Night <input id="schedule-night-start" type="time"> to <input id="schedule-night-end" type="time"></label>
+                        </div>
+                        <button onclick="saveCampaignAgendaUI()" style="margin-bottom:12px;background:#15803d;color:white;border:0;border-radius:7px;padding:7px 12px;font-weight:700;cursor:pointer;">Save Media Times</button>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
                                 <div style="font-weight: 700; color: #ea580c; font-size: 13px;">🌅 सुबह का स्लॉट</div>
@@ -2915,6 +3027,45 @@ app.get('/', (req, res) => {
                 let selectedVoterPhone = null;
                 let currentPosterBlob = null;
                 let aiHistory = [];
+
+                async function loadDailyGoalUI() {
+                    try {
+                        const goalRes = await fetch('/api/daily-target');
+                        const goal = await goalRes.json();
+                        document.getElementById('daily-goal-title').value = goal.title || '';
+                        document.getElementById('daily-goal-target').value = goal.targetContacts || 0;
+                        document.getElementById('daily-goal-completed').value = goal.completedContacts || 0;
+                        document.getElementById('daily-goal-instruction').value = goal.instruction || '';
+                        const opsRes = await fetch('/api/operations-status');
+                        const ops = await opsRes.json();
+                        const connected = (ops.sessions || []).filter(function(s) { return s.status === 'CONNECTED'; }).length;
+                        document.getElementById('ops-summary').textContent = connected + '/' + (ops.sessions || []).length + ' lines connected • ' + (ops.eventCount || 0) + ' runtime events';
+                    } catch (e) {
+                        document.getElementById('ops-summary').textContent = 'Status unavailable';
+                    }
+                }
+
+                async function saveDailyGoalUI() {
+                    const status = document.getElementById('daily-goal-status');
+                    try {
+                        const res = await fetch('/api/daily-target', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: document.getElementById('daily-goal-title').value.trim(),
+                                instruction: document.getElementById('daily-goal-instruction').value.trim(),
+                                targetContacts: Number(document.getElementById('daily-goal-target').value || 0),
+                                completedContacts: Number(document.getElementById('daily-goal-completed').value || 0)
+                            })
+                        });
+                        if (!res.ok) throw new Error('Save failed');
+                        status.textContent = 'Saved';
+                        loadDailyGoalUI();
+                    } catch (e) {
+                        status.textContent = e.message;
+                    }
+                }
+                loadDailyGoalUI();
 
                 async function sendCustomPosterDirect() {
                     const phone = document.getElementById('p-voter-phone').value.trim();
@@ -3763,6 +3914,17 @@ app.get('/', (req, res) => {
                 let pgImageMime = null;
                 let pgAiHistory = [];
 
+                function hourToInput(value) {
+                    const hour = Math.floor(Number(value) || 0);
+                    const minute = Math.round(((Number(value) || 0) - hour) * 60);
+                    return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+                }
+
+                function inputToHour(value) {
+                    const parts = String(value || '00:00').split(':');
+                    return Number(parts[0]) + (Number(parts[1]) / 60);
+                }
+
                 async function loadCampaignAgendaUI() {
                     try {
                         const res = await fetch('/api/campaign-agenda');
@@ -3772,6 +3934,14 @@ app.get('/', (req, res) => {
                             const ptEl = document.getElementById('agenda-points');
                             if (topEl) topEl.value = data.topic;
                             if (ptEl) ptEl.value = data.talkingPoints || '';
+                            ['morning', 'dopahar', 'evening', 'night'].forEach(function(slot) {
+                                const item = data.dailySchedule && data.dailySchedule[slot];
+                                if (!item) return;
+                                const start = document.getElementById('schedule-' + slot + '-start');
+                                const end = document.getElementById('schedule-' + slot + '-end');
+                                if (start) start.value = hourToInput(item.startHour);
+                                if (end) end.value = hourToInput(item.endHour);
+                            });
                         }
                     } catch (e) {}
                 }
@@ -3780,11 +3950,23 @@ app.get('/', (req, res) => {
                 async function saveCampaignAgendaUI() {
                     const topic = document.getElementById('agenda-topic').value.trim();
                     const talkingPoints = document.getElementById('agenda-points').value.trim();
+                    const dailySchedule = {};
+                    ['morning', 'dopahar', 'evening', 'night'].forEach(function(slot) {
+                        const start = document.getElementById('schedule-' + slot + '-start');
+                        const end = document.getElementById('schedule-' + slot + '-end');
+                        if (start && end && start.value && end.value) {
+                            dailySchedule[slot] = {
+                                startHour: inputToHour(start.value),
+                                endHour: inputToHour(end.value),
+                                timeWindow: start.value + ' - ' + end.value
+                            };
+                        }
+                    });
                     try {
                         const res = await fetch('/api/campaign-agenda', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ topic: topic, talkingPoints: talkingPoints })
+                            body: JSON.stringify({ topic: topic, talkingPoints: talkingPoints, dailySchedule: dailySchedule })
                         });
                         const data = await res.json();
                         if (data.success) {

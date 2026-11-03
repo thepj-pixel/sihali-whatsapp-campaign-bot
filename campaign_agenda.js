@@ -98,6 +98,20 @@ class CampaignAgendaManager {
         if (updates.topic) this.agenda.topic = updates.topic;
         if (updates.talkingPoints) this.agenda.talkingPoints = updates.talkingPoints;
         if (Array.isArray(updates.activeMediaDrip)) this.agenda.activeMediaDrip = updates.activeMediaDrip;
+        if (updates.dailySchedule && typeof updates.dailySchedule === 'object') {
+            for (const slot of ['morning', 'dopahar', 'evening', 'night']) {
+                const incoming = updates.dailySchedule[slot];
+                const existing = this.agenda.dailySchedule && this.agenda.dailySchedule[slot];
+                if (!incoming || !existing) continue;
+                const startHour = Number(incoming.startHour);
+                const endHour = Number(incoming.endHour);
+                if (Number.isFinite(startHour) && Number.isFinite(endHour) && startHour >= 0 && endHour <= 24 && startHour < endHour) {
+                    existing.startHour = startHour;
+                    existing.endHour = endHour;
+                    existing.timeWindow = incoming.timeWindow || existing.timeWindow;
+                }
+            }
+        }
         this.agenda.date = new Date().toISOString().split('T')[0];
         this.saveAgenda();
         return this.agenda;

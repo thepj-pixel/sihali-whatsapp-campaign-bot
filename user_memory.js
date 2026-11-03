@@ -74,6 +74,9 @@ class UserMemory {
                 voteIntent: null, // 'yes' | 'no' | 'doubtful' | null
                 consented: null,
                 consentStatus: 'PENDING',
+                consentReminderCount: 0,
+                consentPromptedAt: null,
+                contactCardSent: false,
                 lastUploadedPhotoPath: null,
                 botPersonaGender: 'F', // Opposite of voter: Female persona for male voters, Male persona for female voters
                 sentQuestions: [],
@@ -110,6 +113,9 @@ class UserMemory {
             if (this.users[phone].voteIntent === undefined) this.users[phone].voteIntent = null;
             if (this.users[phone].consented === undefined) this.users[phone].consented = null;
             if (this.users[phone].consentStatus === undefined) this.users[phone].consentStatus = 'PENDING';
+            if (this.users[phone].consentReminderCount === undefined) this.users[phone].consentReminderCount = 0;
+            if (this.users[phone].consentPromptedAt === undefined) this.users[phone].consentPromptedAt = null;
+            if (this.users[phone].contactCardSent === undefined) this.users[phone].contactCardSent = false;
             if (this.users[phone].lastUploadedPhotoPath === undefined) this.users[phone].lastUploadedPhotoPath = null;
             if (!this.users[phone].languagePreference) this.users[phone].languagePreference = 'auto';
             if (this.users[phone].botPersonaGender === undefined) {
@@ -546,11 +552,17 @@ class UserMemory {
         if (user.fatherOrSpouse) ctx += ` | Relation: ${user.fatherOrSpouse}`;
         if (user.voterSentiment) ctx += ` | Sentiment: ${user.voterSentiment}`;
         if (user.tags && user.tags.length > 0) ctx += ` | Tags: ${user.tags.join(', ')}`;
-        if (user.campaignGoal) ctx += ` | TARGET CAMPAIGN GOAL: ${user.campaignGoal} (Gently steer conversation towards this goal!)`;
+        if (user.campaignGoal) ctx += ` | OPERATOR FOLLOW-UP GOAL: ${user.campaignGoal} (Use only when relevant; do not pressure or repeat it.)`;
         if (user.familyNotes) ctx += ` | Family Notes: ${user.familyNotes}`;
         if (user.mahoolNotes) ctx += ` | Ground Mahool: ${user.mahoolNotes}`;
         if (user.babaNotes) ctx += ` | Note for Baba: ${user.babaNotes}`;
         if (user.interactionCount) ctx += ` | Total Chats: ${user.interactionCount}`;
+        const recentBotTopics = (user.history || [])
+            .filter(item => item.role === 'bot')
+            .slice(-3)
+            .map(item => item.text)
+            .filter(Boolean);
+        if (recentBotTopics.length) ctx += ` | RECENT BOT REPLIES TO AVOID REPEATING: ${recentBotTopics.join(' || ')}`;
         ctx += `]`;
         return ctx;
     }

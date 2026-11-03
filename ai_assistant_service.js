@@ -3,6 +3,7 @@ const fs = require('fs');
 const userMemory = require('./user_memory.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const voterEngine = require('./voter_engine.js');
+const replyQuality = require('./reply_quality.js');
 
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 let KB = {};
@@ -110,7 +111,7 @@ ${JSON.stringify(KB, null, 2)}
 `;
 
 // Fast Local Village Answer Engine (<0.001s, 100% Reliable Offline Fallback)
-function getFastLocalAnswer(query, phone = null) {
+function getFastLocalAnswerCore(query, phone = null) {
     const q = (query || '').toLowerCase().trim();
     const user = phone ? userMemory.getUser(phone) : null;
     const isFemale = user?.gender === 'F' || q.includes('didi') || q.includes('bhabhi') || q.includes('behan');
@@ -575,6 +576,11 @@ function getFastLocalAnswer(query, phone = null) {
 }
 
 // 1. Call NVIDIA Endpoint
+function getFastLocalAnswer(query, phone = null) {
+    const user = phone ? userMemory.getUser(phone) : null;
+    return replyQuality.improve(getFastLocalAnswerCore(query, phone), query, user);
+}
+
 async function callNvidia(messages, key) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8500);
@@ -742,7 +748,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (nvidiaKey1) {
         try {
             const reply = await callNvidia(messages, nvidiaKey1);
-            if (!isCannedRejection(reply)) return reply;
+            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
         } catch (e) {
             console.warn('[AI Assistant] NVIDIA Key 1 failed:', e.message);
         }
@@ -753,7 +759,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (nvidiaKey2 && nvidiaKey2 !== nvidiaKey1) {
         try {
             const reply = await callNvidia(messages, nvidiaKey2);
-            if (!isCannedRejection(reply)) return reply;
+            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
         } catch (e) {
             console.warn('[AI Assistant] NVIDIA Key 2 failed:', e.message);
         }
@@ -764,7 +770,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (groqKey) {
         try {
             const reply = await callGroq(messages, groqKey);
-            if (!isCannedRejection(reply)) return reply;
+            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
         } catch (e) {
             console.warn('[AI Assistant] Groq fallback failed:', e.message);
         }
@@ -775,7 +781,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (geminiKey) {
         try {
             const reply = await callGemini(systemPromptWithRAG, conversationHistory.slice(-6), userMessage, geminiKey);
-            if (!isCannedRejection(reply)) return reply;
+            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
         } catch (e) {
             console.warn('[AI Assistant] Gemini fallback failed:', e.message);
         }

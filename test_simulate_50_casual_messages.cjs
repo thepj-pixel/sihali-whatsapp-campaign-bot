@@ -150,6 +150,10 @@ async function run50MessageBrutalSimulation() {
         failedList.forEach(f => console.log(`   Msg #${f.id}: "${f.text}"\n     Expected: "${JSON.stringify(f.expected)}"\n     Got Reply: "${f.reply}..."\n`));
     }
     console.log('================================================================');
+    if (failedCount > 0) process.exitCode = 1;
 }
 
-run50MessageBrutalSimulation().catch(console.error);
+run50MessageBrutalSimulation().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

@@ -8,3 +8,5 @@ voters_rag.jsonl
 voters.csv
 voters.json
 parchi_cache/
+operations_log.jsonl
+campaign_runtime.json
