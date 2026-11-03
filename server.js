@@ -3020,13 +3020,13 @@ app.get('/', (req, res) => {
                             else if (m.status === 'TEST_SENT') badgeClass = 'badge-info';
                             else if (m.status === 'MEDIA_SENT') badgeClass = 'badge-info';
 
-                            return '<tr style="cursor: pointer;" onclick="openVoterInCRM(\'' + m.phone + '\')">' +
+                            return '<tr style="cursor: pointer;" data-phone="' + (m.phone || '') + '" onclick="openVoterInCRM(this.dataset.phone)">' +
                                 '<td style="color: #64748b; font-size: 12px;">' + (m.timestamp || '') + '</td>' +
                                 '<td><span style="font-weight: 600; color: #334155; font-size: 12px;">' + (m.session || '') + '</span></td>' +
                                 '<td><span style="color: #2563eb; font-weight: 700; font-size: 13px;">+' + (m.phone || '') + '</span></td>' +
                                 '<td style="font-weight: 500; color: #0f172a;">' + (m.incoming || '') + '</td>' +
                                 '<td style="color: #334155; font-size: 13px; white-space: pre-wrap;">' + (m.reply || '') + '</td>' +
-                                '<td><span class="badge ' + badgeClass + '">● ' + (m.status || '') + '</span><br><button class="btn btn-sm" style="background:#2563eb; color:white; margin-top:4px; font-size:11px; padding:2px 8px; border-radius:4px; border:none;" onclick="event.stopPropagation(); openVoterInCRM(\'' + m.phone + '\')">💬 Open Chat</button></td>' +
+                                '<td><span class="badge ' + badgeClass + '">● ' + (m.status || '') + '</span><br><button class="btn btn-sm" style="background:#2563eb; color:white; margin-top:4px; font-size:11px; padding:2px 8px; border-radius:4px; border:none;" data-phone="' + (m.phone || '') + '" onclick="event.stopPropagation(); openVoterInCRM(this.dataset.phone)">💬 Open Chat</button></td>' +
                                 '</tr>';
                         }).join('');
                     } catch (e) {}
@@ -3724,8 +3724,8 @@ app.get('/', (req, res) => {
                             '<td><span style="background:' + lineBg + '; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">' + lineBadge + '</span></td>' +
                             '<td style="font-size:12px; color:#64748b;">' + escapeHtml(c.notes || '--') + '</td>' +
                             '<td>' +
-                                '<button onclick="sendQuickWhatsAppToPhone(\'' + c.phone + '\', \'' + safeName + '\')" style="background:#16a34a; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-right:4px;">📲 चैट</button>' +
-                                '<button onclick="deleteContactRow(\'' + c.id + '\')" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">✕</button>' +
+                                '<button data-phone="' + (c.phone || '') + '" data-name="' + escapeHtml(c.name || '') + '" onclick="sendQuickWhatsAppToPhone(this.dataset.phone, this.dataset.name)" style="background:#16a34a; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-right:4px;">📲 चैट</button>' +
+                                '<button data-id="' + c.id + '" onclick="deleteContactRow(this.dataset.id)" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">✕</button>' +
                             '</td>' +
                         '</tr>';
                     }
