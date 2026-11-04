@@ -48,10 +48,10 @@ function buildSaveContactPrompt(lineId = 'sim_636', language = 'hi') {
 function buildConsentPrompt(name = '', language = 'hi') {
     if (language === 'hinglish' || language === 'en') {
         const g = name && !/[\u0900-\u097F]/.test(name) ? `${name} ji` : 'ji';
-        return `Ram Ram ${g}! 🙏 Hum Baba Abhay Singh jansampark team se hain. Aapki voter parchi, ward ki jankari ya gaon ki kisi samasya me kya madad chahiye?`;
+        return `Ram Ram ${g} 🙏 Main Abhay Singh ji ki team se hoon. Bataiye, kya madad karun—parchi, booth ya gaon ka koi kaam?`;
     }
-    const greeting = name ? `${name} जी` : 'भाई जी';
-    return `राम राम ${greeting}! 🙏 हम बाबा अभय सिंह जनसंपर्क टीम से हैं। आपकी मतदाता पर्ची, वार्ड की जानकारी या गाँव की किसी समस्या में क्या सहायता चाहिए?`;
+    const greeting = name && /[\u0900-\u097F]/.test(name) ? `${name} जी` : 'जी';
+    return `राम राम ${greeting} 🙏 मैं अभय सिंह जी की टीम से हूँ। बताइए, क्या मदद करूँ—पर्ची, बूथ या गाँव का कोई काम?`;
 }
 
 /** Script of a message: 'hinglish' for Roman-only text, else 'hi'. */

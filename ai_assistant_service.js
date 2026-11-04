@@ -743,10 +743,10 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     const user = phone ? userMemory.getUser(phone) : null;
 
     // Voter-slip state first (numbered choice, "हाँ", "maine abhi bataya", parchi ask with a remembered name)
-    if (user && !(brain.inFlow(user) && !/(parchi|पर्ची|slip)/i.test(lowerMsg))) {
+    if (user) {
         try {
             const sf = require('./slip_flow.js');
-            const sp = sf.decide(userMessage, user, { slipIntent: false });
+            const sp = sf.decide(userMessage, user, { slipIntent: false, blocked: brain.inFlow(user) });
             if (sp) {
                 userMemory.save();
                 lastBrainResult = { intent: 'voter_slip', source: 'slip_flow:' + sp.kind, stage: user.persuasionStage, previousStage: user.persuasionStage };
@@ -757,7 +757,9 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     }
 
     // Check if voter is giving a contextual follow-up confirmation ("ye hie details h", "yahi h", etc.)
-    const isFollowUpDetails = lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi') || lowerMsg.includes('yahi h') || lowerMsg.includes('yahi he');
+    const lastBotForSlip = user ? (((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '') : '';
+    const isFollowUpDetails = (lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi')) &&
+        /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && lowerMsg.split(/\s+/).length <= 5;
     if (isFollowUpDetails && user && user.lastFoundVoter) {
         console.log('[AI Assistant] Delivering stored voter slip upon details confirmation for:', phone);
         return voterEngine.formatSlipResponse(user.lastFoundVoter);

@@ -46,7 +46,7 @@ const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
 const nowIso = () => new Date().toISOString();
 
 // ---------------- rule extractors ----------------
-const NAME_STOP = new Set(['kya', 'hai', 'h', 'है', 'हूँ', 'हूं', 'hoon', 'hu', 'hun', 'bhai', 'baba', 'ji', 'जी', 'भाई', 'sir', 'yaha', 'यहाँ', 'kaise', 'kaam', 'काम', 'vote', 'वोट', 'nahi', 'नहीं', 'nhi', 'dekh', 'bol', 'raha', 'rha', 'rahi', 'rhi', 'batana', 'batao', 'kar', 'karo', 'to', 'bhi', 'भी', 'kuch', 'कुछ', 'mat', 'parchi', 'slip', 'list', 'ward', 'gaon', 'abhay', 'singh', 'sihali', 'khurd', 'kalan', 'hadahedi', 'haraheri', 'ram', 'राम', 'namaste', 'ok', 'theek', 'thik', 'haan', 'ha', 'हाँ', 'pakka', 'पक्का', 'aur', 'और', 'se', 'से', 'ka', 'ki', 'का', 'की', 'ward', 'वार्ड', 'main', 'मैं', 'mera', 'मेरा', 'naam', 'नाम', 'yaha', 'yahan', 'यहाँ', 'gaon', 'गाँव', 'ghar', 'घर']);
+const NAME_STOP = new Set(['yaad', 'yad', 'याद', 'pata', 'पता', 'bataya', 'बताया', 'kya', 'hai', 'h', 'है', 'हूँ', 'हूं', 'hoon', 'hu', 'hun', 'bhai', 'baba', 'ji', 'जी', 'भाई', 'sir', 'yaha', 'यहाँ', 'kaise', 'kaam', 'काम', 'vote', 'वोट', 'nahi', 'नहीं', 'nhi', 'dekh', 'bol', 'raha', 'rha', 'rahi', 'rhi', 'batana', 'batao', 'kar', 'karo', 'to', 'bhi', 'भी', 'kuch', 'कुछ', 'mat', 'parchi', 'slip', 'list', 'ward', 'gaon', 'abhay', 'singh', 'sihali', 'khurd', 'kalan', 'hadahedi', 'haraheri', 'ram', 'राम', 'namaste', 'ok', 'theek', 'thik', 'haan', 'ha', 'हाँ', 'pakka', 'पक्का', 'aur', 'और', 'se', 'से', 'ka', 'ki', 'का', 'की', 'ward', 'वार्ड', 'main', 'मैं', 'mera', 'मेरा', 'naam', 'नाम', 'yaha', 'yahan', 'यहाँ', 'gaon', 'गाँव', 'ghar', 'घर']);
 
 function titleCase(s) { return s.replace(/\b([a-z])/g, c => c.toUpperCase()); }
 
@@ -401,6 +401,7 @@ function cardObject(user) {
     o.language = m.language === 'en' ? 'hinglish' : (m.language === 'hi' ? 'devanagari' : 'unknown');
     if (m.dialect) o.dialect = m.dialect;
     if (user.lastFoundVoter) o.voterSlipFound = true;
+    if (m.slip && m.slip.relName) o.slip = `${m.slip.name} (${m.slip.relation} ${m.slip.relName}, voter-list ward ${m.slip.ward})`;
     return o;
 }
 

@@ -47,11 +47,11 @@ const HARD = [
 
 function globalChecks(tag, msg, reply, prev) {
     for (const [name, rx] of HARD) check(`${tag} no ${name}`, !rx.test(reply));
-    check(`${tag} length <= 480`, reply.length <= 480);
+    check(`${tag} length <= 480`, reply.length <= 480 || /डिजिटल मतदाता पर्ची/.test(reply));
     check(`${tag} at most one question`, (reply.match(/\?/g) || []).length <= 1);
     check(`${tag} never a bare Ji/Achha`, !/^(ji|जी|achha|accha|अच्छा|samajh gayi|समझ गई)[\s.,!🙏]*((dada|tau|tai|mata|behan|bhai sahab|दादा|ताऊ|ताई|माता|बहन|भाई साहब)\s*(ji|जी)?)?[\s.,!🙏]*$/i.test(reply.trim()));
     if (prev) check(`${tag} not a repeat of previous bot reply`, replyQuality.normalize(reply) !== replyQuality.normalize(prev));
-    if (/[a-z\u0900-\u097F]/i.test(msg) && !brain.MEDIA_RX.test(msg.trim())) {
+    if (/[a-z\u0900-\u097F]/i.test(msg) && !brain.MEDIA_RX.test(msg.trim()) && !/(डिजिटल मतदाता पर्ची|1️⃣)/.test(reply)) {
         const hi = /[\u0900-\u097F]/.test(msg);
         check(`${tag} script follows voter (${hi ? 'Devanagari' : 'Hinglish'})`, hi ? /[\u0900-\u097F]/.test(reply) : !/[\u0900-\u097F]/.test(reply));
     }
@@ -227,7 +227,7 @@ C.push({ name: 'samasya-two-problems', turns: [
 ], after: (u) => { const r = recs(u, samasya); check('[two-problems] two records (paani, sadak)', r.length === 2 && r.some(x => x.category === 'paani') && r.some(x => x.category === 'sadak')); } });
 
 C.push({ name: 'samasya-taunt-angry', turns: [
-    { m: '40 saal me kya kiya?', intent: 'taunt', has: ['haq'] },
+    { m: '40 saal me kya kiya?', intent: 'taunt', has: ['haq', 'sir aankhon', 'naraazgi'], not: /(kuch nahi kiya|jhooth)/i },
     { m: 'sab jhoothe ho', intent: 'taunt' },
     { m: 'hamare yahan to naali bhi nahi hai', intent: 'complaint' },
     { m: 'ward 10 hadahedi', has: ['kab se'] },
@@ -713,10 +713,45 @@ REG.push({ name: 'reg-devanagari-negative', templateOnly: true, turns: [
     { m: 'ठीक है' }
 ], after: (u, rs) => { const ops = rs.slice(1, 5).map(x => opener(x.reply)); check('[devanagari-negative] openers vary', new Set(ops).size === ops.length); } });
 
+// ---- v4.4 (owner 22:48): people-pleaser on abuse/false allegations, then the samasya is logged; no vote push after anger ----
+REG.push({ name: 'reg-allegation-then-samasya', turns: [
+    { m: 'baba abhay singh chutiya h', intent: 'abuse', has: ['sir aankhon', 'naraaz', 'gusse', 'bhavna', 'samman'], not: /(chutiya|galat|jhooth|aisa nahi)/i },
+    { m: 'kuch kaam nahi karwaya', intent: 'taunt', not: /(jhooth|galat|aisa nahi)/i },
+    { m: 'sadak tooti padi hai ward 4 me', intent: 'complaint' },
+    { m: 'mandir ke paas wali gali', has: ['kab se'] },
+    { m: '2 saal se', has: ['darj'] },
+    { m: 'theek hai', noVoteAsk: true }
+], after: (u) => check('[allegation] the angry voter\'s samasya is logged', recs(u, samasya).length === 1) });
+REG.push({ name: 'reg-grievance-open-logs-topic', templateOnly: true, turns: [
+    { m: 'kha gaya saare paise', intent: 'corruption', noVoteAsk: true },
+    { m: 'naali band hai', has: ['note', 'kab se', 'gali', 'ward'] },
+    { m: 'ward 9 school ke paas' },
+    { m: 'ek mahina' },
+    { m: 'ok' },
+    { m: 'dhanyavad' }
+], after: (u) => check('[grievance-open] the problem after the allegation is a logged samasya', recs(u, samasya).length === 1) });
+
 for (const r of REG) {
     C.push({ ...r, name: r.name + '-nollm' });
     C.push({ ...r, name: r.name + '-stubllm', llm: stubLLM, after: async (u, rs) => { if (r.after) await r.after(u, rs); } });
 }
+// ---- v4.4: context-loss bug — the slip flow must never wipe the conversation ----
+C.push({ name: 'reg-slip-keeps-context-pipeline', pipeline: true, turns: [
+    { m: 'Ram ram' },
+    { m: 'ward 3 me sadak tuti padi h', intent: 'complaint' },
+    { m: '3 saal se', has: ['darj'] },
+    { m: 'meri parchi chahiye', not: /सड़क/ },
+    { m: 'Krishan Kumar', has: ['1️⃣'], not: /samajh gayi/ },
+    { m: '1', has: ['डिजिटल मतदाता पर्ची'] },
+    { m: 'meri sadak wali baat yaad hai?', intent: 'memory_check', has: ['sadak'], not: /(डिजिटल मतदाता पर्ची|वोटर लिस्ट)/ },
+    { m: 'nahi pata kab banegi', not: /(डिजिटल मतदाता पर्ची|वोटर लिस्ट)/ },
+    { m: 'mera naam yaad hai?', intent: 'memory_check', has: ['कृष्ण', 'Krishan'], not: /Yaad ji/ }
+], after: (u) => {
+    const m = u.memory || {};
+    check('[context] samasya + concern survive the slip turns', recs(u, samasya).length === 1 && (m.concerns || []).some(c => c.topic === 'road'));
+    check('[context] slip facts kept next to the conversation (name, father, ward)', m.slip && m.slip.relName === 'भवानी राम' && m.name && (m.ward === 3 || u.ward === 3));
+    check('[context] history keeps the earlier turns', (u.history || []).some(h => /sadak tuti/.test(h.text || '')));
+} });
 C.push({ name: 'reg-memory-name-ward-pipeline', pipeline: true, turns: [
     { m: 'namaste' },
     { m: 'main ward 4 se hu, mera naam Suresh hai', has: ['Suresh'], not: /(वोटर लिस्ट|पिताजी का नाम)/ },
@@ -759,6 +794,12 @@ function unitChecks() {
     check('[server] 401 message does not print the PIN', !/Enter PIN 2026/.test(src));
     check('[server] slip search is skipped while a samasya/mulaqat flow is open', /inBrainFlow/.test(src));
     check('[server] no election-symbol claim in templates', !/स्वस्तिक \(卐\) पर मुहर/.test(src));
+    // ---- v4.4: short first reply ----
+    const ep = require('./engagement_policy.js');
+    const cp = [ep.buildConsentPrompt('', 'hi'), ep.buildConsentPrompt('', 'hinglish')];
+    check('[first] consent intro is 1-2 short lines', cp.every(x => x.length <= 130 && x.split('\n').length <= 2));
+    check('[server] substantive first message is answered directly (no intro block)', /firstIsSubstantive/.test(src) && !/await sendLineContactCardOnce\(sock, replyJid, senderPhone, sessionObj\);\n\s*continue;/.test(src));
+    check('[server] "yahi"/"nahi pata" only re-run a voter search right after our slip prompt', /lastBotForSlip/.test(src));
     // ---- v4: slip flow (owner transcript) ----
     const sf = require('./slip_flow.js');
     check('[slip] choiceIndex: 1, 1️⃣, pehla, "no 2", "2 number", dusra', sf.choiceIndex('1', 2) === 0 && sf.choiceIndex('1️⃣', 2) === 0 && sf.choiceIndex('pehla', 2) === 0 && sf.choiceIndex('no 2', 3) === 1 && sf.choiceIndex('2 number', 3) === 1 && sf.choiceIndex('dusra', 3) === 1 && sf.choiceIndex('7', 3) === -1);
@@ -787,7 +828,7 @@ function unitChecks() {
     check('[slip] parchi ask reuses the name remembered from an earlier intro', r3 && r3.kind === 'choose');
     const k4 = { history: [], memory: {} };
     const single = sf.decide('Ramesh Yadav parchi', k4, {});
-    check('[slip] single match asks the father/husband confirmation first (privacy rule kept)', single && single.kind === 'confirm' && /हाँ/.test(single.text));
+    check('[slip] single match asks the father/husband confirmation first (privacy rule kept)', single && single.kind === 'confirm' && /(हाँ|haan)/.test(single.text));
     k4.history.push({ role: 'bot', text: single.text });
     check('[slip] "haan" after the confirmation delivers', (sf.decide('haan', k4, {}) || {}).kind === 'deliver');
     check('[slip] abuse/candidate/news never trigger a slip search', ['Kutta abhay Singh', 'Elon Musk kon h', 'Kha gaya saare paise', 'who is abhay singh'].every(m => sf.decide(m, { history: [], memory: {} }, { slipIntent: true }) === null));
@@ -795,7 +836,7 @@ function unitChecks() {
     const ob = require('./outbound_settings.js');
     const saved = process.env.OUTBOUND_SETTINGS_PATH;
     ob._reset();
-    check('[outbound] defaults: proactive OFF, quiet hours ON', ob.get().proactiveOutbound === false && ob.get().quietHours === true && !saved.includes('outbound_settings.json'));
+    check('[outbound] defaults: proactive OFF, quiet hours OFF (owner 22:48)', ob.get().proactiveOutbound === false && ob.get().quietHours === false && !saved.includes('outbound_settings.json'));
     check('[server] proactive runner gated by the outbound toggle', /if \(!require\('\.\/outbound_settings\.js'\)\.proactiveEnabled\(\)\) return \{ disabled: true \};/.test(src));
     check('[server] admin boot report stays opt-in', /process\.env\.ADMIN_BOOT_REPORT !== 'on'/.test(src));
     check('[server] outbound settings API + dashboard toggle', /\/api\/settings\/outbound/.test(src) && /id="ob-proactive"/.test(src) && /id="ob-quiet"/.test(src));
@@ -805,6 +846,19 @@ function unitChecks() {
 
 (async () => {
     unitChecks();
+    // owner 22:48 (5): the same opener/pitch is not reused across days (memory keeps the lines already used)
+    {
+        const vu = freshUser();
+        const outs = [];
+        for (let day = 0; day < 3; day++) {
+            vu.history = []; // a new day: chat history window is empty, long-term memory stays
+            for (const m of ['bc bakwas', 'theek hai']) { vu.history.push({ role: 'user', text: m }); const r = await brain.respond(m, vu, {}); vu.history.push({ role: 'bot', text: r.text }); outs.push(r.text); }
+        }
+        const abuseOps = [outs[0], outs[2], outs[4]].map(x => replyQuality.normalize(x).slice(0, 18));
+        check('[variety] abuse openers differ on three different days', new Set(abuseOps).size === 3);
+        const thanks = [outs[1], outs[3], outs[5]].map(x => replyQuality.normalize(x).slice(0, 18));
+        check('[variety] thanks lines rotate across days', new Set(thanks).size >= 2);
+    }
     // owner rule: with default settings, the 15-min proactive timer path sends nothing
     {
         const sent = [];

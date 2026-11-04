@@ -3,7 +3,7 @@
 **Owner rule: "dont send any ping message other than our dashboard".** The bot never starts a conversation by itself any more.
 - New `outbound_settings.js` (state in `outbound_settings.json`, gitignored so a toggle never dirties the VM's git tree). `proactiveOutbound` is **OFF by default**: `runProactiveNudges` (planner follow-ups, persuasion nudges, consent reminders) returns at once, and `followup_planner.runCycle` refuses to send unless the toggle is on (`enabled` param, defaults to the setting). The admin boot ping stays opt-in (`ADMIN_BOOT_REPORT=on`). The night summary only builds on the dashboard; it never sends.
 - What still goes out: replies to incoming messages (including the contact card on the first replies) and what the operator triggers from the dashboard (Bulk Send, single send, agenda when the operator presses send).
-- **Quiet hours** for Bulk Send (21:00–08:00 IST) are a toggle, **ON by default**. Replies are never blocked by it.
+- **Quiet hours** for Bulk Send (21:00–08:00 IST) are a toggle, **OFF by default** since v4.4. Replies are never blocked by it.
 - Dashboard → **📣 Bulk Send → 3️⃣ Lines & Safety Caps → 🔒 Outbound rules**: two checkboxes. API: `GET/POST /api/settings/outbound {proactiveOutbound, quietHours}`. `/health` now shows `outbound`.
 
 **Voter slip (core feature) — new `slip_flow.js`, used by `server.js` and `ai_assistant_service.js`.**
@@ -21,6 +21,13 @@
 - Plain insults ("bekar aadmi hai", "chup kar"): respect plus an open door, no works pitch. Taunts keep one work.
 - Every negative reply takes an opener not used in the last 8 bot messages; the repeat guard uses the same pool for negative intents.
 - Emoji-only and gibberish first messages; English "who is abhay singh / how are you / who are you".
+
+**v4.4 (owner, 22:48 IST).**
+- Quiet hours toggle now defaults **OFF** ("don't worry about day/night"). Turn it on from the dashboard if needed.
+- **Context-loss fix.** "yahi", "itna hi" and "nahi pata" used to re-run the last voter search on *any* later message ("nahi pata kab banegi sadak" sent a slip again and the chat lost its thread). They now count only as a short answer right after our own slip prompt. Long or problem-like messages ("Ramesh Kumar ke ghar ke paas naali band hai") never become a voter search. The slip only fills blanks in memory (never overwrites name/ward told earlier) and stores `memory.slip` (name, father/husband, voter-list ward), which the LLM memory card carries. Memory updates also run on slip turns. "mera naam yaad hai?" no longer stores "Yaad" as a name.
+- **First reply to a new contact:** a real opening message (question, problem, parchi ask) is answered directly. A bare greeting gets a 1-line intro ("राम राम जी 🙏 मैं अभय सिंह जी की टीम से हूँ। बताइए, क्या मदद करूँ—पर्ची, बूथ या गाँव का कोई काम?"). The contact card no longer stacks on the intro; it follows a real reply.
+- **Abuse / false allegations, people-pleaser style:** "आपकी नाराज़गी सिर आँखों पर 🙏 आपका काम पूरा हो, यही हमारी कोशिश है—बताइए क्या दिक्कत है, मैं आपकी बात सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।" No denial, no argument, female voice throughout. The first "kuch kaam nahi karwaya" gets an acknowledgement and the question of what is stuck (no works pitch). The next problem-like answer within 45 minutes is logged as a samasya, and no vote ask follows an angry message for 45 minutes. "Aapka kaam zaroor poora hoga" was softened to "aapka kaam poora ho, yahi hamari koshish hai" so the bot never guarantees a fix.
+- **Variety across turns and days:** openers, closers and canned lines are logged per voter (`memory.lineLog`, last 60). A line not used before is picked first, then the least recently used one. Works already told stay excluded for good (`toldItems`).
 
 **Tests.** `test:brainv3` adds the owner's transcript, abuse variants, first-message cases and a Devanagari negative run (each with the LLM off and with a stub LLM), slip-flow units (full name, "1", "pehla", reuse of the name, "maine abhi bataya", single-match confirmation), and an assertion that with default settings the proactive timer path and the broadcast timer send nothing.
 

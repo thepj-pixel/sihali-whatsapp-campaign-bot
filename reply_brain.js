@@ -93,7 +93,7 @@ const RX = {
     commitYes: /(pakk?a\b|pakka vote|vote (dalne|daalne|dene) (zaroor )?(aaunga|aaungi|aunga|aungi|aayenge|aaenge)|वोट (डालने|देने) (ज़रूर |जरूर )?(आऊँगा|आऊंगा|आऊँगी|आऊंगी|आएँगे|आएंगे)|vote (to )?(denge|dunga|dungi|dege|de denge|karenge)|aap?ke sath|aapke saath|(hum|ham|main|mai) (to )?(abhay singh|aap|baba)[a-z ]{0,10}(ke )?sath|saath (hai|hain|h)\b|baba ko hi|abhay singh ko hi|support (hai|h|karenge)|hamara vote|mhara vote|पक्का|वोट (देंगे|दूंगा|दूँगा|दूंगी|देगें|दे देंगे|देगा|देगी)|साथ (हैं|है|हूँ|हूं|हु)|saath (hu|hoon|hun)\b|sath (hu|hoon|hun)\b|समर्थन (है|करेंगे)|आपको ही|अभय सिंह को ही)/i,
     opposed: /(nahi denge|nhi denge|nahi dunga|nahi dungi|vote nahi|vote nhi|kisi aur ko|dusre ko|doosre ko|(dusre|doosre|unke|uske|virodhi|samne wale) ke (saath|sath|supporter)|dusre ka supporter|against|virodh me|नहीं देंगे|नहीं दूंगा|वोट नहीं|किसी और को|दूसरे को|(दूसरे|उनके|उसके|विरोधी|सामने वाले) के साथ|खिलाफ)/i,
     bribe: /(daru|daaru|sharab|botal|bottle|kitna doge|kitne doge|paise doge|paisa doge|paise milenge|paisa milega|paise do|paisa do|note do|kuch (to )?milega|kya milega vote|vote ka kya milega|kuch (to )?doge|पैसे दो|पैसा दो|पैसे दोगे|पैसा दोगे|पैसे मिलेंगे|पैसा मिलेगा|कितना दोगे|कुछ (तो )?मिलेगा|क्या मिलेगा|दारू|शराब|बोतल)/i,
-    taunt: /((40 saal|चालीस साल|40 साल|aaj tak|आज तक|5 saal|पाँच साल)[^?]{0,20}(kya kiya|क्या किया)|kuch nahi kiya|kuch nhi kiya|kuchh nahi kiya|jhoot|jhooth|\bchor\b|farji|farzi|dhongi|bekar|bakwas|kaam hi nahi|koi kaam nahi|कुछ नहीं किया|झूठ|चोर|फर्जी|बेकार|बकवास|कोई काम नहीं)/i,
+    taunt: /((40 saal|चालीस साल|40 साल|aaj tak|आज तक|5 saal|पाँच साल)[^?]{0,20}(kya kiya|क्या किया)|kuch nahi kiya|kuch nhi kiya|kuchh nahi kiya|kuch (bhi )?kaam nahi (karwaya|karaya|kiya|hua|kar(w)?aye)|koi kaam nahi (karwaya|kiya|hua)|kuch nahi karwaya|कुछ (भी )?काम नहीं (करवाया|किया|हुआ)|jhoot|jhooth|\bchor\b|farji|farzi|dhongi|bekar|bakwas|kaam hi nahi|koi kaam nahi|कुछ नहीं किया|झूठ|चोर|फर्जी|बेकार|बकवास|कोई काम नहीं)/i,
     abuse: /(\bmc\b|\bbc\b|\bmkc\b|bsdk|bhosd|madarc|behenc|bhenc|\bkutt?[aeiy]\b|kutton|kutiya|kamine|kamina|harami|haraami|saala|saale|chutiy|gandu|\blavd|\blaud|\blod[ue]\b|\bsuar\b|suwar|\bgadh[ae]\b|ullu ka|nalayak|naalayak|tatti|कुत्त[ाेी]|कुतिया|कमीन[ेा]|हरामी|साले|साला|भोस|मादर|चुतिय|गांडू|सूअर|गधे|नालायक)/i,
     corruption: /(\bchor (hai|h|he|hain|aadmi|insaan|log)\b|(abhay|baba|sarpanch|panchayat)[a-z ]{0,12}\bchor\b|चोर (है|हैं|आदमी)|kha (gaya|gye|gaye|gya|liya|liye|jayega|jaega)|kha (gaya|gye|gaye) (saare|sare|sab|saara|sara)?\s*(paise|paisa)|(paise|paisa|fund|funds|bajat|budget)\s*(kha|khaa|hadap|dakar|loot|lut)|kha (gaya|gye|gaye) (sab|saara|sare)|hadap (liya|liye|gaya)|ghotal|ghotaal|ghapla|ghaple|bhrasht|bhrashtachar|corrupt|commission khor|kamishan|\bloot (liya|liye|li|gaya|gaye|rahe)|lut (liya|liye)|lootera|lutera|chori (ki|kar|karke)|खा (गया|गए|गये|लिया|लिए)|पैसे खा|पैसा खा|हड़प|घोटाला|घपला|भ्रष्ट|लूट (लिया|लिए|ली|गया)|लुटेरा|कमीशन)/i,
     insult: /(\bchup\b|chup (kar|kr|reh|raho)|\bbekar\b|bekaar|nikamm|faltu|faltoo|ghatiya|gatiya|wahiyat|\bdhongi\b|jhootha|jhutha|naatak|natak baaz|drama|chamcha|चुप|बेकार|निकम्म|फालतू|फ़ालतू|घटिया|वाहियात|ढोंगी|झूठा|नाटक)/i,
@@ -319,13 +319,28 @@ function pickCloser(stage, l, user, concern = null) {
     if (askedRecently && stage !== 'committed') return null;
     if (/(darj kar li|note kar liya|दर्ज कर ली|नोट कर लिया|bulawe ke liye|बुलावे के लिए)/i.test(recentBotText(user, 2))) return null;
     const mm = user && user.memory;
+    if (mm && mm.grievanceOpenAt && Date.now() - Date.parse(mm.grievanceOpenAt) < 45 * 60e3) return null; // no vote ask right after anger
     if (mm && (mm.wrongNumberAt || (mm.condolenceAt && Date.now() - Date.parse(mm.condolenceAt) < 3 * 86400e3))) return null;
-    return opts.find(o => !recent.includes(o.slice(0, 25).toLowerCase())) || null;
+    const log = usedLines(user);
+    const ok = opts.filter(o => !recent.includes(o.slice(0, 25).toLowerCase()));
+    const pick = ok.find(o => !log.includes(lineKey(o))) || ok.slice().sort((a, b) => log.indexOf(lineKey(a)) - log.indexOf(lineKey(b)))[0] || null;
+    if (pick) markLine(user, pick);
+    return pick;
 }
 
+// Lines used for this voter across days (keys = first 22 chars), so the same pitch/opener is not reused tomorrow either.
+const lineKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 22);
+function usedLines(user) { const m = user && user.memory; if (!m) return []; if (!Array.isArray(m.lineLog)) m.lineLog = []; return m.lineLog; }
+function markLine(user, s) { if (!user || !user.memory) return; const log = usedLines(user); const k = lineKey(s); const i = log.indexOf(k); if (i >= 0) log.splice(i, 1); log.push(k); while (log.length > 60) log.shift(); }
 function vary(user, variants) {
     const recent = recentBotText(user, 4).toLowerCase();
-    return variants.find(v => !recent.includes(v.slice(0, 22).toLowerCase())) || variants[(((user && user.memory && user.memory.recall && user.memory.recall.turn) || 0)) % variants.length];
+    const log = usedLines(user);
+    const notRecent = variants.filter(v => !recent.includes(v.slice(0, 22).toLowerCase()));
+    // never-used first, then the least recently used among those not in the last few replies
+    const pick = notRecent.find(v => !log.includes(lineKey(v))) || notRecent.slice().sort((a, b) => log.indexOf(lineKey(a)) - log.indexOf(lineKey(b)))[0] ||
+        variants[(((user && user.memory && user.memory.recall && user.memory.recall.turn) || 0)) % variants.length];
+    markLine(user, pick);
+    return pick;
 }
 
 /** Recall a remembered concern — but not right after we just confirmed/registered it (no reciting). */
@@ -358,24 +373,28 @@ function topicItems(topic, l, user, type = null) {
 // ---------------- negative sentiment: varied, calm, never the same opener twice ----------------
 const NEG_POOL = {
     abuse: [
+        ['आपकी नाराज़गी सिर आँखों पर{H} 🙏 आपका काम पूरा हो, यही हमारी कोशिश है—बताइए क्या दिक्कत है, मैं आपकी बात सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।', 'Aapki naraazgi sir aankhon par{H} 🙏 Aapka kaam poora ho, yahi hamari koshish hai—bataiye kya dikkat hai, main aapki baat sabse pehle Abhay Singh ji tak pahunchati hoon.'],
         ['आपकी नाराज़गी समझ सकती हूँ{H}। कोई दिक्कत है तो खुलकर बताइए—मैं सीधे अभय सिंह जी तक पहुँचाऊँगी 🙏', 'Aapki naraazgi samajh sakti hoon{H}. Koi dikkat hai to khulkar bataiye—main seedhe Abhay Singh ji tak pahunchaungi 🙏'],
         ['गुस्से में कही बात का बुरा नहीं मानती{H} 🙏 आराम से बताइए, किस बात से मन दुखा है?', 'Gusse me kahi baat ka bura nahi maanti{H} 🙏 Aaram se bataiye, kis baat se man dukha hai?'],
         ['मैं आपकी बात का सम्मान करती हूँ{H}, भले आप नाराज़ हों 🙏 गाँव का कोई काम अटका हो तो बताइए, नोट कर लूँगी।', 'Main aapki baat ka samman karti hoon{H}, bhale aap naraaz hon 🙏 Gaon ka koi kaam atka ho to bataiye, note kar lungi.'],
         ['ठीक है{H}, आपकी भावना टीम तक पहुँचा दूँगी 🙏 जब मन करे, अपनी असली परेशानी बताइएगा—सुनने के लिए यहीं हूँ।', 'Theek hai{H}, aapki bhavna team tak pahuncha dungi 🙏 Jab man kare, apni asli pareshani bataiyega—sunne ke liye yahin hoon.']
     ],
     insult: [
+        ['आपकी भावना की पूरी कद्र करती हूँ{H} 🙏 मैं बहस नहीं करूँगी—बस इतना बताइए कि किस बात से मन दुखा है, सबसे पहले अभय सिंह जी तक पहुँचाऊँगी।', 'Aapki bhavna ki poori kadr karti hoon{H} 🙏 Main behes nahi karungi—bas itna bataiye ki kis baat se man dukha hai, sabse pehle Abhay Singh ji tak pahunchaungi.'],
         ['हर किसी की अपनी राय होती है{H}, आपकी राय का भी सम्मान है 🙏', 'Har kisi ki apni raay hoti hai{H}, aapki raay ka bhi samman hai 🙏'],
         ['आपकी नाराज़गी सिर-आँखों पर{H}—शायद कहीं कोई काम अटका है जिसने मन दुखाया।', 'Aapki naraazgi sir-aankhon par{H}—shayad kahin koi kaam atka hai jisne man dukhaya.'],
         ['आप जैसा महसूस कर रहे हैं, वो मैं टीम तक ज़रूर पहुँचाऊँगी{H} 🙏', 'Aap jaisa mehsoos kar rahe hain, wo main team tak zaroor pahunchaungi{H} 🙏'],
         ['मैं बहस नहीं करूँगी{H}—आपकी बात सुनना मेरा काम है 🙏', 'Main behes nahi karungi{H}—aapki baat sunna mera kaam hai 🙏']
     ],
     taunt: [
+        ['आपकी शिकायत सिर आँखों पर{H} 🙏 जहाँ काम अधूरा लगा, वहाँ शिकायत बनती है।', 'Aapki shikayat sir aankhon par{H} 🙏 Jahan kaam adhoora laga, wahan shikayat banti hai.'],
         ['सवाल पूछना आपका हक़ है{H}।', 'Sawal poochna aapka haq hai{H}.'],
         ['आपकी नाराज़गी समझती हूँ{H}—जहाँ काम अटका हो वहाँ गुस्सा आना स्वाभाविक है।', 'Aapki naraazgi samajhti hoon{H}—jahan kaam atka ho wahan gussa aana swabhavik hai.'],
         ['आपने खुलकर कहा, अच्छा लगा{H} 🙏', 'Aapne khulkar kaha, achha laga{H} 🙏'],
         ['बात सीधी है{H}—काम ज़मीन पर दिखता है, आप खुद देख सकते हैं।', 'Baat seedhi hai{H}—kaam zameen par dikhta hai, aap khud dekh sakte hain.']
     ],
     corruption: [
+        ['आपकी बात सिर आँखों पर{H} 🙏 अभय सिंह जी 40 साल से निष्कलंक सेवा में हैं, और पंचायत के काम ज़मीन पर दिखते हैं—', 'Aapki baat sir aankhon par{H} 🙏 Abhay Singh ji 40 saal se nishkalank seva me hain, aur panchayat ke kaam zameen par dikhte hain—'],
         ['आपकी चिंता समझती हूँ{H} 🙏 अभय सिंह जी 40 साल की निष्कलंक समाज सेवा के लिए जाने जाते हैं, और पंचायत में हुए काम ज़मीन पर दिखते हैं—', 'Aapki chinta samajhti hoon{H} 🙏 Abhay Singh ji 40 saal ki nishkalank samaj seva ke liye jaane jaate hain, aur panchayat me hue kaam zameen par dikhte hain—'],
         ['ऐसी बात सुनकर मन दुखता है{H}, पर आपकी बात का सम्मान है 🙏 गाँव ने 40 साल से अभय सिंह जी की सेवा देखी है, और काम सामने हैं—', 'Aisi baat sunkar man dukhta hai{H}, par aapki baat ka samman hai 🙏 Gaon ne 40 saal se Abhay Singh ji ki seva dekhi hai, aur kaam saamne hain—'],
         ['आपका सवाल जायज़ है{H}—भरोसा काम से बनता है 🙏 पंचायत में हुए काम आप खुद देख सकते हैं—', 'Aapka sawal jaayaz hai{H}—bharosa kaam se banta hai 🙏 Panchayat me hue kaam aap khud dekh sakte hain—']
@@ -385,9 +404,13 @@ function negLine(user, l, H, kind) {
     const recent = recentBotText(user, 8).toLowerCase();
     const pool = NEG_POOL[kind] || NEG_POOL.insult;
     const all = Object.values(NEG_POOL).flat();
-    const pick = pool.find(p => !recent.includes((l === 'hi' ? p[0] : p[1]).replace('{H}', H).slice(0, 18).toLowerCase())) ||
-        all.find(p => !recent.includes((l === 'hi' ? p[0] : p[1]).replace('{H}', H).slice(0, 18).toLowerCase())) || pool[0];
-    return (l === 'hi' ? pick[0] : pick[1]).replace('{H}', H);
+    const txt = p => (l === 'hi' ? p[0] : p[1]).replace('{H}', H);
+    const log = usedLines(user);
+    const fresh = pool.filter(p => !recent.includes(txt(p).slice(0, 18).toLowerCase()));
+    const pick = fresh.find(p => !log.includes(lineKey(txt(p)))) || fresh.slice().sort((a, b) => log.indexOf(lineKey(txt(a))) - log.indexOf(lineKey(txt(b))))[0] ||
+        all.find(p => !recent.includes(txt(p).slice(0, 18).toLowerCase())) || pool[0];
+    markLine(user, txt(pick));
+    return txt(pick);
 }
 
 // ---------------- compose (grounded template) ----------------
@@ -420,13 +443,14 @@ function compose(cls, ctx) {
             return { text: body, ask: false, used };
         }
         case 'abuse':
+            mem.grievanceOpenAt = new Date().toISOString();
             return { text: negLine(user, l, H, 'abuse'), ask: false };
         case 'corruption': {
-            const major = ['M2', 'D-H1', 'M1', 'M8', 'M4'].map(id => kb.getItem(id)).filter(i => i && !mem.toldItems.includes(i.id));
-            const it = major[0] || kb.getItem('M2');
-            if (it) used.push(it.id);
-            const work = it ? kb.render(it, l).replace(/[।.]\s*$/, '') : '';
-            return { text: negLine(user, l, H, 'corruption') + work + S('। किसी ख़ास काम को लेकर शिकायत हो तो बताइए, सीधे टीम तक पहुँचाऊँगी।', '. Kisi khaas kaam ko lekar shikayat ho to bataiye, seedhe team tak pahunchaungi.'), ask: false, used };
+            const SHORT = { M2: ['जल जीवन मिशन की टंकियाँ और घर-घर नल', 'Jal Jeevan Mission ki tankiyan aur ghar-ghar nal'], 'D-H1': ['उनकी दान की ज़मीन पर बना उप-स्वास्थ्य केंद्र', 'unki daan ki zameen par bana up-swasthya kendra'], M1: ['खेल मैदान, रनिंग ट्रैक और ओपन जिम', 'khel maidan, running track aur open gym'], M8: ['सिहाली खुर्द की मॉड्यूलर लाइब्रेरी', 'Sihali Khurd ki modular library'], M4: ['जोहड़ों की गहरी खुदाई', 'johadon ki gehri khudai'] };
+            const id = Object.keys(SHORT).find(k => !mem.toldItems.includes(k)) || 'M2';
+            used.push(id);
+            mem.grievanceOpenAt = new Date().toISOString();
+            return { text: negLine(user, l, H, 'corruption') + S('जैसे ', 'jaise ') + SHORT[id][l === 'hi' ? 0 : 1] + S('। फिर भी किसी ख़ास काम को लेकर शिकायत हो तो बताइए, मैं सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।', '. Phir bhi kisi khaas kaam ko lekar shikayat ho to bataiye, main sabse pehle Abhay Singh ji tak pahunchati hoon.'), ask: false, used };
         }
         case 'emoji_only':
             return { text: vary(user, [S(`🙏 राम राम${H}! बताइए, क्या सेवा करूँ—पर्ची, बूथ या गाँव का कोई काम?`, `🙏 Ram Ram${H}! Bataiye, kya seva karun—parchi, booth ya gaon ka koi kaam?`), S(`😊🙏 आपका संदेश मिला${H}। कुछ पूछना हो तो लिख दीजिए।`, `😊🙏 Aapka sandesh mila${H}. Kuch poochna ho to likh dijiye.`)]), ask: false };
@@ -524,12 +548,21 @@ function compose(cls, ctx) {
         case 'taunt': {
             if (cls.insult) {
                 // a plain insult ("bekar aadmi hai", "chup kar") gets calm respect and an open door, not a works pitch
+                mem.grievanceOpenAt = new Date().toISOString();
                 const op = negLine(user, l, H, 'insult');
-                body = op + ' ' + vary(user, [
+                body = /(बताइए|bataiye)/i.test(op) ? op : op + ' ' + vary(user, [
                     S('कोई ख़ास बात या काम जो आपको खटकता हो, वो बताइए—मैं सीधे टीम तक पहुँचाऊँगी।', 'Koi khaas baat ya kaam jo aapko khatakta ho, wo bataiye—main seedhe team tak pahunchaungi.'),
                     S('अगर गाँव का कोई काम अटका है, तो बस वार्ड और जगह बता दीजिए, नोट कर लूँगी।', 'Agar gaon ka koi kaam atka hai, to bas ward aur jagah bata dijiye, note kar lungi.'),
                     S('आपकी बात सुनने के लिए मैं यहीं हूँ, जब चाहें लिखिए।', 'Aapki baat sunne ke liye main yahin hoon, jab chahein likhiye.')
                 ].filter(x => !(/(atka|अटका)/i.test(op) && /(atka|अटका)/i.test(x))));
+                ask = false;
+                break;
+            }
+            if (!mem.told.tauntAck) {
+                // first allegation: no argument, no works list—acknowledge and ask what is wrong (logged as a samasya next)
+                mem.told.tauntAck = true;
+                mem.grievanceOpenAt = new Date().toISOString();
+                body = negLine(user, l, H, 'taunt') + S(' बताइए आपके यहाँ कौन-सा काम अटका है—वार्ड और जगह के साथ, मैं सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।', ' Bataiye aapke yahan kaun sa kaam atka hai—ward aur jagah ke saath, main sabse pehle Abhay Singh ji tak pahunchati hoon.');
                 ask = false;
                 break;
             }
@@ -1012,6 +1045,12 @@ function think(message, user, opts = {}, memoryDone = false) {
             if (cls.intent === 'complaint' || (cls.intent === 'abuse' && cls.alsoTopic)) fr = flows.startSamasya(ctx, { topic: kb.primaryTopic(message, cls.topic) });
             else if (cls.intent === 'samasya_explicit') fr = flows.startSamasya(ctx, { topic: null, explicit: true });
             else if (cls.intent === 'meeting') fr = flows.startMulaqat(ctx, { type: cls.call ? 'call' : 'visit' });
+            // after an angry message we asked "kya dikkat hai?": the next problem-like answer is logged as a samasya
+            else if (mem.grievanceOpenAt && Date.now() - Date.parse(mem.grievanceOpenAt) < 45 * 60e3 && ['topic_mention', 'short_reply', 'unclear', 'gave_ward', 'works'].includes(cls.intent) && (cls.topic || CONCERN_RX.test(message)) && !/\?/.test(message)) {
+                fr = flows.startSamasya(ctx, { topic: kb.primaryTopic(message, cls.topic) });
+                if (fr) mem.grievanceOpenAt = null;
+            }
+            if (fr && cls.intent === 'complaint') mem.grievanceOpenAt = null;
         }
     } catch (e) { console.error('[Brain] flow error:', e.message); fr = null; }
 

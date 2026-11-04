@@ -795,6 +795,15 @@ async function startSession(sessionObj) {
                 // Consent is a real state transition, not just message copy.
                 // New contacts receive the permission prompt before campaign automation starts.
                 const consentDecision = engagementPolicy.parseConsentResponse(body);
+                // A new contact who opens with a real message (question, problem, parchi ask) gets that answered right away;
+                // only a bare greeting / emoji gets the short 1-line intro. No long welcome block.
+                const firstIsSubstantive = user.consentStatus === 'PENDING' && consentDecision !== 'rejected' && !engagementPolicy.isOptOutMessage(body) &&
+                    String(body || '').trim().split(/\s+/).length >= 2 && !/^(hi+|hello|hey|hlo|ram ram|raam raam|namaste|namaskar|pranam|jai shri ram|radhe radhe|राम राम|नमस्ते|नमस्कार|प्रणाम)[\s\p{L}\p{M}!.,🙏]{0,12}$/iu.test(String(body || '').trim());
+                if (firstIsSubstantive) {
+                    engagementPolicy.applyConsentDecision(user, 'accepted');
+                    userMemory.save();
+                    operationsTracker.record('consent', 'accepted', { lineId: sessionObj.id, via: 'substantive_first_message' });
+                }
                 if (user.consentStatus === 'PENDING') {
                     engagementPolicy.markConsentPrompted(user);
                     userMemory.save();
@@ -802,8 +811,7 @@ async function startSession(sessionObj) {
                     await sendSafeMessage(sock, replyJid, { text: consentPrompt });
                     userMemory.recordMessage(senderPhone, 'bot', consentPrompt, 'consent_prompt', sessionObj.name);
                     operationsTracker.record('consent_prompt', 'sent', { lineId: sessionObj.id });
-                    await sendLineContactCardOnce(sock, replyJid, senderPhone, sessionObj);
-                    continue;
+                    continue; // contact card follows later with a real reply (anti-ban hook), not stacked on the intro
                 }
 
                 const substantiveFirstReply = consentDecision === 'accepted' &&
@@ -932,7 +940,11 @@ async function startSession(sessionObj) {
                     const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
                     // Check if user is confirming previous query ("ye hie details h", "yahi h", "itna hi pata h", etc.)
-                    const isFollowUpDetails = lower.includes('ye hie') || lower.includes('yahi') || lower.includes('yehi') || lower.includes('itna hi') || lower.includes('yahi h') || lower.includes('yahi he') || lower.includes('nahi pata');
+                    // Context-loss fix: "yahi"/"nahi pata" re-ran the last voter search on ANY later message ("nahi pata kab banegi
+                    // sadak" -> a slip again). It now counts only as a short answer right after our own slip prompt.
+                    const lastBotForSlip = ((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '';
+                    const isFollowUpDetails = (lower.includes('ye hie') || lower.includes('yahi') || lower.includes('yehi') || lower.includes('itna hi') || lower.includes('nahi pata')) &&
+                        /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && body.trim().split(/\s+/).length <= 5;
                     let effectiveSearchText = body;
                     if (isFollowUpDetails && user && user.lastSearchedQuery) {
                         effectiveSearchText = user.lastSearchedQuery;
@@ -1050,6 +1062,8 @@ async function startSession(sessionObj) {
                     } else if (slipPlan) {
                         // Voter slip (slip_flow.js): numbered choice, "हाँ" confirmation, remembered name, full-name match
                         const targetVoter = slipPlan.voter || null;
+                        // keep the conversation memory growing on slip turns too (name/ward/concerns said alongside)
+                        try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: 'voter_slip', topic: null }); } catch (e) {}
                         if (slipPlan.kind === 'deliver' && targetVoter) {
                             userMemory.save();
                             replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.FAMILY_TAIL;
@@ -3668,7 +3682,7 @@ app.get('/', (req, res) => {
                             <div id="outbound-settings" style="border: 1px dashed #94a3b8; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; background: #f8fafc;">
                                 <div style="font-weight: 800; margin-bottom: 4px;">🔒 Outbound rules (saved on the server)</div>
                                 <label style="display: block; margin: 3px 0;"><input type="checkbox" id="ob-proactive" onchange="saveOutboundSettings()"> <b>Proactive outbound</b> (bot starts chats on its own: follow-ups, nudges, consent reminders) — <span id="ob-proactive-state">OFF</span></label>
-                                <label style="display: block; margin: 3px 0;"><input type="checkbox" id="ob-quiet" onchange="saveOutboundSettings()"> <b>Quiet hours for Bulk Send</b> (no bulk sends 21:00–08:00 IST; replies always go) — <span id="ob-quiet-state">ON</span></label>
+                                <label style="display: block; margin: 3px 0;"><input type="checkbox" id="ob-quiet" onchange="saveOutboundSettings()"> <b>Quiet hours for Bulk Send</b> (no bulk sends 21:00–08:00 IST; replies always go) — <span id="ob-quiet-state">OFF</span></label>
                                 <div style="color: #64748b;">Replies to incoming messages and the sends you trigger here always work.</div>
                             </div>
 
@@ -5161,9 +5175,9 @@ app.get('/', (req, res) => {
                 window.renderOutboundSettings = function (d) {
                     if (!d || !document.getElementById('ob-proactive')) return;
                     document.getElementById('ob-proactive').checked = !!d.proactiveOutbound;
-                    document.getElementById('ob-quiet').checked = d.quietHours !== false;
+                    document.getElementById('ob-quiet').checked = d.quietHours === true;
                     document.getElementById('ob-proactive-state').textContent = d.proactiveOutbound ? 'ON' : 'OFF';
-                    document.getElementById('ob-quiet-state').textContent = d.quietHours !== false ? 'ON' : 'OFF';
+                    document.getElementById('ob-quiet-state').textContent = d.quietHours === true ? 'ON' : 'OFF';
                 };
                 window.saveOutboundSettings = function () {
                     var body = { proactiveOutbound: document.getElementById('ob-proactive').checked, quietHours: document.getElementById('ob-quiet').checked };

@@ -4,10 +4,11 @@
  *   proactiveOutbound  default OFF. When OFF the bot never starts a conversation on its own: no planner follow-ups,
  *                      no persuasion nudges, no consent reminders, no timer-driven sends, no admin WhatsApp pings.
  *                      Only replies to incoming messages and sends the operator triggers from the dashboard go out.
- *   quietHours         default ON. Bulk Send pauses 21:00-08:00 IST. Replies are never blocked by it.
+ *   quietHours         default OFF (owner, 4 Nov 22:48: "don't worry about day/night"). When ON, Bulk Send pauses
+ *                      21:00-08:00 IST. Replies are never blocked by it.
  *
  * Stored in outbound_settings.json (gitignored, so a dashboard toggle never dirties the VM's git tree).
- * Env PROACTIVE_OUTBOUND=on / BULK_QUIET_HOURS=off only change the defaults; the dashboard value wins once set.
+ * Env PROACTIVE_OUTBOUND=on / BULK_QUIET_HOURS=on only change the defaults; the dashboard value wins once set.
  */
 const fs = require('fs');
 const path = require('path');
@@ -16,7 +17,7 @@ const FILE = process.env.OUTBOUND_SETTINGS_PATH || path.join(__dirname, 'outboun
 function defaults() {
     return {
         proactiveOutbound: String(process.env.PROACTIVE_OUTBOUND || '').toLowerCase() === 'on',
-        quietHours: String(process.env.BULK_QUIET_HOURS || '').toLowerCase() !== 'off'
+        quietHours: String(process.env.BULK_QUIET_HOURS || '').toLowerCase() === 'on'
     };
 }
 let cache = null;
@@ -44,6 +45,6 @@ function set(changes = {}) {
     return get();
 }
 function proactiveEnabled() { return load().proactiveOutbound === true; }
-function quietHoursEnabled() { return load().quietHours !== false; }
+function quietHoursEnabled() { return load().quietHours === true; }
 function _reset() { cache = null; }
 module.exports = { FILE, get, set, proactiveEnabled, quietHoursEnabled, _reset };
