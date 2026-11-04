@@ -1,4 +1,4 @@
-# HARK_CHANGES — Brain v3.1–3.3 (4 Nov 2026, night: fixes from the live self-test)
+# HARK_CHANGES — Brain v3.1–3.5 (4 Nov 2026, night: fixes from the live self-test)
 
 LLM keys are live on the VM (2 NVIDIA keys). These fixes come from a human read of 11 live self-test scripts.
 
@@ -25,6 +25,14 @@ LLM keys are live on the VM (2 NVIDIA keys). These fixes come from a human read 
 - ignores an asked dialect (`no_dialect`/`bad_dialect`)
 
 `<think>` blocks and "Reply:" labels are stripped, and temperature is 0.4. `/api/ai-status` now carries `replyStats`: counts by source (llm / template / flow / llm_rejected), rejection reasons, per-intent counts and the last 60 replies with any rejected LLM text.
+
+**v3.4–3.5 (from the second and third live reads).**
+- The LLM may not add a question when the draft has none. A pending samasya question is re-appended after the LLM.
+- Self-promises ("prayas karti hoon"), "hum ... samajhti hoon" grammar, and voting pushes in any wording are rejected.
+- Robotic tail questions ("kya aapko aur jaankari chahiye?") are stripped.
+- Works answers never present a sankalp as done: it is labelled "aage ka sankalp". Major works come first.
+- "vote kahan dena hai" goes to polling. Devanagari "भरता है" counts as a complaint.
+- Filler after a re-asked place closes the samasya quietly.
 
 **Tests.** `test:brainv3` adds 11 regression conversations, each run with the LLM off and with a stub LLM, plus a pipeline memory conversation, classification units and validator units. Every reply in the suite is now checked for "never a bare Ji/Achha".
 
