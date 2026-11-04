@@ -636,7 +636,7 @@ async function callNvidia(messages, key) {
                 model: 'nvidia/nemotron-3.5-bolt-e4b',
                 messages: messages,
                 max_tokens: 280,
-                temperature: 0.6
+                temperature: 0.4
             })
         });
         clearTimeout(timeout);
@@ -768,7 +768,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     const explicitParchi = /(parchi|पर्ची|voter slip|voter id|epic|slip)/i.test(lowerMsg);
     // A self-introduction mid-chat ("main ward 4 se hu, mera naam Suresh hai") is remembered and answered by the
     // brain; it never silently turns into a voter-list search. An explicit parchi ask still searches.
-    const selfIntro = /((mera|meri|mero|mhara|my)\s+(naam|name|nam)|(मेरा|म्हारा)\s+नाम)/i.test(userMessage) && !explicitParchi;
+    const selfIntro = /((mera|meri|mero|mhara|my)\s+(naam|name|nam)|(मेरा|म्हारा)\s+नाम)/i.test(userMessage) && !explicitParchi && !/(pita|pitaji|father|pati|husband|पिता|पति|s\/o|w\/o)/i.test(userMessage);
     if (user && selfIntro) {
         try {
             const vm = require('./voter_memory.js');

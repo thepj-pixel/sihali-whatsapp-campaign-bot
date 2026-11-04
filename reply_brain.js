@@ -140,7 +140,7 @@ const RX = {
 const NEG_COMMIT = /((pakk?a|vote|saath|sath|support|पक्का|वोट|साथ|समर्थन)[^.?!]{0,14}(nahi|nhi|nahin|मत|नहीं|नही)\b|(nahi|nhi|nahin|नहीं)\s*(pata|pakka|पता|पक्का))/i;
 const THIRD_PARTY = /(dusr[eia]|doosr[eia]|virodhi|samne wal|saamne wal|dusri party|unk[eia] (saath|sath)|usk[eia] (saath|sath)|unko|unhe|usko|दूसर[ेीा]|विरोधी|सामने वाल|उनके साथ|उसके साथ|उनको|उन्हें|उसको)/i;
 const THIRD_PARTY_PRAISE = /(\b(unka|unki|unke|uska|uski|uske|wo|woh|unhone)\b|उनका|उनकी|उनके|उसका|उसकी|वो|उन्होंने)/i;
-const CONCERN_RX = /(problem|pareshani|samasya|samashya|shikayat|dikkat|dikat|takleef|kab lagegi|kab lagega|kab lagenge|कब लगेगी|कब लगेगा|nahi hai|nhi hai|nahi hua|nhi hua|nahi aata|nhi aata|nahi aati|nahi milti|nahi milta|nhi milta|nahi mil rah|nahi mila|nhi mila|nahi aa rah|nhi aa rah|nahi aa ri|band ho gay|ruk gay|atak gay|atki|toot|tuta|tuti|tooti|ukhad|band (hai|h|pada)|kharab|kab hoga|kab banega|kab banegi|bhar jata|bharta|gandagi|gaddh|khadd|kichad|keechad|andhera|chakkar|pareshan|mehngi|mahangi|mehangi|band pad|jaam|\bjam\b|chok|chahiye|chaiye|समस्या|परेशानी|शिकायत|दिक्कत|तकलीफ|नहीं है|नहीं हुआ|नहीं आता|नहीं आती|नहीं मिल|नहीं आ रह|बंद हो गई|बंद हो गया|रुक गई|अटक|टूट|उखड़|खराब|ख़राब|बंद है|कब होगा|कब बनेगा|कब बनेगी|भर जाता|गड्ढ|खड्ड|कीचड़|अँधेरा|अंधेरा|चक्कर|परेशान|महंगी|महँगी|बंद पड़|जाम|चोक|चाहिए)/i;
+const CONCERN_RX = /(bura haal|bura hal|buri haalat|haalat kharab|halat kharab|kharab haal|ghani dikkat|ghani pareshani|बुरा हाल|बुरी हालत|हालत ख़राब|हालत खराब|घणी दिक्कत|घणी परेशानी|problem|pareshani|samasya|samashya|shikayat|dikkat|dikat|takleef|kab lagegi|kab lagega|kab lagenge|कब लगेगी|कब लगेगा|nahi hai|nhi hai|nahi hua|nhi hua|nahi aata|nhi aata|nahi aati|nahi milti|nahi milta|nhi milta|nahi mil rah|nahi mila|nhi mila|nahi aa rah|nhi aa rah|nahi aa ri|band ho gay|ruk gay|atak gay|atki|toot|tuta|tuti|tooti|ukhad|band (hai|h|pada)|kharab|kab hoga|kab banega|kab banegi|bhar jata|bharta|gandagi|gaddh|khadd|kichad|keechad|andhera|chakkar|pareshan|mehngi|mahangi|mehangi|band pad|jaam|\bjam\b|chok|chahiye|chaiye|समस्या|परेशानी|शिकायत|दिक्कत|तकलीफ|नहीं है|नहीं हुआ|नहीं आता|नहीं आती|नहीं मिल|नहीं आ रह|बंद हो गई|बंद हो गया|रुक गई|अटक|टूट|उखड़|खराब|ख़राब|बंद है|कब होगा|कब बनेगा|कब बनेगी|भर जाता|गड्ढ|खड्ड|कीचड़|अँधेरा|अंधेरा|चक्कर|परेशान|महंगी|महँगी|बंद पड़|जाम|चोक|चाहिए)/i;
 
 function detectTopic(text) { return kb.primaryTopic(text, null); }
 
@@ -501,8 +501,14 @@ function compose(cls, ctx) {
             const msgTopics = kb.detectTopics(message);
             const lm = items.filter(i => i.landmark);
             const onTopic = items.filter(i => i.topics.some(x => x === kt || msgTopics.includes(x)));
-            const list = lm.length ? lm : (onTopic.length ? onTopic : (items.length ? items : topicItems(kt, l, user)));
-            let sn = addFacts(cls.wish ? list.filter(i => i.type === 'done') : list, cls.topic && !cls.wish && !['jobs', 'pension', 'ration', 'bijli', 'housing'].includes(kt) ? 2 : 1);
+            let list = lm.length ? lm : (onTopic.length ? onTopic : (items.length ? items : topicItems(kt, l, user)));
+            // "kya kaam karwaye?" asks about work DONE: never answer it with a future sankalp
+            const askedPast = /(karw?a(ye|ya|yi|e)|kiy[ae]|kiye|banw?a(ye|ya|yi)|\bhu(a|e)\b|\bban[ae]\b|करवा(ए|या|ई)|किया|किए|बनवा(ए|या|ई)|हुआ|हुए|बना|बने|vikas|विकास)/i.test(message);
+            if (cls.intent === 'works' && !cls.wish && !lm.length && !cls.topic && askedPast) {
+                const major = ['M2', 'M8', 'M1', 'D-H1', 'M7', 'M5', 'M9', 'M4', 'M11'].map(id => kb.getItem(id)).filter(i => i && !mem.toldItems.includes(i.id));
+                if (major.length) list = major;
+            } else if (cls.intent === 'works' && !cls.wish && !lm.length && askedPast && list.some(i => i.type === 'done')) list = list.filter(i => i.type === 'done');
+            let sn = addFacts(cls.wish ? list.filter(i => i.type === 'done') : list, (cls.topic || cls.intent === 'works') && !cls.wish && !['jobs', 'pension', 'ration', 'bijli', 'housing'].includes(kt) ? 2 : 1);
             const KEY = [[/(gym|जिम)/i, /(open gym|ओपन जिम)/i], [/(library|लाइब्रेरी)/i, /(library|लाइब्रेरी)/i], [/(running|track|ट्रैक|रनिंग)/i, /(running track|रनिंग ट्रैक)/i], [/(court|basketball|badminton|kho|कोर्ट)/i, /(court|कोर्ट)/i],
                     [/(tanki|टंकी)/i, /(tanki|टंकी|टंकियाँ)/i], [/(bore|बोर)/i, /(borewell|बोरवेल)/i], [/(hospital|aspatal|swasthya|अस्पताल|स्वास्थ्य)/i, /(up-swasthya|उप-स्वास्थ्य)/i], [/(pashu|पशु)/i, /(pashu|पशु)/i], [/(meeting hall|मीटिंग हॉल)/i, /(meeting hall|मीटिंग हॉल)/i], [/(sarovar|सरोवर)/i, /(sarovar|सरोवर)/i]];
             const kKey = !lm.length && !cls.wish ? KEY.find(([q]) => q.test(message)) : null;
@@ -821,11 +827,36 @@ function buildLLMPrompt(cls, ctx, draft) {
         `HARD RULES: use ONLY the facts below — no other works, numbers, dates, names or promises. Works were "पिछले कार्यकाल में पंचायत में करवाए गए" / "उनके प्रयास से" — NEVER say Abhay Singh was sarpanch (he was not) and never call him "सरपंच प्रतिनिधि". Say "अभय सिंह जी", never just "बाबा जी". No budgets/rupees, no counts of works, never mention an election symbol (ballot: name at serial no. 1). Never promise a date or that something will surely be fixed. Never attack or mock opponents. No caste/religion, no money/liquor/gifts, no threats. Never claim a voter slip was sent. Bribe/liquor asks: politely refuse with "${C.selfRespect_hi || ''}".`,
         'FACTS (from the parchas):', ...factLinesTxt,
         `- ${C.service_hi || ''}; ${C.honour_hi || ''}`,
+        `STYLE: keep every fact of the draft (you may shorten wording, never drop the work/sankalp it names). Do NOT add a vote request if the draft has none. ${person.gender ? '' : 'The voter\'s gender is unknown: never use gendered verbs or titles for them (say "aap ... chahenge", not chahti/chahte).'} You (the bot) speak with feminine verbs (karti hoon / करती हूँ).`,
         `SAFE DRAFT (grounded; improve the wording to sound natural, keep its facts, do not add new ones): ${draft}`
     ].filter(Boolean).join('\n');
 }
 
-const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'bribe_others', 'opposed', 'money_ask', 'dialect_switch', 'bribe', 'introduce', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'greeting', 'positive', 'commit', 'family_votes', 'opponent', 'off_topic', 'joke', 'memory_check', 'who_are_you', 'unclear', 'short_reply', 'thanks', 'was_sarpanch', 'daily_life']);
+// Sensitive or fact-exact intents (opposition, bribes, money, sarpanch question, dialect switch, memory) stay on the
+// reviewed templates; the LLM rewrites the conversational ones.
+const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'introduce', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'greeting', 'positive', 'commit', 'family_votes', 'off_topic', 'joke', 'who_are_you', 'unclear', 'short_reply', 'thanks', 'daily_life']);
+
+const STOPW = new Set('aur ke ki ka ko me mein se par hai hain gaye gayi gaya gayi. liye jaane wali wale abhay singh panchayat pichhle karyakal tahat jayegi jayega karwayi karwaya banwayi banwaya banwaye lagwayi kiya kiye sabhi unke unhone apni apne aapke aapki aapka और के की का को में से पर है हैं गए गई गया लिए वाली वाले अभय सिंह पंचायत पिछले कार्यकाल तहत जाएगी जाएगा करवाई करवाया बनवाई बनवाया बनवाए लगवाई किया किए उनके उन्होंने अपनी अपने आपके आपकी आपका'.split(/\s+/));
+const keyTokens = s => String(s || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOPW.has(w));
+/** Extra checks on the LLM against the grounded draft: facts kept, no new vote push, no guessed gender, dialect honoured. */
+function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {} } = {}) {
+    const r = String(out || '');
+    const low = r.toLowerCase();
+    if (used.length) {
+        const factToks = [...new Set(used.map(id => kb.getItem(id)).filter(Boolean).flatMap(i => keyTokens(kb.render(i, l))))];
+        if (factToks.length >= 3) {
+            const hit = factToks.filter(w => low.includes(w)).length;
+            if (hit / factToks.length < 0.35) return 'dropped_facts';
+        }
+    }
+    if (!ASKED_VOTE.test(draft) && /(साथ देंगे ना|वोट देंगे ना|saath denge na|vote denge na|vote denge\b|वोट देंगे\b)/i.test(r)) return 'unasked_vote_push';
+    if (person.gender !== 'F' && /(chahti hain|chahti ho|sakti hain|rahi hain|karti hain|aayi hain|bolti hain|चाहती हैं|सकती हैं|रही हैं|करती हैं|आई हैं|बहन जी|behan ji|mata ji|माता जी)/i.test(r) && !/(behan ji|mata ji|बहन जी|माता जी|tai ji|ताई जी)/i.test(draft)) return 'gender_guess';
+    if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
+    if (/(\bmonday\b|\bsunday\b|\bvote dalna\b)/i.test(r) && l === 'hi') return 'wrong_script';
+    if (/(कड़ै|kade)\s*(वोट|vote)/i.test(r)) return 'bad_dialect';
+    if (user && user.dialectPref === 'haryanvi' && !/(thar[aei]|thaar[aei]|mhar[aei]|\bsai\b|\bse\b|\bib\b|kade|\bke\b|थार|म्हार|सै|इब|कड़ै|के )/i.test(r)) return 'no_dialect';
+    return null;
+}
 
 function redirectVariants(user, l, message) {
     const hon = honorific(personOf(user, message), l);
@@ -943,7 +974,7 @@ async function respond(message, user = {}, opts = {}) {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             const out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));
             const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' 2026 16 7:30 5:30 40 1';
-            const why = validateLLM(out, { allowedText: allowed, user, l: t.l });
+            const why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user });
             if (!why) { text = String(out).trim(); source = 'llm'; }
             else { source = 'template(llm_rejected:' + why + ')'; rejected = { why, out: String(out || '').slice(0, 300) }; }
         } catch (e) { source = 'template(llm_error)'; }
@@ -1003,4 +1034,4 @@ function buildPersuasionNudge(user = {}, goal = {}, now = new Date()) {
 
 const SNIPPETS = {};
 const KB_TOPIC = {};
-module.exports = { cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };
+module.exports = { validateAgainstDraft, cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };

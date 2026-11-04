@@ -331,7 +331,7 @@ C.push({ name: 'stub-llm-bad-rejected', mode: 'brain', llm: badLLM, turns: [
     { m: 'soch rahe hain' },
     { m: 'dusra candidate kaisa hai?' }
 ], after: (u, rs) => {
-    check('[llm-bad] every bad LLM output rejected', rs.every(r => r.r && /llm_rejected|^flow$/.test(r.r.source)));
+    check('[llm-bad] every bad LLM output rejected', rs.every(r => r.r && /llm_rejected|^flow$|^template$/.test(r.r.source)) && !rs.some(r => r.r.source === 'llm'));
 } });
 
 C.push({ name: 'stub-llm-json-extract', mode: 'brain', llmJson: async (prompt) => /Mahesh/.test(prompt) ? '{"name":"Mahesh","gender":"M","dialect":"haryanvi","ageGroup":"middle"} trailing' : 'not json', turns: [

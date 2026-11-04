@@ -35,9 +35,9 @@ const toNum = x => (/^\d+$/.test(x) ? Number(x) : NUM_WORDS[String(x).toLowerCas
 /** "2 mahine se", "kaafi time se", "barsaat se", "saal bhar se" -> the voter's own words (trimmed), else null */
 function parseSince(text) {
     const t = clean(text);
-    const m = t.match(new RegExp(NUM + '\\s*(din|dino|hafte|hafta|hapte|mahine|mahina|mahino|month|months|saal|sal|baras|varsh|years?|दिन|दिनों|हफ्ते|हफ़्ते|हफ्ता|महीने|महीना|महीनों|साल|बरस|वर्ष)\\s*(se|से|ho gaye|हो गए|ho gya|ho gaya|हो गया)?', 'i'));
+    const m = t.match(new RegExp(NUM + '\\s*(din|dino|hafte|hafta|hapte|mahine|mahina|mahino|month|months|saal|sal|baras|varsh|years?|दिन|दिनों|हफ्ते|हफ़्ते|हफ्ता|महीने|महीना|महीनों|साल|बरस|वर्ष)\\s*(se|से|te|tai|तै|तें|ho gaye|हो गए|ho gya|ho gaya|हो गया)?', 'i'));
     if (m) return clean(m[0]);
-    const m2 = t.match(/(kaafi|kafi|bahut|lambe|kai)\s*(time|samay|din|dino|saal|mahino)\s*se|kaafi pehle se|shuru se|hamesha se|barsaat se|barish se|baarish se|chunav ke baad se|saal bhar se|pichhle saal se|pichle saal se|kal se|parso se|aaj se|abhi abhi|काफ़ी|काफी\s*(समय|दिनों|साल)\s*से|बहुत\s*(समय|दिनों)\s*से|शुरू से|हमेशा से|बरसात से|बारिश से|साल भर से|पिछले साल से|कल से|परसों से|आज से/i);
+    const m2 = t.match(/(kaafi|kafi|bahut|lambe|kai)\s*(time|samay|din|dino|saal|mahino)\s*se|kaafi pehle se|shuru se|hamesha se|barsaat se|barish se|baarish se|chunav ke baad se|saal bhar se|pichhle saal se|pichle saal se|kal se|parso se|aaj se|abhi abhi|(barsaat|barish|baarish|saal bhar|kai din|ghane din|kaafi din) (te|tai)|(बरसात|बारिश|साल भर|कई दिन|घणे दिन|घणे दिनां) (तै|तें)|काफ़ी|काफी\s*(समय|दिनों|साल)\s*से|बहुत\s*(समय|दिनों)\s*से|शुरू से|हमेशा से|बरसात से|बारिश से|साल भर से|पिछले साल से|कल से|परसों से|आज से/i);
     return m2 ? clean(m2[0]) : null;
 }
 
@@ -416,6 +416,7 @@ function continueFlow(ctx) {
 
     if (f.type === 'mulaqat_offer') {
         const bareAck = /^(ok+|okay|theek( hai)?|thik( hai)?|ठीक है|achha|accha|अच्छा|hmm+)[\s!.🙏👍]*$/i.test(t);
+        if (cls.intent === 'commit' || cls.intent === 'family_votes') { setFlow(user, null); return null; } // "vote pakka" is not a yes to the visit
         if (cls.intent === 'meeting' || parseWhen(t) || (isYes(t) && !NO.test(t) && !bareAck && !THANKS_ACK.test(t))) return startMulaqat(ctx, { fromOffer: true });
         if (bareAck || THANKS_ACK.test(t) || cls.intent === 'thanks') {
             setFlow(user, null);

@@ -947,7 +947,9 @@ async function startSession(sessionObj) {
                     // While the voter is answering our samasya/mulaqat questions ("shiv mandir ke paas", "Ramesh ke ghar ke saamne"),
                     // a name-like answer must not be hijacked by the voter-slip search — only an explicit parchi ask is.
                     const inBrainFlow = replyBrain.inFlow(user) && !hasExplicitParchiKeyword && !hasEpicPattern;
-                    const isVoterSlipIntent = !inBrainFlow && !isConversational && !isGreetingMsg && !isPhotoQuery && !isVideoQuery && !isPosterGenQuery && (
+                    // "main ward 4 se hu, mera naam Suresh hai" is an introduction (the brain remembers name + ward), not a slip ask
+                    const isSelfIntro = /((mera|meri|mero|mhara|my)\s+(naam|name|nam)|(मेरा|म्हारा)\s+नाम)/i.test(body) && !hasExplicitParchiKeyword && !hasEpicPattern && !hasParchiPhrase && !/(pita|pitaji|father|pati|husband|पिता|पति|s\/o|w\/o)/i.test(body);
+                    const isVoterSlipIntent = !inBrainFlow && !isSelfIntro && !isConversational && !isGreetingMsg && !isPhotoQuery && !isVideoQuery && !isPosterGenQuery && (
                         hasEpicPattern ||
                         hasExplicitParchiKeyword ||
                         (hasParchiPhrase && !lower.includes('photo') && !lower.includes('video') && !lower.includes('poster')) ||

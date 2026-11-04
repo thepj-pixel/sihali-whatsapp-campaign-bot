@@ -681,6 +681,10 @@ C.push({ name: 'reg-memory-name-ward-pipeline', pipeline: true, turns: [
 function unitChecks() {
     const CL = { 'hum to dusre candidate ke saath hain': 'opposed', 'dusre wale to de rahe hain': 'bribe_others', 'vote pakka nahi': 'undecided', 'unko vote denge': 'opposed', 'abhay singh ko vote nahi denge': 'opposed', 'hum aapke saath hain': 'commit', 'मैं अभय सिंह जी के साथ हूँ': 'commit', 'हम तो दूसरे उम्मीदवार के साथ हैं': 'opposed', 'pakka vote denge': 'commit', 'kitne crore kharch kiye': 'money_ask', 'tum log chunav me hi yaad karte ho': 'grievance', 'abhay singh me kya khaas hai': 'about_baba', 'acha library ke baare me batao': 'works', 'samne wale ke saath hain': 'opposed', 'baba ke against hain': 'opposed' };
     for (const [m, want] of Object.entries(CL)) check(`[classify] "${m}" -> ${want}`, brain.classify(m, { history: [] }).intent === want);
+    check('[llm] dropped facts rejected', brain.validateAgainstDraft('Ji, bahut achha kaam hua hai.', 'x', { used: ['M8'], l: 'en', person: {} }) === 'dropped_facts');
+    check('[llm] vote push not in draft rejected', brain.validateAgainstDraft('Library bani hai. 16 Nov ko saath denge na?', 'Library bani hai.', { l: 'en', person: {} }) === 'unasked_vote_push');
+    check('[llm] guessed female voter rejected', brain.validateAgainstDraft('Kya aap aur jaanna chahti hain?', 'Library bani.', { l: 'en', person: {} }) === 'gender_guess');
+    check('[llm] Haryanvi asked but plain Hindi rejected', brain.validateAgainstDraft('Aapka swagat hai ji.', 'x', { l: 'en', person: {}, user: { dialectPref: 'haryanvi' } }) === 'no_dialect');
     check('[llm] cleanLLM strips think blocks / labels', brain.cleanLLM('<think>x</think>Reply: "Ji, dhanyavad"') === 'Ji, dhanyavad');
     check('[parse] since', flows.parseSince('do mahine se pani nahi') === 'do mahine se' && /साल/.test(flows.parseSince('एक साल से टूटी है')) && flows.parseSince('kaafi time se') && !flows.parseSince('pakka vote denge'));
     check('[parse] when', flows.parseWhen('kal shaam 6 baje') && flows.parseWhen('ravivar dopahar') && flows.parseWhen('शनिवार शाम') && !flows.parseWhen('dhanyavad'));
