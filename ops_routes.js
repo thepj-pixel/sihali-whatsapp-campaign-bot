@@ -14,6 +14,7 @@ function install(app, d) {
     contactTags.installGentleMode(d.replyBrain);
     try { if (contactTags.syncToMemory(userMemory)) userMemory.save(); } catch (e) {}
 
+    let lastSelfTestAt = 0; // a self-test pair needs 25 s of quiet before own-line test sends
     const scheduler = new ScheduledCampaigns({
         stateFile: process.env.SCHEDULED_STATE_PATH || path.join(__dirname, 'scheduled_campaigns.json'),
         mediaDir: path.join(__dirname, 'media'),
@@ -22,7 +23,7 @@ function install(app, d) {
         isBlocked: (phone) => (liveSelfTest.ownLineOf([phone]) ? 'own_line' : engagementPolicy.broadcastBlockReason(userMemory.users[phone])),
         isVirodhi: (phone) => contactTags.isVirodhi(phone) || !!(userMemory.users[phone] && userMemory.users[phone].virodhi === true),
         ownLineOf: (phone) => liveSelfTest.ownLineOf([phone]),
-        isTestBusy: () => { try { return liveSelfTest.isActive(); } catch (e) { return false; } },
+        isTestBusy: () => { try { if (liveSelfTest.isActive()) { lastSelfTestAt = Date.now(); return true; } return Date.now() - lastSelfTestAt < 25000; } catch (e) { return false; } },
         getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
         isSilenced: (ms) => { try { return followupPlanner.inSilencePeriod(new Date(ms)); } catch (e) { return false; } },
         onSent: (info) => {

@@ -396,6 +396,7 @@ class ScheduledCampaigns {
                 await this.sleep(Math.round(Math.min(8000, 1500 + text.length * 35) * (0.7 + this.random() * 0.6)));
                 await sock.sendPresenceUpdate?.('paused', jid);
             } catch (_) {}
+            if (c.test && this.isTestBusy()) { it.status = 'pending'; return; } // a self-test started meanwhile
             it.status = 'sending'; it.at = stamp();
             this.save();
             let content;
