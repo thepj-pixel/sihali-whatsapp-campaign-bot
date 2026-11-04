@@ -527,7 +527,7 @@ const llmPratinidhi = async () => 'Abhay Singh ji sarpanch pratinidhi rahe hain 
 let li = 0;
 C.push({ name: 'llm-rule-breaks-rejected', llm: async (...a) => [llmSymbol, llmPromise, llmTwoQ, llmPratinidhi][(li++) % 4](...a), turns: [
     { m: 'abhay singh ne kya kiya?' }, { m: 'aage kya karoge?' }, { m: 'ram ram' }, { m: 'abhay singh kaun hai' }, { m: 'kya kaam hua' }, { m: 'soch rahe hain' }
-], after: (u, rs) => check('[llm] symbol / promised date / two questions / pratinidhi outputs all rejected', rs.every(r => /llm_rejected/.test(r.r.source))) });
+], after: (u, rs) => check('[llm] symbol / promised date / two questions / pratinidhi outputs all rejected', rs.every(r => r.r.source !== 'llm') && rs.filter(r => /llm_rejected/.test(r.r.source)).length >= 4) });
 
 const goodDaily = async (sys) => /daily_life/.test(sys) ? 'Arre, bhagwan jaldi theek karein ji 🙏 Apna dhyan rakhiye.' : null;
 C.push({ name: 'llm-daily-life-ok', llm: goodDaily, turns: [
@@ -624,7 +624,7 @@ REG.push({ name: 'reg-question-breaks-samasya', turns: [
     { m: 'ward 6 me' },
     { m: 'pakka vote denge, ghar ke 3 vote', intent: 'commit', has: ['3 vote'] }
 ], after: (u) => { const r = recs(u, samasya)[0] || {}; check('[reg-question] question never stored as the location', !/padhne|library/i.test(r.location || '')); } });
-REG.push({ name: 'reg-ghar-visit-multifield', turns: [
+REG.push({ name: 'reg-ghar-visit-multifield', allFlow: true, turns: [
     { m: 'Ram Ram sa' },
     { m: 'main Sihali Kalan ward 7 se, Abhay singh ji se milna hai', intent: 'meeting', has: ['din aur samay'] },
     { m: 'haan ghar bulana hai', has: ['din aur samay'] },
@@ -640,7 +640,7 @@ REG.push({ name: 'reg-visit-purpose-followup', allFlow: true, turns: [
     { m: 'pata nahi', has: ['team'] },
     { m: 'gaon ki sadak ki baat karni hai', has: ['jod diya'] }
 ], after: (u) => { const r = recs(u, mulaqat)[0] || {}; check('[reg-purpose] purpose follow-up updates the record', /sadak ki baat/.test(r.purpose || '') && recs(u, mulaqat).length === 1); } });
-REG.push({ name: 'reg-samasya-place-before-since', turns: [
+REG.push({ name: 'reg-samasya-place-before-since', allFlow: true, turns: [
     { m: 'Namaste ji' },
     { m: 'main Haraheri ward 10 se hu', intent: 'introduce' },
     { m: 'hamari gali me naali band padi hai, ganda paani bhar jata hai', intent: 'complaint', has: ['gali'], not: /kab se/i },

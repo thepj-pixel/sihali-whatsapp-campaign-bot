@@ -297,7 +297,15 @@ function startMulaqat(ctx, { type = 'visit', fromOffer = false, purpose = null }
             return { text: S(`जी, आपकी बात पहले से टीम के पास दर्ज है—टीम आपसे फ़ोन पर संपर्क करेगी 🙏${nums}`, `Ji, aapki baat pehle se team ke paas darj hai—team aapse phone par sampark karegi 🙏${nums}`), flow: true, ask: false, mulaqatId: r.id };
         }
         if (r.status === 'confirmed') return { text: S(`${hon}, आपकी मुलाक़ात की बात पहले से तय है${r.preferredWhen && (l === 'hi' || !hasDev(r.preferredWhen)) ? ' (' + r.preferredWhen + ')' : ''} 🙏 कोई बदलाव हो तो बताइए, टीम तक पहुँचा दूँगी।`, `${hon}, aapki mulaqat ki baat pehle se tay hai${r.preferredWhen && !hasDev(r.preferredWhen) ? ' (' + r.preferredWhen + ')' : ''} 🙏 Koi badlav ho to bataiye, team tak pahuncha dungi.`), flow: true, ask: false, mulaqatId: r.id };
-        if (r.detailsComplete) return { text: S(`${hon}, आपकी मुलाक़ात की बात पहले से दर्ज है 🙏 टीम समय पक्का करके आपको फ़ोन करेगी। कुछ और जोड़ना हो तो लिख दीजिए।`, `${hon}, aapki mulaqat ki baat pehle se darj hai 🙏 Team samay pakka karke aapko phone karegi. Kuch aur jodna ho to likh dijiye.`), flow: true, ask: false, mulaqatId: r.id };
+        if (r.detailsComplete) {
+            const got = absorbMulaqatFields(r, clean(message), ms);
+            const m2 = voterMemory.ensure(user);
+            m2.lastMulaqat = { id: r.id, at: new Date().toISOString() };
+            if (Object.keys(got).length) return { text: S(`जी${/^(जी|ji)$/i.test(hon) ? '' : ' ' + hon}, ये भी आपकी मुलाक़ात वाली बात में जोड़ दिया 🙏 टीम समय पक्का करके फ़ोन करेगी।`, `Ji${/^(जी|ji)$/i.test(hon) ? '' : ' ' + hon}, ye bhi aapki mulaqat wali baat me jod diya 🙏 Team samay pakka karke phone karegi.`), flow: true, ask: false, mulaqatId: r.id };
+            if (m2.told.mulaqatDupAt && Date.now() - Date.parse(m2.told.mulaqatDupAt) < 6 * 3600e3) return { text: S(`जी${/^(जी|ji)$/i.test(hon) ? '' : ' ' + hon}, आपकी बात टीम के पास है 🙏 मिलने का दिन-समय या कोई और बात बदलनी हो तो बता दीजिए।`, `Ji${/^(जी|ji)$/i.test(hon) ? '' : ' ' + hon}, aapki baat team ke paas hai 🙏 Milne ka din-samay ya koi aur baat badalni ho to bata dijiye.`), flow: true, ask: false, mulaqatId: r.id };
+            m2.told.mulaqatDupAt = new Date().toISOString();
+            return { text: S(`${hon}, आपकी मुलाक़ात की बात पहले से दर्ज है 🙏 टीम समय पक्का करके आपको फ़ोन करेगी। कुछ और जोड़ना हो तो लिख दीजिए।`, `${hon}, aapki mulaqat ki baat pehle se darj hai 🙏 Team samay pakka karke aapko phone karegi. Kuch aur jodna ho to likh dijiye.`), flow: true, ask: false, mulaqatId: r.id };
+        }
         return askNextMulaqat(ctx, r.id, S(`ज़रूर ${hon} 🙏`, `Zaroor ${hon} 🙏`));
     }
     const when = parseWhen(message);
@@ -375,10 +383,16 @@ function mulaqatPurposeFollowUp(ctx) {
     const last = m.lastMulaqat;
     if (!last || Date.now() - Date.parse(last.at || 0) > 2 * 3600e3) return null;
     const t = clean(message);
-    if (!PURPOSE_RX.test(t) || t.length > 160 || isQuestion(t)) return null;
+    if (t.length > 160 || isQuestion(t)) return null;
     const { mulaqatStore: ms } = stores();
     const r = ms.get(last.id);
     if (!r) return null;
+    if (!PURPOSE_RX.test(t)) {
+        if (!(parseWhen(t) || (parseLocation(t) || {}).place || (/(log|jane|लोग|जने)/i.test(t) && parseCount(t)))) return null;
+        absorbMulaqatFields({ ...r, preferredWhen: null, place: null, familyMembers: null, purpose: r.purpose }, t, ms);
+        const ji0 = /^(जी|ji)$/i.test(hon);
+        return { text: l === 'hi' ? `जी${ji0 ? '' : ' ' + hon}, ये बदलाव भी नोट कर लिया 🙏 टीम इसी हिसाब से समय पक्का करेगी।` : `Ji${ji0 ? '' : ' ' + hon}, ye badlav bhi note kar liya 🙏 Team isi hisaab se samay pakka karegi.`, flow: true, ask: false, mulaqatId: r.id };
+    }
     const generic = !r.purpose || /^(samasya S-|milna-julna|मिलना-जुलना)/i.test(r.purpose);
     ms.update(r.id, { purpose: generic ? t.slice(0, 200) : (r.purpose + ' | ' + t).slice(0, 300) }, 'bot');
     m.lastMulaqat = null;

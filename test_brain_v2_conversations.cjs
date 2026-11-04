@@ -316,7 +316,7 @@ C.push({ name: 'stub-llm-good-context', mode: 'brain', llm: goodLLM, turns: [
     { m: 'abhi soch rahe hain' },
     { m: 'naali wali baat yaad hai?', has: ['naali'] }
 ], after: (u, rs) => {
-    check('[llm-good] LLM wrote replies (source llm)', rs.filter(r => r.r && r.r.source === 'llm').length >= 3);
+    check('[llm-good] LLM wrote replies (source llm)', rs.filter(r => r.r && r.r.source === 'llm').length >= 2); // v3.2: greeting/intro/memory stay on templates
     const last = prompts[prompts.length - 1] || { sys: '' };
     check('[llm-good] prompt carries memory card with the concern', /concerns: .*drainage/.test(last.sys));
     check('[llm-good] prompt carries retrieved fact lines', /\[(DONE|FUTURE SANKALP)/.test(prompts.map(p => p.sys).join('\n')));
