@@ -4,7 +4,9 @@ const path = require('path');
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 const KB = JSON.parse(fs.readFileSync(kbPath, 'utf8'));
 
-const API_KEY = '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';
+const { loadApiConfig } = require('./api_keys.js');
+const API_KEY = loadApiConfig().nvidia_keys[0] || '';
+if (!API_KEY) { console.error('No NVIDIA key: set NVIDIA_API_KEYS in env/.env or nvidia_keys in api_config.json'); process.exit(1); }
 
 const systemPrompt = `
 आप ग्राम पंचायत सिहाली खुर्द के सरपंच पद प्रत्याशी 'बाबा अभय सिंह (मोटी आंगली वाले बाबा)' के डिजिटल सहायक हैं।

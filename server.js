@@ -132,7 +132,8 @@ app.get('/api/ground-intel', (req, res) => {
 
 
 const PORT = process.env.PORT || 3000;
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
+// Optional explicit override; when empty, ai_assistant_service uses its key list (env NVIDIA_API_KEYS / api_config.json)
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 const CAMPAIGN_PIN = process.env.CAMPAIGN_PIN || '2026';
 const DASHBOARD_ONLY = process.env.DASHBOARD_ONLY === 'true';
 const PUBLIC_DASHBOARD_URL = String(process.env.PUBLIC_DASHBOARD_URL || '').replace(/\/$/, '');

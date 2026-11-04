@@ -37,11 +37,11 @@ VM में बॉट डायरेक्टरी में `api_config.json
 ```json
 {
   "nvidia_keys": [
-    "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",
-    "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"
+    "nvapi-YOUR_FIRST_KEY",
+    "nvapi-YOUR_SECOND_KEY"
   ],
-  "groq_api_key": "gsk_...",
-  "gemini_api_key": "AQ.Ab8RN6InN-...",
+  "groq_api_key": "gsk_YOUR_GROQ_KEY",
+  "gemini_api_key": "YOUR_GEMINI_KEY",
   "media_urls": {
     "campaign_reel_video": "https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/campaign_reel.mp4",
     "campaign_poster": "https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster.jpg"

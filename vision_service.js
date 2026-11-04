@@ -1,21 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const configPath = path.join(__dirname, 'api_config.json');
-let CONFIG = {
-    gemini_api_key: process.env.GEMINI_API_KEY || '',
-    groq_api_key: process.env.GROQ_API_KEY || '',
-    nvidia_keys: []
-};
-
-try {
-    if (fs.existsSync(configPath)) {
-        const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        CONFIG = { ...CONFIG, ...fileConfig };
-    }
-} catch (e) {
-    console.warn('[VisionService] Could not read api_config.json:', e.message);
-}
+const { loadApiConfig } = require('./api_keys.js');
+let CONFIG = loadApiConfig();
 
 class VisionService {
     constructor() {
@@ -24,11 +11,8 @@ class VisionService {
 
     reloadConfig() {
         try {
-            if (fs.existsSync(configPath)) {
-                const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                CONFIG = { ...CONFIG, ...fileConfig };
-                this.geminiKey = CONFIG.gemini_api_key || CONFIG.geminiApiKey || '';
-            }
+            CONFIG = loadApiConfig();
+            this.geminiKey = CONFIG.gemini_api_key || CONFIG.geminiApiKey || '';
         } catch (e) {}
     }
 

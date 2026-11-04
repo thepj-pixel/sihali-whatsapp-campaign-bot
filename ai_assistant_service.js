@@ -28,27 +28,17 @@ function removeHeldRoadDetails(value) {
 
 const KB_FOR_PROMPT = removeHeldRoadDetails(KB);
 
-// Config file with keys for NVIDIA, Groq, and Gemini
-const configPath = path.join(__dirname, 'api_config.json');
+// API keys come from env / .env / gitignored api_config.json (see api_keys.js). Nothing hardcoded.
+const { loadApiConfig } = require('./api_keys.js');
 let CONFIG = {
-    nvidia_keys: [
-        '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',
-        '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'
-    ],
-    groq_api_key: process.env.GROQ_API_KEY || '',
-    gemini_api_key: process.env.GEMINI_API_KEY || '',
     media_urls: {
         campaign_reel_video: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/campaign_reel.mp4',
         campaign_poster: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster.jpg'
     }
 };
-try {
-    if (fs.existsSync(configPath)) {
-        const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        CONFIG = { ...CONFIG, ...fileConfig };
-    }
-} catch (e) {
-    console.warn('Could not read api_config.json, using defaults:', e.message);
+CONFIG = { ...CONFIG, ...loadApiConfig() };
+if (!CONFIG.nvidia_keys.length && !CONFIG.groq_api_key && !CONFIG.gemini_api_key) {
+    console.warn('[AI Assistant] No LLM API keys configured (NVIDIA_API_KEYS / GROQ_API_KEY / GEMINI_API_KEY env or api_config.json). Local engine only.');
 }
 
 const SYSTEM_PROMPT = `

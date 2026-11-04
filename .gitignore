@@ -13,3 +13,6 @@ campaign_runtime.json
 user_memory.json
 dashboard_test_contacts.json
 dashboard_test_profile.json
+broadcast_state.json
+broadcast_state.json.tmp
+broadcast_state.json.corrupt-*
