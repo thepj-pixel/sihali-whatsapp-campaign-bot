@@ -1,3 +1,26 @@
+# HARK_CHANGES — OPS v4 (4–5 Nov 2026): Overview, विरोधी list, contact card per line, Scheduled Bulk
+
+All new logic lives in new modules; `server.js` only has small hooks (`ops_routes.install(app, deps)`, three `${opsRoutes.ui.*()}` inserts in the page, the per-line card check). `reply_brain.js` has exactly one new line (the विरोधी gentle hook at the end of `think()`).
+
+| Feature | Files | API |
+|---|---|---|
+| 📊 Overview / निष्कर्ष tab | `overview.js`, `ops_routes.js` | `GET /api/overview?stance=&line=&ward=&q=&includeTest=1` |
+| 🚫 विरोधी list + gentle mode | `contact_tags.js` (state `contact_tags.json`, gitignored), 1 line in `reply_brain.js` | `GET /api/virodhi`, `POST /api/virodhi/add {text, note}`, `POST /api/virodhi/remove {phone}` |
+| 📇 Contact card once per contact **per line** (+ single-send) | `contact_card.js`, `server.js` (`sendLineContactCardOnce`, anti-ban hook, `/api/send-message` → `contactCardQueued`) | — |
+| 🗓️ Scheduled Bulk (windowed, randomized, rotating, resumable) | `scheduled_campaigns.js` (state `scheduled_campaigns.json`, gitignored), `ops_routes.js` | `POST /api/scheduled/preview`, `/create`, `/from-agenda {date, slot, …audience}`; `GET /api/scheduled`, `/api/scheduled/:id`; `POST /api/scheduled/:id/pause|resume|cancel` |
+| Self-test "fresh contact" mode | `self_test.js` (`freshContact: true` → consent prompt + card like a brand-new number) | `POST /api/self-test/start {…, freshContact:true}` |
+| Tests | `test_ops_v4.cjs` (`npm run test:ops`, part of `test:all`) | — |
+
+**Overview.** One row per conversation: name, phone, line, ward, stance (commit / समर्थक / सोच रहे / विरोधी / नाराज़), last message time, a one-line rule-based summary (slip found, issues, family votes, last intents, samasya, mulaqat + the voter's last words), samasya and mulaqat. Totals at the top, a ✅ good and ⚠️ needs-care list, all mulaqat with when/place. Filters: stance, line, ward, search, include test. No CSV/export.
+
+**विरोधी.** Paste numbers in Overview → "🚫 विरोधी list". The record gets `user.virodhi = true`. For them every reply is passed through `contactTags.gentle()`: any sentence that asks for the vote / commitment / family votes / home visit is removed and a respectful listening line is used instead; `installGentleMode` also post-filters the LLM path. Samasya logging is untouched. Scheduled Bulk skips them unless "include विरोधी" is ticked.
+
+**Contact card.** `user.contactCardLines = {lineId: time}`. A voter gets the card of the line they talk to right after our first reply (consent prompt), once per line. Old records with `contactCardSent=true` count as sent on their assigned line, so nobody gets a second card after deploy. Dashboard single-send queues the card if that line has not sent it yet.
+
+**Scheduled Bulk.** Pick audience (paste / saved contacts by ward/village), message variants (separate with a `---` line; `{name}` and `{a|b}` work), tick posters to rotate, a window (preset morning 8–11, afternoon 13–16, evening 17–20, or custom), gap (default 20–90 s), lines. Each recipient gets a random time in the window; per line the gap is enforced; text and poster rotate (balanced). Shares the Bulk Send per-line hourly/daily caps; STOP/declined and विरोधी are checked at plan and at send time; not-on-WhatsApp skipped. Restart-safe (a mid-send item is never resent). Anything still unsent 60 min after the window ends is skipped (`window_passed`) so nothing goes out hours late. Quiet hours are OFF unless ticked. **Agenda slot**: "Schedule agenda slot" uses that day's slot hook + poster and the slot's time window for the chosen audience (operator-triggered). Test campaigns (`test:true`) may only target our own line numbers and wait while a Live Self-Test is running.
+
+---
+
 # HARK_CHANGES — v4 (4 Nov 2026, late night: owner's phone test + "no pings" rule)
 
 **Owner rule: "dont send any ping message other than our dashboard".** The bot never starts a conversation by itself any more.
