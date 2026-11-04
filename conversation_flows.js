@@ -494,6 +494,12 @@ function continueFlow(ctx) {
                 const sk = rec.sankalpId ? kb.getItem(rec.sankalpId) : null;
                 return { text: S(`${hon}, पक्की तारीख़ का वादा मैं नहीं करूँगी, पर आपकी बात अभय सिंह जी के रजिस्टर में दर्ज है और उन तक पहुँचेगी 🙏`, `${hon}, pakki tareekh ka vaada main nahi karungi, par aapki baat Abhay Singh ji ke register me darj hai aur un tak pahunchegi 🙏`) + ' ' + whereQ(rec.topic, l, rec.village).replace(/^Ye /, 'Bas ye bata dijiye, ye ').replace(/^ये /, 'बस ये बता दीजिए, ये '), flow: true, samasyaId: rec.id };
             } else if (isAck(t) && (f.parked || 0) > 0) {
+                if (f.resumed) {
+                    // we already re-asked the place after the detour: close quietly, never "log" it again
+                    setFlow(user, null);
+                    ss.update(rec.id, { detailsComplete: true }, 'bot');
+                    return { text: S(`कोई बात नहीं${/^(जी|ji)$/i.test(hon) ? ' जी' : ' ' + hon}, आपकी ${kb.topicLabel(rec.topic, l)} वाली बात अभय सिंह जी के रजिस्टर में है 🙏 गली याद आए तो बस यहाँ लिख दीजिएगा।`, `Koi baat nahi${/^(जी|ji)$/i.test(hon) ? ' ji' : ' ' + hon}, aapki ${kb.topicLabel(rec.topic, l)} wali baat Abhay Singh ji ke register me hai 🙏 Gali yaad aaye to bas yahan likh dijiyega.`), flow: true, ask: false, samasyaId: rec.id };
+                }
                 if ((f.asked || 1) < 2) { setFlow(user, { ...f, asked: (f.asked || 1) + 1, parked: 0 }); return { text: S(`${hon}, आपकी ${kb.topicLabel(rec.topic, l)} वाली बात नोट है 🙏 बस इतना बता दीजिए—ये किस गली या वार्ड में है, ताकि सही जगह पहुँचे?`, `${hon === 'ji' ? 'Ji' : hon}, aapki ${kb.topicLabel(rec.topic, l)} wali baat note hai 🙏 Bas itna bata dijiye—ye kis gali ya ward me hai, taaki sahi jagah pahunche?`), flow: true, samasyaId: rec.id }; }
                 return finalizeSamasya(ctx, rec.id); // an "ok" after a detour is not an answer: confirm with what we have
             } else if (isSkip(t) || isAck(t)) {

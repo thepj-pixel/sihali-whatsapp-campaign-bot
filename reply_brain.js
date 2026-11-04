@@ -99,7 +99,7 @@ const RX = {
     condolence: /(guzar gaye|guzar gayi|gujar gaye|gujar gayi|dehant|dehaant|nahi rahe|nhi rahe|swargwas|swargvas|maut ho|death ho|shant ho gaye|chal base|गुज़र गए|गुजर गए|गुज़र गईं|देहांत|नहीं रहे|स्वर्गवास|मृत्यु|मौत हो|चल बसे|शांत हो गए)/i,
     slip: /(parchi|parchee|voter slip|\bslip\b|\bepic\b|voter id|naam dekh|list me naam|पर्ची|मतदाता सूची|वोटर लिस्ट)/i,
     ballot: /(chunav chinh|chunav chinha|chinh|nishan|nishaan|symbol|nishani|kram sankhya|serial (number|no)|kaun sa number|konsa number|matpatra|ballot|mohar kaise|muhar kaise|mohar kahan|kaise vote (dal|daal)|vote kaise (dal|daal|de)|चिन्ह|चिह्न|निशान|मतपत्र|क्रम संख्या|मोहर कैसे|मुहर कैसे|कैसे वोट|वोट कैसे)/i,
-    polling: /(kab hai|kab h\b|tarikh|tareekh|\bdate\b|booth|kahan (vote|dalna)|kidhar vote|kitne baje|time kya|kya le ?kar (jana|aana)|kaun sa card|aadhar|aadhaar|मतदान कब|कब है|तारीख|बूथ|कहाँ वोट|कितने बजे|क्या लेकर|आधार|16 nov)/i,
+    polling: /((vote|matdan|matdaan|वोट|मतदान)\s*(kahan|kaha|kidhar|kab|कहाँ|कहां|किधर|कब)|kahan dena|kaha dena|कहाँ देना|कहां देना|kab hai|kab h\b|tarikh|tareekh|\bdate\b|booth|kahan (vote|dalna)|kidhar vote|kitne baje|time kya|kya le ?kar (jana|aana)|kaun sa card|aadhar|aadhaar|मतदान कब|कब है|तारीख|बूथ|कहाँ वोट|कितने बजे|क्या लेकर|आधार|16 nov)/i,
     callReq: /(phone (karo|kar do|karwa|karva|karaiye|karvao)|call (karo|kar do|karwa)|baat (karao|karwao|karvao|kara do|karwa do)|unka number|abhay singh (ji )?ka number|baba ka number|number (do|dijiye|bhejo|de do)|फोन (करो|करवा|कराओ)|बात (कराओ|करवाओ|करवा दो)|नंबर (दो|दीजिए|भेजो))/i,
     meeting: /(milna (hai|chahta|chahti|chahte)|milne (aana|aao|aaiye|aayenge)|mulakat|mulaqat|mulaakat|ghar (aao|aaiye|aana|par aaiye|bulana|bulaana|bula)|ghar pe aao|(abhay singh|baba|unse|un se) (ji )?(se )?(milna|milwa|baat karni|baat karna)|baba se (milna|baat)|मिलना (है|चाहता|चाहती)|मिलने आइए|मुलाकात|मुलाक़ात|घर (आओ|आइए|बुलाना|पर आइए)|(अभय सिंह|बाबा|उनसे)( जी)? ?(से )?(मिलना|मिलवा|बात करनी))/i,
     samasyaExplicit: /(ek (problem|samasya|shikayat|dikkat)|shikayat (darj|likh|karni|karna)|complaint|samasya (batani|bataani|hai)|problem (batani|hai)|meri (shikayat|samasya)|एक (समस्या|शिकायत|दिक्कत|परेशानी)|शिकायत (दर्ज|लिख|करनी)|समस्या (बतानी|है))/i,
@@ -140,7 +140,7 @@ const RX = {
 const NEG_COMMIT = /((pakk?a|vote|saath|sath|support|पक्का|वोट|साथ|समर्थन)[^.?!]{0,14}(nahi|nhi|nahin|मत|नहीं|नही)\b|(nahi|nhi|nahin|नहीं)\s*(pata|pakka|पता|पक्का))/i;
 const THIRD_PARTY = /(dusr[eia]|doosr[eia]|virodhi|samne wal|saamne wal|dusri party|unk[eia] (saath|sath)|usk[eia] (saath|sath)|unko|unhe|usko|दूसर[ेीा]|विरोधी|सामने वाल|उनके साथ|उसके साथ|उनको|उन्हें|उसको)/i;
 const THIRD_PARTY_PRAISE = /(\b(unka|unki|unke|uska|uski|uske|wo|woh|unhone)\b|उनका|उनकी|उनके|उसका|उसकी|वो|उन्होंने)/i;
-const CONCERN_RX = /(bura haal|bura hal|buri haalat|haalat kharab|halat kharab|kharab haal|ghani dikkat|ghani pareshani|बुरा हाल|बुरी हालत|हालत ख़राब|हालत खराब|घणी दिक्कत|घणी परेशानी|problem|pareshani|samasya|samashya|shikayat|dikkat|dikat|takleef|kab lagegi|kab lagega|kab lagenge|कब लगेगी|कब लगेगा|nahi hai|nhi hai|nahi hua|nhi hua|nahi aata|nhi aata|nahi aati|nahi milti|nahi milta|nhi milta|nahi mil rah|nahi mila|nhi mila|nahi aa rah|nhi aa rah|nahi aa ri|band ho gay|ruk gay|atak gay|atki|toot|tuta|tuti|tooti|ukhad|band (hai|h|pada)|kharab|kab hoga|kab banega|kab banegi|bhar jata|bharta|gandagi|gaddh|khadd|kichad|keechad|andhera|chakkar|pareshan|mehngi|mahangi|mehangi|band pad|jaam|\bjam\b|chok|chahiye|chaiye|समस्या|परेशानी|शिकायत|दिक्कत|तकलीफ|नहीं है|नहीं हुआ|नहीं आता|नहीं आती|नहीं मिल|नहीं आ रह|बंद हो गई|बंद हो गया|रुक गई|अटक|टूट|उखड़|खराब|ख़राब|बंद है|कब होगा|कब बनेगा|कब बनेगी|भर जाता|गड्ढ|खड्ड|कीचड़|अँधेरा|अंधेरा|चक्कर|परेशान|महंगी|महँगी|बंद पड़|जाम|चोक|चाहिए)/i;
+const CONCERN_RX = /(भरता है|भरती है|भर रहा|भर जाता|जमा रहता|जमा हो जाता|bharta hai|bhar raha|jama rehta|bura haal|bura hal|buri haalat|haalat kharab|halat kharab|kharab haal|ghani dikkat|ghani pareshani|बुरा हाल|बुरी हालत|हालत ख़राब|हालत खराब|घणी दिक्कत|घणी परेशानी|problem|pareshani|samasya|samashya|shikayat|dikkat|dikat|takleef|kab lagegi|kab lagega|kab lagenge|कब लगेगी|कब लगेगा|nahi hai|nhi hai|nahi hua|nhi hua|nahi aata|nhi aata|nahi aati|nahi milti|nahi milta|nhi milta|nahi mil rah|nahi mila|nhi mila|nahi aa rah|nhi aa rah|nahi aa ri|band ho gay|ruk gay|atak gay|atki|toot|tuta|tuti|tooti|ukhad|band (hai|h|pada)|kharab|kab hoga|kab banega|kab banegi|bhar jata|bharta|gandagi|gaddh|khadd|kichad|keechad|andhera|chakkar|pareshan|mehngi|mahangi|mehangi|band pad|jaam|\bjam\b|chok|chahiye|chaiye|समस्या|परेशानी|शिकायत|दिक्कत|तकलीफ|नहीं है|नहीं हुआ|नहीं आता|नहीं आती|नहीं मिल|नहीं आ रह|बंद हो गई|बंद हो गया|रुक गई|अटक|टूट|उखड़|खराब|ख़राब|बंद है|कब होगा|कब बनेगा|कब बनेगी|भर जाता|गड्ढ|खड्ड|कीचड़|अँधेरा|अंधेरा|चक्कर|परेशान|महंगी|महँगी|बंद पड़|जाम|चोक|चाहिए)/i;
 
 function detectTopic(text) { return kb.primaryTopic(text, null); }
 
@@ -508,7 +508,17 @@ function compose(cls, ctx) {
                 const major = ['M2', 'M8', 'M1', 'D-H1', 'M7', 'M5', 'M9', 'M4', 'M11'].map(id => kb.getItem(id)).filter(i => i && !mem.toldItems.includes(i.id));
                 if (major.length) list = major;
             } else if (cls.intent === 'works' && !cls.wish && !lm.length && askedPast && list.some(i => i.type === 'done')) list = list.filter(i => i.type === 'done');
-            let sn = addFacts(cls.wish ? list.filter(i => i.type === 'done') : list, (cls.topic || cls.intent === 'works') && !cls.wish && !['jobs', 'pension', 'ration', 'bijli', 'housing'].includes(kt) ? 2 : 1);
+            const maxN = (cls.topic || cls.intent === 'works') && !cls.wish && !['jobs', 'pension', 'ration', 'bijli', 'housing'].includes(kt) ? 2 : 1;
+            let sn;
+            const doneL = list.filter(i => i.type === 'done').sort((a, b) => (/^M\d/.test(b.id) ? 1 : 0) - (/^M\d/.test(a.id) ? 1 : 0)), futL = list.filter(i => i.type === 'future');
+            if (!cls.wish && !lm.length && doneL.length && futL.length) {
+                // never present a sankalp as if it were done: done work first, then the sankalp clearly labelled
+                sn = addFacts(doneL, askedPast ? maxN : 1);
+                if (!askedPast) { const f = addFacts(futL, 1); if (f) sn = (sn ? sn + ' ' : '') + S('आगे का संकल्प: ', 'Aage ka sankalp: ') + f; }
+            } else if (!cls.wish && !lm.length && !doneL.length && futL.length) {
+                const f = addFacts(futL, 1);
+                sn = f ? S('आगे का संकल्प: ', 'Aage ka sankalp: ') + f : '';
+            } else sn = addFacts(cls.wish ? doneL : list, maxN);
             const KEY = [[/(gym|जिम)/i, /(open gym|ओपन जिम)/i], [/(library|लाइब्रेरी)/i, /(library|लाइब्रेरी)/i], [/(running|track|ट्रैक|रनिंग)/i, /(running track|रनिंग ट्रैक)/i], [/(court|basketball|badminton|kho|कोर्ट)/i, /(court|कोर्ट)/i],
                     [/(tanki|टंकी)/i, /(tanki|टंकी|टंकियाँ)/i], [/(bore|बोर)/i, /(borewell|बोरवेल)/i], [/(hospital|aspatal|swasthya|अस्पताल|स्वास्थ्य)/i, /(up-swasthya|उप-स्वास्थ्य)/i], [/(pashu|पशु)/i, /(pashu|पशु)/i], [/(meeting hall|मीटिंग हॉल)/i, /(meeting hall|मीटिंग हॉल)/i], [/(sarovar|सरोवर)/i, /(sarovar|सरोवर)/i]];
             const kKey = !lm.length && !cls.wish ? KEY.find(([q]) => q.test(message)) : null;
@@ -836,7 +846,7 @@ function buildLLMPrompt(cls, ctx, draft) {
 // reviewed templates; the LLM rewrites the conversational ones.
 // Short, exact replies (greeting, thanks, intro with booth, commitment/family votes, who-are-you) also stay on templates:
 // live runs showed the model appending broken sentences to them.
-const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'short_reply', 'daily_life']);
+const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'daily_life']);
 
 const STOPW = new Set('aur ke ki ka ko me mein se par hai hain gaye gayi gaya gayi. liye jaane wali wale abhay singh panchayat pichhle karyakal tahat jayegi jayega karwayi karwaya banwayi banwaya banwaye lagwayi kiya kiye sabhi unke unhone apni apne aapke aapki aapka और के की का को में से पर है हैं गए गई गया लिए वाली वाले अभय सिंह पंचायत पिछले कार्यकाल तहत जाएगी जाएगा करवाई करवाया बनवाई बनवाया बनवाए लगवाई किया किए उनके उन्होंने अपनी अपने आपके आपकी आपका'.split(/\s+/));
 const keyTokens = s => String(s || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOPW.has(w));
@@ -851,11 +861,12 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
             if (hit / factToks.length < 0.35) return 'dropped_facts';
         }
     }
-    if (!ASKED_VOTE.test(draft) && /(साथ देंगे ना|वोट देंगे ना|saath denge na|vote denge na|vote denge\b|वोट देंगे\b)/i.test(r)) return 'unasked_vote_push';
+    if (!ASKED_VOTE.test(draft) && /(साथ देंगे ना|वोट देंगे ना|saath denge na|vote denge na|vote denge\b|वोट देंगे\b|(मतदान|वोट)[^।?]{0,40}(आएंगी|आएँगी|आएंगे|आएँगे|देंगे|डालेंगे|देंगी)\s*\?|(vote|matdan|matdaan)[^.?]{0,40}(aayenge|aayengi|aaoge|denge|dalenge|dengi)\s*\?)/i.test(r)) return 'unasked_vote_push';
     if (person.gender !== 'F' && /(chahti hain|chahti ho|sakti hain|rahi hain|karti hain|aayi hain|bolti hain|चाहती हैं|सकती हैं|रही हैं|करती हैं|आई हैं|बहन जी|behan ji|mata ji|माता जी)/i.test(r) && !/(behan ji|mata ji|बहन जी|माता जी|tai ji|ताई जी)/i.test(draft)) return 'gender_guess';
     if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
     if (/(\bmonday\b|\bsunday\b|\bvote dalna\b)/i.test(r) && l === 'hi') return 'wrong_script';
     if (/(kad़ै|कड़ै|kade)\s*(वोट|vote)/i.test(r)) return 'bad_dialect';
+    if (/\b(hum|ham)\b[^.?!]{0,30}\b(samajhti|samajhta|karti|karta|rahi|raha|sunti|janti)\s+(hoon|hu|hun)\b|\bहम\b[^।?!]{0,30}(समझती|करती|रही|सुनती|जानती)\s+हूँ/i.test(r)) return 'grammar';
     if (/((prayas|koshish|vaada|wada)\s+(karti|karungi|karta)\s*(hoon|hu|hun)?|(khulwa|banwa|karwa|lagwa|dila)\w*\s+(dungi|deti hoon|deti hu|karungi)|(प्रयास|कोशिश|वादा)\s+(करती|करूँगी|करूंगी)|(खुलवा|बनवा|करवा|लगवा|दिला)\S*\s+(दूँगी|दूंगी|देती हूँ|करूँगी))/i.test(r)) return 'self_promise';
     if (user && user.dialectPref === 'haryanvi' && !/(thar[aei]|thaar[aei]|mhar[aei]|\bsai\b|\bse\b|\bib\b|kade|\bke\b|थार|म्हार|सै|इब|कड़ै|के )/i.test(r)) return 'no_dialect';
     return null;

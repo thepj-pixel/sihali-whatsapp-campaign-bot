@@ -589,7 +589,7 @@ REG.push({ name: 'reg-angry-grievance', turns: [
     { m: '5 saal kuch nahi kiya, sab jhooth', intent: 'taunt' },
     { m: 'hamare yahan to sadak tooti padi hai', intent: 'complaint' },
     { m: 'kaunsi sadak banwai bata', intent: 'works', has: ['sadak'] },
-    { m: 'hmm', has: ['gali'], not: /darj kar li/i },
+    { m: 'hmm', has: ['gali'], not: /(darj kar li|kis gali ya ward)/i },
     { m: 'bus stand ke paas wali gali' }
 ], after: (u) => check('[reg-angry] exactly one samasya record, no duplicate on filler', recs(u, samasya).length === 1) });
 REG.push({ name: 'reg-chitchat-no-bare-ji', turns: [
