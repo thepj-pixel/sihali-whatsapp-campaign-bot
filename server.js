@@ -4443,12 +4443,13 @@ if (process.platform === 'linux') {
                     console.log(`[AutoSync] 🚀 New GitHub commit detected (${hashes[0].slice(0,7)} -> ${hashes[1].slice(0,7)})! Auto-updating...`);
                     const updateCmd = [
                         `git merge --ff-only origin/${DEPLOY_BRANCH}`,
+                        'npm ci --omit=dev',
                         'mkdir -p ~/.fonts ~/.local/share/fonts',
                         'cp media/*.ttf ~/.fonts/ 2>/dev/null || true',
                         'cp media/*.ttf ~/.local/share/fonts/ 2>/dev/null || true',
                         'fc-cache -f ~/.fonts 2>/dev/null || true',
-                        'rm -rf parchi_cache/*',
-                        'pm2 restart all'
+                        'pm2 restart whatsapp-bot --update-env',
+                        'pm2 save'
                     ].join(' && ');
 
                     exec(updateCmd, (updateErr, updateOut) => {

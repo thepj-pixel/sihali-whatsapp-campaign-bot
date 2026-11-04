@@ -1,47 +1,53 @@
-#!/bin/bash
-# ==============================================================================
-# Sihali Khurd Election 2026 - Automatic GitHub Sync Watchdog
-# Checks GitHub repository for new commits every 30 seconds and auto-deploys
-# Can run as standalone cron or continuous daemon: ./autoupdate.sh --daemon
-# ==============================================================================
+#!/usr/bin/env bash
+# Safe GitHub deployment watchdog.
+# The running bot already checks for updates every 35 seconds; this script is
+# also available for cron/systemd recovery or a one-time manual sync.
 
-DIR="/home/patrikryian/sihali-whatsapp-campaign-bot"
-if [ ! -d "$DIR" ]; then
-    DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+set -u
+
+APP_DIR="${APP_DIR:-/home/patrikryian/sihali-whatsapp-campaign-bot}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-codex/production-readiness}"
+PM2_APP="${PM2_APP:-whatsapp-bot}"
+
+if [ ! -d "$APP_DIR/.git" ]; then
+    APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
-cd "$DIR" || exit 1
+cd "$APP_DIR" || exit 1
 
 check_and_sync() {
-    # Silently fetch latest commits from main branch
-    git fetch origin main > /dev/null 2>&1
+    git fetch origin "$DEPLOY_BRANCH" >/dev/null 2>&1 || return 1
 
-    LOCAL=$(git rev-parse HEAD 2>/dev/null)
-    REMOTE=$(git rev-parse origin/main 2>/dev/null)
+    local local_hash remote_hash remote_ahead timestamp
+    local_hash="$(git rev-parse HEAD 2>/dev/null)" || return 1
+    remote_hash="$(git rev-parse "origin/$DEPLOY_BRANCH" 2>/dev/null)" || return 1
+    remote_ahead="$(git rev-list --count "HEAD..origin/$DEPLOY_BRANCH" 2>/dev/null)" || return 1
 
-    if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
-        TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-        echo "[$TIMESTAMP] 🚀 New GitHub commit detected! ($LOCAL -> $REMOTE)"
-        rm -f messages_feed.json
-        # Force hard reset to prevent any local untracked file conflicts
-        git reset --hard origin/main
-        # Auto-install fonts into user directory and refresh font cache
-        mkdir -p ~/.fonts ~/.local/share/fonts
-        cp media/*.ttf ~/.fonts/ 2>/dev/null || true
-        cp media/*.ttf ~/.local/share/fonts/ 2>/dev/null || true
-        fc-cache -f ~/.fonts 2>/dev/null || true
-        # Clear card cache so corrupted/tofu cards are wiped
-        rm -rf parchi_cache/*
-        pm2 restart all
-        echo "[$TIMESTAMP] ✅ Bot updated, fonts synced, and PM2 reloaded successfully!"
+    [ "$remote_ahead" -gt 0 ] || return 0
+
+    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    echo "[$timestamp] Updating $DEPLOY_BRANCH (${local_hash:0:7} -> ${remote_hash:0:7})"
+
+    if ! git merge --ff-only "origin/$DEPLOY_BRANCH"; then
+        echo "[$timestamp] Update stopped: the VM branch is not a clean fast-forward." >&2
+        return 1
     fi
+
+    npm ci --omit=dev || return 1
+    mkdir -p "$HOME/.fonts" "$HOME/.local/share/fonts"
+    cp media/*.ttf "$HOME/.fonts/" 2>/dev/null || true
+    cp media/*.ttf "$HOME/.local/share/fonts/" 2>/dev/null || true
+    fc-cache -f "$HOME/.fonts" 2>/dev/null || true
+    pm2 restart "$PM2_APP" --update-env || return 1
+    pm2 save >/dev/null || true
+    echo "[$timestamp] Update complete: $(git rev-parse --short HEAD)"
 }
 
-if [ "$1" == "--daemon" ]; then
-    echo "Starting continuous GitHub Watchdog daemon (looping every 30s)..."
+if [ "${1:-}" = "--daemon" ]; then
+    echo "Watching origin/$DEPLOY_BRANCH every 35 seconds..."
     while true; do
         check_and_sync
-        sleep 30
+        sleep 35
     done
 else
     check_and_sync

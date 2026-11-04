@@ -44,6 +44,8 @@ curl -fsS http://127.0.0.1:3000/health
 pm2 logs whatsapp-bot --lines 60 --nostream
 ```
 
+After this first deployment, the Linux process checks `origin/$DEPLOY_BRANCH` every 35 seconds. When the remote branch is ahead it performs a fast-forward-only merge, runs `npm ci --omit=dev`, and restarts only `whatsapp-bot`. `autoupdate.sh` provides the same safe behavior for a manual run or an external watchdog; do not run a second daemon while the in-process watcher is active.
+
 ## Put the dashboard on one permanent domain (no Cloudflare tunnel)
 
 1. In the domain provider, create an `A` record pointing the chosen dashboard hostname to the VM public IPv4 address.
