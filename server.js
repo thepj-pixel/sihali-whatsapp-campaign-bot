@@ -652,7 +652,7 @@ async function startSession(sessionObj) {
                 const senderIds = [senderPhone, rawJid, msg.key?.senderPn, msg.key?.remoteJidAlt, msg.key?.participant].filter(Boolean);
                 const ownRoute = liveSelfTest.route(sessionObj.id, senderIds);
                 if (ownRoute === 'capture') {
-                    const capturedText = extractMessageText(msg.message) || (msg.message?.contactMessage || msg.message?.contactsArrayMessage ? '[contact card]' : '[media]');
+                    const capturedText = (msg.message?.imageMessage ? '[image] ' : (msg.message?.videoMessage ? '[video] ' : '')) + (extractMessageText(msg.message) || '') || (msg.message?.contactMessage || msg.message?.contactsArrayMessage ? '[contact card]' : '[media]');
                     liveSelfTest.capture(sessionObj.id, capturedText);
                     logDiagnostic({ session: sessionObj.name, phone: 'Self-Test (' + senderPhone + ')', incoming: capturedText, reply: 'Captured by Live Self-Test (tester line does not reply).', status: 'SELF_TEST_CAPTURE' });
                     continue;

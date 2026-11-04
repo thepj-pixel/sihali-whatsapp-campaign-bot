@@ -95,7 +95,7 @@ async function runConversation(n, spec) {
         prev = r.text;
     }
     if (spec.after) await spec.after(u, replies);
-    if (spec.llm === stubLLM && !spec.allFlow) check(`[${spec.name}] LLM path used for at least one reply`, replies.some(x => x.r.source === 'llm'));
+    if (spec.llm === stubLLM && !spec.allFlow && !spec.templateOnly) check(`[${spec.name}] LLM path used for at least one reply`, replies.some(x => x.r.source === 'llm'));
 }
 
 const recs = (u, store) => store.list({ phone: u.phone, includeTest: true });
@@ -668,7 +668,7 @@ REG.push({ name: 'reg-devanagari-works', turns: [
 ] });
 // ---- v4: the owner's live test from 917976410227 (4 Nov 2026 night) ----
 const opener = t => replyQuality.normalize(String(t || '')).slice(0, 18);
-REG.push({ name: 'reg-owner-transcript', turns: [
+REG.push({ name: 'reg-owner-transcript', templateOnly: true, turns: [
     { m: 'Kaam bata saara ka saara', intent: 'works', hasAll: ['Jal Jeevan', 'library', 'swasthya'], not: /(ghar-gaon me sab theek|samajh gayi)/i },
     { m: 'Elon Musk kon h', intent: 'off_topic', has: ['Sihali Khurd', 'gaon'], not: /(Moti Aangli|pratyashi hain)/i },
     { m: 'Aree aur batao..mark zuckerberg kie news batao', intent: 'off_topic', not: /(Moti Aangli)/i },
@@ -704,7 +704,7 @@ REG.push({ name: 'reg-first-messages', turns: [
     { m: 'what work has been done', intent: 'works', has: ['Jal Jeevan'] },
     { m: 'how are you', intent: 'greeting' }
 ] });
-REG.push({ name: 'reg-devanagari-negative', turns: [
+REG.push({ name: 'reg-devanagari-negative', templateOnly: true, turns: [
     { m: 'सारे काम बताओ', intent: 'works', hasAll: ['जल जीवन', 'लाइब्रेरी'] },
     { m: 'कुत्ता है अभय सिंह', intent: 'abuse', not: /कुत्त/ },
     { m: 'सारे पैसे खा गया', intent: 'corruption', has: ['40 साल'] },

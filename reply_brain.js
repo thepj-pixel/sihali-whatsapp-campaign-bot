@@ -521,6 +521,17 @@ function compose(cls, ctx) {
             break;
         }
         case 'taunt': {
+            if (cls.insult) {
+                // a plain insult ("bekar aadmi hai", "chup kar") gets calm respect and an open door, not a works pitch
+                const op = negLine(user, l, H, 'insult');
+                body = op + ' ' + vary(user, [
+                    S('कोई ख़ास बात या काम जो आपको खटकता हो, वो बताइए—मैं सीधे टीम तक पहुँचाऊँगी।', 'Koi khaas baat ya kaam jo aapko khatakta ho, wo bataiye—main seedhe team tak pahunchaungi.'),
+                    S('अगर गाँव का कोई काम अटका है, तो बस वार्ड और जगह बता दीजिए, नोट कर लूँगी।', 'Agar gaon ka koi kaam atka hai, to bas ward aur jagah bata dijiye, note kar lungi.'),
+                    S('आपकी बात सुनने के लिए मैं यहीं हूँ, जब चाहें लिखिए।', 'Aapki baat sunne ke liye main yahin hoon, jab chahein likhiye.')
+                ].filter(x => !(/(atka|अटका)/i.test(op) && /(atka|अटका)/i.test(x))));
+                ask = false;
+                break;
+            }
             const t = cls.topic || (anyConcern && anyConcern.topic) || (AUDIENCE_TOPICS[person.gender || 'none'] || [])[0];
             const done = items.filter(i => i.type === 'done');
             const sn = addFacts(done.length ? done : topicItems(t, l, user, 'done'), 1);
@@ -1054,7 +1065,7 @@ async function respond(message, user = {}, opts = {}) {
     let { text } = t;
     let source = t.flowResult ? 'flow' : 'template';
     let rejected = null;
-    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
+    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !cls.person && !cls.news && !cls.insult && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));
