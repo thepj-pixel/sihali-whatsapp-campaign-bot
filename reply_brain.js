@@ -426,4 +426,29 @@ async function respond(message, user = {}, opts = {}) {
     return { text, intent: cls.intent, topic: cls.topic, stage, previousStage, needsAdmin: !!c.needsAdmin, source, honorific: hon, gender: person.gender };
 }
 
-module.exports = { respond, classify, personOf, honorific, nextStage, boothForWard, validateLLM, STAGES, SNIPPETS };
+/**
+ * Proactive follow-up for consented contacts who are undecided/leaning: one warm persuasion step.
+ * goal.targetWard + goal.task (admin-written text) is appended only for people in that ward.
+ */
+function buildPersuasionNudge(user = {}, goal = {}) {
+    const stage = stageOf(user);
+    if (!['undecided', 'leaning', 'unknown'].includes(stage)) {
+        if (stage === 'committed' && goal && goal.task && goal.targetWard && String(goal.targetWard) === String(user.ward)) {
+            return String(goal.task).slice(0, 300);
+        }
+        return null;
+    }
+    const facts = factsText();
+    const l = user.languagePreference === 'hinglish' ? 'en' : 'hi';
+    const person = personOf(user, '');
+    const hon = honorific(person, l);
+    const topic = (user.context && user.context.openComplaint && user.context.openComplaint.topic) || (AUDIENCE_TOPICS[person.gender || 'none'] || [])[0];
+    const sn = snippetFor(topic, l, facts, { first: true });
+    const closer = pickCloser(stage === 'unknown' ? 'undecided' : stage, l, user) || (CLOSERS[stage === 'unknown' ? 'undecided' : stage] || CLOSERS.unknown)[l][0];
+    let text = (l === 'hi' ? `राम राम ${hon}! 🙏 ` : `Ram Ram ${hon}! 🙏 `) + (sn ? sn + ' ' : '') + closer;
+    if (goal && goal.task && goal.targetWard && String(goal.targetWard) === String(user.ward)) text += ' ' + String(goal.task).slice(0, 200);
+    if (replyQuality.isRepeated(text, user)) return null;
+    return text;
+}
+
+module.exports = { buildPersuasionNudge, respond, classify, personOf, honorific, nextStage, boothForWard, validateLLM, STAGES, SNIPPETS };

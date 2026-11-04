@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const AGENDA_FILE = path.join(__dirname, 'campaign_agenda.json');
+const AGENDA_FILE = process.env.CAMPAIGN_AGENDA_PATH || path.join(__dirname, 'campaign_agenda.json');
+const SLOTS = ['morning', 'dopahar', 'evening', 'night'];
+const istDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
 const DEFAULT_AGENDA = {
     date: new Date().toISOString().split('T')[0],
@@ -89,8 +91,54 @@ class CampaignAgendaManager {
         }
     }
 
-    getAgenda() {
-        return this.agenda;
+    /** Agenda for today (IST): base agenda + that day's override (topic, talking points, slot media/hook). */
+    getAgenda(date = istDate()) {
+        const day = (this.agenda.days || {})[date];
+        if (!day) return { ...this.agenda, activeDate: date, dayOverride: false };
+        const merged = JSON.parse(JSON.stringify(this.agenda));
+        if (day.topic) merged.topic = day.topic;
+        if (day.talkingPoints) merged.talkingPoints = day.talkingPoints;
+        for (const slot of SLOTS) {
+            const d = day.slots && day.slots[slot];
+            if (d && merged.dailySchedule[slot]) {
+                if (d.mediaFile !== undefined) merged.dailySchedule[slot].mediaFile = d.mediaFile;
+                if (d.hook) merged.dailySchedule[slot].hook = d.hook;
+            }
+        }
+        merged.activeDate = date;
+        merged.dayOverride = true;
+        return merged;
+    }
+
+    getDay(date) { return (this.agenda.days || {})[date] || null; }
+
+    listDays() {
+        return Object.keys(this.agenda.days || {}).sort().map(d => ({ date: d, topic: this.agenda.days[d].topic || '' }));
+    }
+
+    /** Save one day's plan. slots: { morning: { mediaFile, hook }, ... } */
+    updateDay(date, changes = {}) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error('date must be YYYY-MM-DD');
+        this.agenda.days = this.agenda.days || {};
+        const cur = this.agenda.days[date] || { slots: {} };
+        const next = { ...cur, slots: { ...(cur.slots || {}) } };
+        if (changes.topic !== undefined) next.topic = String(changes.topic || '').slice(0, 300);
+        if (changes.talkingPoints !== undefined) next.talkingPoints = String(changes.talkingPoints || '').slice(0, 3000);
+        if (changes.slots && typeof changes.slots === 'object') {
+            for (const slot of SLOTS) {
+                const inc = changes.slots[slot];
+                if (!inc) continue;
+                const mediaFile = inc.mediaFile ? path.basename(String(inc.mediaFile)) : '';
+                next.slots[slot] = { mediaFile, hook: String(inc.hook || '').slice(0, 600) };
+            }
+        }
+        next.updatedAt = new Date().toISOString();
+        this.agenda.days[date] = next;
+        // keep the last 30 days
+        const keys = Object.keys(this.agenda.days).sort();
+        while (keys.length > 30) delete this.agenda.days[keys.shift()];
+        this.saveAgenda();
+        return next;
     }
 
     updateAgenda(updates) {
@@ -144,7 +192,7 @@ class CampaignAgendaManager {
         const istMinutes = (now.getUTCMinutes() + 30) % 60;
         const currentFraction = istHours + (istMinutes / 60);
 
-        const schedule = this.agenda.dailySchedule || DEFAULT_AGENDA.dailySchedule;
+        const schedule = this.getAgenda().dailySchedule || DEFAULT_AGENDA.dailySchedule;
         if (currentFraction >= schedule.morning.startHour && currentFraction < schedule.morning.endHour) {
             return { slot: 'morning', ...schedule.morning };
         }
@@ -161,10 +209,11 @@ class CampaignAgendaManager {
     }
 
     getAgendaRAGPrompt() {
-        if (!this.agenda || !this.agenda.topic) return '';
+        const today = this.getAgenda();
+        if (!today || !today.topic) return '';
         return `[DAILY CAMPAIGN AGENDA / आज का चुनावी एजेंडा]:
-विषय: ${this.agenda.topic}
-बातचीत में शामिल करने योग्य मुख्य बिंदु: ${this.agenda.talkingPoints}
+विषय: ${today.topic}
+बातचीत में शामिल करने योग्य मुख्य बिंदु: ${today.talkingPoints}
 (⚠️ नियम: इसे जबरदस्ती न थोपें; यदि बातचीत आगे बढ़ रही हो तो स्वाभाविक रूप से एक पंक्ति में आत्मीयता से इसका ज़िक्र करें।)\n`;
     }
 }

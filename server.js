@@ -1,6 +1,6 @@
 
 // Proactive Daytime Nudge Engine (Sends sweet, respectful follow-ups 2-4 hours after inactivity)
-function runProactiveNudges(sock) {
+function runProactiveNudges(sock, lineId = 'sim_636') {
     try {
         const now = new Date();
         const istHours = (now.getUTCHours() + 5 + Math.floor((now.getUTCMinutes() + 30) / 60)) % 24;
@@ -10,6 +10,9 @@ function runProactiveNudges(sock) {
         const allUsers = userMemory.getAllUsers();
         for (const u of allUsers) {
             if (!u.phone || u.phone.includes('Self Device') || u.phone.length < 10) continue;
+            // Sticky lines: each person is only nudged from the line they talk to (unassigned -> primary)
+            if ((u.assignedLine || 'sim_636') !== lineId) continue;
+            if (u.broadcastOptOut) continue;
             if (engagementPolicy.canSendConsentReminder(u)) {
                 const reminder = engagementPolicy.buildConsentReminder(u.name);
                 const reminderJid = `${u.phone}@s.whatsapp.net`;
@@ -18,7 +21,7 @@ function runProactiveNudges(sock) {
                     u.consentReminderAt = new Date().toISOString();
                     userMemory.recordMessage(u.phone, 'bot', reminder, 'consentReminder');
                     userMemory.save();
-                    operationsTracker.record('consent_reminder', 'sent', { lineId: 'sim_636' });
+                    operationsTracker.record('consent_reminder', 'sent', { lineId });
                 }).catch(e => operationsTracker.record('consent_reminder', 'failed', { lineId: 'sim_636', reason: e.message }));
                 break;
             }
@@ -32,7 +35,9 @@ function runProactiveNudges(sock) {
             const hoursSinceLastPing = lastPingDate ? (Date.now() - lastPingDate.getTime()) / (1000 * 60 * 60) : 999;
 
             if (hoursSinceLastChat >= 2.5 && hoursSinceLastChat <= 8 && hoursSinceLastPing >= 20) {
-                const pickedNudge = conversationContext.buildProactiveMessage(u);
+                let pickedNudge = null;
+                try { pickedNudge = replyBrain.buildPersuasionNudge(u, dailyGoal.get()); } catch (e) {}
+                if (!pickedNudge) pickedNudge = conversationContext.buildProactiveMessage(u);
                 if (!pickedNudge) continue;
                 const replyJid = `${u.phone}@s.whatsapp.net`;
 
@@ -645,6 +650,10 @@ async function startSession(sessionObj) {
 
                 console.log(`[${sessionObj.id}] Received from ${senderPhone} (${replyJid}): "${body}"`);
 
+                // First contact: save to Contacts (voter match / pushName) and pin this line (sticky)
+                autoSaveContact({ phone: senderPhone, pushName: msg.pushName, lineId: sessionObj.id, sock, jid: replyJid, source: 'inbound' });
+                try { dailyGoal.recordEvent && dailyGoal.recordEvent('reply', { phone: senderPhone, line: sessionObj.id, ward: (userMemory.users[senderPhone] || {}).ward }); } catch (e) {}
+
                 // Record user message in memory
                 userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name);
 
@@ -690,6 +699,7 @@ async function startSession(sessionObj) {
                     await sendSafeMessage(sock, replyJid, { text: consentPrompt });
                     userMemory.recordMessage(senderPhone, 'bot', consentPrompt, 'consent_prompt', sessionObj.name);
                     operationsTracker.record('consent_prompt', 'sent', { lineId: sessionObj.id });
+                    await sendLineContactCardOnce(sock, replyJid, senderPhone, sessionObj);
                     continue;
                 }
 
@@ -1238,6 +1248,90 @@ function getActiveSocket(preferredId = 'sim_636') {
 }
 
 
+
+// ==================== FIRST CONTACT: auto-save, sticky line, contact card ====================
+const replyBrain = require('./reply_brain.js');
+const WA_SYNC_CONTACTS = process.env.WA_SYNC_CONTACTS !== 'false';
+const waContactSyncQueue = [];
+let waContactSyncBusy = false;
+
+/** Best-effort: also add the person to the WhatsApp line's own address book (Baileys >= 6.7 app-state contactAction). */
+function queueWhatsAppContactSync(sock, jid, fullName) {
+    if (!WA_SYNC_CONTACTS || !sock || typeof sock.addOrEditContact !== 'function' || !jid || !fullName) return;
+    waContactSyncQueue.push({ sock, jid, fullName });
+    if (waContactSyncBusy) return;
+    waContactSyncBusy = true;
+    (async () => {
+        while (waContactSyncQueue.length) {
+            const job = waContactSyncQueue.shift();
+            try {
+                await job.sock.addOrEditContact(job.jid, { fullName: job.fullName, firstName: job.fullName.split(' ')[0], saveOnPrimaryAddressbook: true });
+                operationsTracker.record('wa_contact_sync', 'ok', {});
+            } catch (e) {
+                operationsTracker.record('wa_contact_sync', 'failed', { reason: e.message });
+            }
+            await new Promise(r => setTimeout(r, 3000)); // gentle: one app-state patch every 3s
+        }
+        waContactSyncBusy = false;
+    })();
+}
+
+/**
+ * Every new number that messages us or that we message is saved to Contacts with the best name we have
+ * (voter match > WhatsApp pushName > given name) and pinned to the line it first talked to.
+ */
+function autoSaveContact({ phone, name, pushName, lineId, sock, jid, source }) {
+    try {
+        const clean = contactUtils.normalizeIndianPhone(phone) || userMemory.cleanPhone(phone);
+        if (!clean || clean.length < 10) return null;
+        const user = userMemory.getUser(clean);
+        if (user && !user.assignedLine && lineId) user.assignedLine = lineId;
+        if (user && pushName && !user.pushName) user.pushName = String(pushName).slice(0, 60);
+        const voterName = user && user.lastFoundVoter && (user.lastFoundVoter.name_hi || user.lastFoundVoter.name);
+        const bestName = voterName || (user && user.name && !/ग्रामवासी/.test(user.name) ? user.name : '') || name || pushName || '';
+        const existing = contactsManager.findByPhone(clean);
+        const isNew = !existing;
+        if (isNew || (bestName && (!existing.name || /ग्रामवासी|^Contact$/.test(existing.name)))) {
+            contactsManager.add({
+                ...(existing || {}),
+                phone: clean,
+                name: bestName || 'ग्रामवासी',
+                ward: (existing && existing.ward) || (user && user.ward) || null,
+                line: (existing && existing.line) || (user && user.assignedLine) || lineId || 'sim_636',
+                tags: (existing && existing.tags) || [source === 'bulk' ? '📣 Bulk Send' : '📥 WhatsApp Inbound']
+            });
+        }
+        if (isNew && bestName) queueWhatsAppContactSync(sock, jid || `${clean}@s.whatsapp.net`, bestName);
+        return { isNew, user };
+    } catch (e) {
+        console.warn('[AutoSave] contact save failed:', e.message);
+        return null;
+    }
+}
+
+/** Send this line's contact card + "please save" line exactly once per person. */
+async function sendLineContactCardOnce(sock, jid, phone, sessionObj) {
+    const u = userMemory.getUser(phone);
+    if (!u || u.contactCardSent || u.broadcastOptOut || u.consentStatus === 'REJECTED') return false;
+    u.contactCardSent = true;
+    u.contactCardSentAt = new Date().toISOString();
+    userMemory.save();
+    try {
+        await new Promise(r => setTimeout(r, 1200 + Math.random() * 1500));
+        await sendMultiContactCard(sock, jid, sessionObj.id);
+        const l = u.languagePreference === 'hinglish' ? 'hinglish' : 'hi';
+        const hon = replyBrain.honorific(replyBrain.personOf(u, ''), l === 'hi' ? 'hi' : 'en');
+        const savePrompt = `${l === 'hi' ? 'राम राम' : 'Ram Ram'} ${hon}! 🙏 ${engagementPolicy.buildSaveContactPrompt(sessionObj.id, u.languagePreference)}`;
+        await sendSafeMessage(sock, jid, { text: savePrompt });
+        userMemory.recordMessage(phone, 'bot', '📇 [Line contact card sent]', null, sessionObj.name);
+        operationsTracker.record('contact_card', 'sent', { lineId: sessionObj.id });
+        return true;
+    } catch (e) {
+        console.warn(`[ContactCard] ${phone}:`, e.message);
+        return false;
+    }
+}
+
 // ==================== BULK SEND (BROADCAST ENGINE) ====================
 // Anti-ban bulk sender. Consent/opt-out rules come from engagement_policy.js; the engine keeps its
 // own durable opt-out list + queue in broadcast_state.json (gitignored) so pm2 restarts resume safely.
@@ -1248,7 +1342,13 @@ const broadcastEngine = new BroadcastEngine({
     mediaDir: path.join(__dirname, 'media'),
     getSessions: () => SESSIONS,
     isBlocked: (phone) => engagementPolicy.broadcastBlockReason(userMemory.users[phone]),
-    onSent: ({ phone, name, text, line, lineName, media }) => {
+    getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
+    onSent: ({ phone, name, text, line, lineName, media, sent }) => {
+        const sess = SESSIONS.find(x => x.id === line);
+        const jid = (sent && sent.key && sent.key.remoteJid) || `${phone}@s.whatsapp.net`;
+        autoSaveContact({ phone, name, lineId: line, sock: sess && sess.sock, jid, source: 'bulk' });
+        if (sess && sess.sock) sendLineContactCardOnce(sess.sock, jid, phone, sess).catch(() => {});
+        try { dailyGoal.recordEvent && dailyGoal.recordEvent('reached', { phone, line, ward: (userMemory.users[phone] || {}).ward }); } catch (e) {}
         try {
             const u = userMemory.getUser(phone, name || '');
             if (u && !u.name && name) u.name = name;
@@ -1295,7 +1395,7 @@ app.post('/api/send-message', async (req, res) => {
             });
         }
 
-        const active = getActiveSocket(lineId || 'sim_636');
+        const active = getActiveSocket(lineId || targetUser.assignedLine || 'sim_636');
         if (!active) {
             return res.status(503).json({ error: 'No WhatsApp line is currently connected. Please scan QR code first.' });
         }
@@ -1374,6 +1474,7 @@ app.post('/api/send-message', async (req, res) => {
         }
 
         const savedUser = targetUser;
+        if (savedUser && !savedUser.assignedLine) savedUser.assignedLine = active.session.id;
         if (template === 'consent_check' || template === 'permission_casual') {
             engagementPolicy.markConsentPrompted(savedUser);
             operationsTracker.record('consent_prompt', 'sent', { lineId: active.session.id, template });
@@ -2053,6 +2154,115 @@ app.get('/api/export/dialer.csv', (req, res) => {
     }
 });
 
+// ---------- Media Bank: one-click upload (image / video / pdf) ----------
+const { mediaTypeOf } = require('./broadcast_engine.js');
+const MEDIA_DIR = path.join(__dirname, 'media');
+const PROTECTED_MEDIA = new Set(['poster.jpg', 'campaign_reel.mp4', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf', 'baba_face.jpg', 'baba_33_transparent.png']);
+const MEDIA_MAX_BYTES = 45 * 1024 * 1024;
+
+function safeMediaName(original) {
+    const ext = path.extname(String(original || '')).toLowerCase();
+    let base = path.basename(String(original || 'file'), ext).normalize('NFKD').replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'media';
+    let name = base + ext;
+    let n = 1;
+    while (fs.existsSync(path.join(MEDIA_DIR, name))) name = `${base}_${n++}${ext}`;
+    return name;
+}
+
+app.get('/api/media/list', (req, res) => {
+    res.json({ success: true, media: broadcastEngine.listMedia().map(m => ({ ...m, protected: PROTECTED_MEDIA.has(m.file) })) });
+});
+
+app.post('/api/media/upload', (req, res) => {
+    try {
+        const { fileName, base64Data } = req.body || {};
+        if (!fileName || !base64Data) return res.status(400).json({ success: false, error: 'fileName and base64Data required' });
+        const ext = path.extname(String(fileName)).toLowerCase();
+        const type = mediaTypeOf(ext);
+        if (!type) return res.status(400).json({ success: false, error: 'Only images (jpg/png/webp), videos (mp4/3gp/mov) or PDF' });
+        const buf = Buffer.from(String(base64Data).replace(/^data:[^;]+;base64,/, ''), 'base64');
+        if (!buf.length) return res.status(400).json({ success: false, error: 'Empty file' });
+        if (buf.length > MEDIA_MAX_BYTES) return res.status(413).json({ success: false, error: 'File too large (max 45 MB)' });
+        const name = safeMediaName(fileName);
+        fs.writeFileSync(path.join(MEDIA_DIR, name), buf);
+        operationsTracker.record('media_bank_upload', 'ok', { mediaType: type });
+        res.json({ success: true, file: name, type, size: buf.length, url: '/media/' + encodeURIComponent(name) });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/media/delete', (req, res) => {
+    const file = path.basename(String((req.body || {}).file || ''));
+    if (!file || PROTECTED_MEDIA.has(file) || !mediaTypeOf(path.extname(file).toLowerCase())) return res.status(400).json({ success: false, error: 'This file cannot be deleted here' });
+    const full = path.join(MEDIA_DIR, file);
+    if (!fs.existsSync(full)) return res.status(404).json({ success: false, error: 'Not found' });
+    fs.unlinkSync(full);
+    res.json({ success: true });
+});
+
+// ---------- Daily agenda per day ----------
+app.get('/api/agenda/day', (req, res) => {
+    const date = String(req.query.date || dailyGoal.currentIstDate());
+    res.json({ success: true, date, day: campaignAgenda.getDay(date), merged: campaignAgenda.getAgenda(date), days: campaignAgenda.listDays() });
+});
+app.post('/api/agenda/day', (req, res) => {
+    try {
+        const { date, topic, talkingPoints, slots } = req.body || {};
+        for (const slot of Object.keys(slots || {})) {
+            const f = slots[slot] && slots[slot].mediaFile;
+            if (f && !fs.existsSync(path.join(MEDIA_DIR, path.basename(f)))) return res.status(400).json({ success: false, error: `Media not found for ${slot}: ${f}` });
+        }
+        const day = campaignAgenda.updateDay(date || dailyGoal.currentIstDate(), { topic, talkingPoints, slots });
+        res.json({ success: true, day });
+    } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
+// ---------- Daily goal: live progress, persuasion funnel, night summary ----------
+function persuasionTotals() {
+    const t = { unknown: 0, undecided: 0, leaning: 0, committed: 0, opposed: 0, needsAdmin: 0 };
+    const byWard = {};
+    for (const u of userMemory.getAllUsers()) {
+        if (!u.phone || String(u.phone).includes('Self')) continue;
+        const st = u.persuasionStage || 'unknown';
+        t[st] = (t[st] || 0) + 1;
+        if (u.needsAdmin) t.needsAdmin++;
+        const w = u.ward || 'unknown';
+        byWard[w] = byWard[w] || { unknown: 0, undecided: 0, leaning: 0, committed: 0, opposed: 0 };
+        byWard[w][st] = (byWard[w][st] || 0) + 1;
+    }
+    return { ...t, byWard };
+}
+app.get('/api/daily-goal/progress', (req, res) => {
+    res.json({ success: true, progress: dailyGoal.progress(req.query.date || undefined), totals: persuasionTotals(), history: dailyGoal.history(7) });
+});
+app.post('/api/daily-goal/summary', (req, res) => {
+    res.json({ success: true, summary: dailyGoal.buildSummary(req.body?.date || undefined, persuasionTotals()) });
+});
+app.post('/api/voter/stage', (req, res) => {
+    const { phone, stage } = req.body || {};
+    const u = userMemory.users[userMemory.cleanPhone(phone)];
+    if (!u || !replyBrain.STAGES.includes(stage)) return res.status(400).json({ success: false, error: 'Unknown voter or stage' });
+    const from = u.persuasionStage || 'unknown';
+    u.persuasionStage = stage;
+    u.persuasionHistory = (u.persuasionHistory || []).concat([{ from, to: stage, at: new Date().toISOString(), intent: 'admin' }]).slice(-20);
+    if (u.needsAdmin && req.body.clearFlag) u.needsAdmin = null;
+    userMemory.save();
+    dailyGoal.recordEvent('stage', { phone: u.phone, line: u.assignedLine, ward: u.ward, from, to: stage });
+    res.json({ success: true });
+});
+// Night summary at ~21:45 IST, once per day
+setInterval(() => {
+    try {
+        const now = new Date();
+        const ist = new Date(now.getTime() + 5.5 * 3600 * 1000);
+        if (ist.getUTCHours() === 21 && ist.getUTCMinutes() >= 45) {
+            const p = dailyGoal.progress();
+            if (!p.summary) dailyGoal.buildSummary(undefined, persuasionTotals());
+        }
+    } catch (e) {}
+}, 5 * 60 * 1000).unref();
+
 // Manual contact entry / paste (one per line: phone, name, ward, village)
 app.post('/api/contacts/bulk-add', (req, res) => {
     try {
@@ -2553,6 +2763,7 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-contacts" class="tab-btn" onclick="switchTab('contacts', this)">📇 Voter Contacts & VCF/CSV (<span id="contacts-count">0</span>)</button>
                     <button id="tab-btn-media" class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
                     <button id="tab-btn-bulk" class="tab-btn" type="button" data-tab="bulk">📣 Bulk Send</button>
+                    <button id="tab-btn-goal" class="tab-btn" type="button" data-tab="goal">🎯 Goal & Agenda</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -2888,6 +3099,15 @@ app.get('/', (req, res) => {
                                     <option value="baba_aux">Baba Aux line</option>
                                     <option value="canada">Canada line (+1)</option>
                                 </select>
+                                <select id="crm-stage-filter" style="width:100%;margin-bottom:7px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;background:white;color:#0f172a;font-size:12px;">
+                                    <option value="all">All persuasion stages</option>
+                                    <option value="unknown">⚪ Unknown</option>
+                                    <option value="undecided">🟡 Undecided</option>
+                                    <option value="leaning">🟢 Leaning</option>
+                                    <option value="committed">✅ Committed (पक्का वोट)</option>
+                                    <option value="opposed">🔴 Opposed</option>
+                                    <option value="needsAdmin">🚩 Needs admin</option>
+                                </select>
                                 <input type="text" id="voter-search" placeholder="🔍 नाम, फोन नंबर या टैग से खोजें..." style="width: 100%; padding: 8px 12px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 13px; outline: none; background: #f8fafc; color: #0f172a;" oninput="filterVoters(this.value)">
                             </div>
                             <!-- 17 Smart Filter Chips -->
@@ -3061,6 +3281,9 @@ app.get('/', (req, res) => {
                             <a href="/api/export/dialer.csv?source=contacts" download style="background: #7c3aed; color: white; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;" title="name, phone_10, phone_91, ward, village — opted-out excluded">
                                 📞 Dialer/IVR CSV
                             </a>
+                            <a href="/api/contacts/export-vcf?line=sim_636" download="contacts_sim_636.vcf" style="background:#334155;color:white;padding:7px 10px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;">📲 VCF Primary</a>
+                            <a href="/api/contacts/export-vcf?line=baba_aux" download="contacts_baba_aux.vcf" style="background:#334155;color:white;padding:7px 10px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;">📲 VCF Baba Aux</a>
+                            <a href="/api/contacts/export-vcf?line=canada" download="contacts_canada.vcf" style="background:#334155;color:white;padding:7px 10px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;">📲 VCF Canada</a>
                         </div>
                     </div>
 
@@ -3183,6 +3406,16 @@ app.get('/', (req, res) => {
                 <!-- TAB 5: Media Bank & Direct Uploader -->
                 <div id="tab-media" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">📸 Campaign Media Bank & Mobile Uploader</h3>
+                    <!-- One-click Media Bank upload (image / video / pdf) -->
+                    <div id="hm-drop" style="border: 2px dashed #94a3b8; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 16px; background: #f8fafc; cursor: pointer;">
+                        <div style="font-size: 28px;">📤</div>
+                        <div style="font-weight: 800;">फ़ोटो / वीडियो / PDF यहाँ छोड़ें या टैप करके चुनें</div>
+                        <div style="font-size: 11px; color: #64748b;">Max 45 MB • तुरंत नीचे की सूची में दिखेगा, Bulk Send और एजेंडा में इस्तेमाल कर सकते हैं</div>
+                        <input type="file" id="hm-file" accept="image/*,video/*,application/pdf" multiple style="display:none;">
+                        <div id="hm-status" style="margin-top: 8px; font-size: 13px; font-weight: 600;"></div>
+                    </div>
+                    <div id="hm-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px;"></div>
+
                     <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:16px; margin-bottom:18px;">
                         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
                             <h4 style="margin:0; color:#0f172a;">Daily Goal & Operations</h4>
@@ -3368,6 +3601,50 @@ app.get('/', (req, res) => {
                             <label><input type="checkbox" id="export-include-optout"> include opted-out (not recommended)</label>
                             <button type="button" data-action="export" style="font-size: 12px; padding: 6px 12px; border-radius: 6px; border: none; background: #0284c7; color: white; font-weight: 700; cursor: pointer;">⬇️ Export CSV</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ===== Goal & Agenda Tab ===== -->
+                <div id="tab-goal" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🎯 आज का लक्ष्य, प्रगति और एजेंडा</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin: 0 0 8px 0;">Daily goal / task</h4>
+                            <input id="hg-title" placeholder="उदा: आज 300 लोगों से बात, 100 पक्के वोट" style="width:100%; box-sizing:border-box; padding:7px; margin-bottom:6px; border:1px solid #cbd5e1; border-radius:6px;">
+                            <textarea id="hg-instruction" rows="2" placeholder="बॉट के लिए आज का फोकस (बातचीत में उपयोग होगा)" style="width:100%; box-sizing:border-box; padding:7px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px; margin-top:6px;">
+                                <label>Target people <input id="hg-target" type="number" min="0" style="width:70px;"></label>
+                                <label>Target पक्के वोट <input id="hg-target-committed" type="number" min="0" style="width:70px;"></label>
+                                <label>Task ward <input id="hg-ward" style="width:50px;" placeholder="—"></label>
+                            </div>
+                            <textarea id="hg-task" rows="2" placeholder="उस वार्ड के लिए संदेश (उदा: कल शाम 5 बजे चौपाल पर ज़रूर आइए) — आप जो लिखेंगे वही भेजा जाएगा" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                            <button type="button" data-goal-action="save-goal" style="margin-top:8px; padding:7px 14px; border:none; border-radius:6px; background:#16a34a; color:white; font-weight:800; cursor:pointer;">💾 Save goal</button>
+                            <span id="hg-goal-status" style="font-size:12px; margin-left:8px;"></span>
+                        </div>
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin: 0 0 8px 0;">📈 Live progress (today)</h4>
+                            <div id="hg-progress" style="font-size:14px;">Loading…</div>
+                            <div id="hg-funnel" style="font-size:13px; margin-top:8px;"></div>
+                            <button type="button" data-goal-action="summary" style="margin-top:8px; padding:6px 12px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer; font-size:12px;">🌙 Build day summary now</button>
+                            <div id="hg-summary" style="font-size:12px; margin-top:8px; white-space:pre-wrap; background:#f8fafc; padding:8px; border-radius:6px;"></div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top:16px;">
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;"><h4 style="margin:0 0 8px 0;">Per line</h4><div id="hg-by-line" style="font-size:12px;"></div></div>
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;"><h4 style="margin:0 0 8px 0;">Per ward</h4><div id="hg-by-ward" style="font-size:12px; max-height:260px; overflow-y:auto;"></div></div>
+                    </div>
+                    <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-top:16px;">
+                        <h4 style="margin: 0 0 8px 0;">🗓️ Daily agenda (per day)</h4>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px;">
+                            <label>Date <input type="date" id="ha-date"></label>
+                            <button type="button" data-goal-action="load-day" style="padding:5px 10px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer; font-size:12px;">Load</button>
+                            <span id="ha-days" style="color:#64748b;"></span>
+                        </div>
+                        <input id="ha-topic" placeholder="आज का विषय" style="width:100%; box-sizing:border-box; padding:7px; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                        <textarea id="ha-points" rows="3" placeholder="बातचीत के मुख्य बिंदु (सिर्फ़ सत्यापित तथ्य)" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                        <div id="ha-slots" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin-top:8px;"></div>
+                        <button type="button" data-goal-action="save-day" style="margin-top:8px; padding:7px 14px; border:none; border-radius:6px; background:#2563eb; color:white; font-weight:800; cursor:pointer;">💾 Save day agenda</button>
+                        <span id="ha-status" style="font-size:12px; margin-left:8px;"></span>
                     </div>
                 </div>
             </div>
@@ -3994,7 +4271,9 @@ app.get('/', (req, res) => {
                     const lower = String(query === undefined ? (searchInput ? searchInput.value : '') : query).toLowerCase();
                     const line = document.getElementById('crm-line-filter')?.value || 'all';
                     const filtered = allVoters.filter(function(v) {
-                        const lineMatch = line === 'all' || v.lastSessionId === line;
+                        const lineMatch = line === 'all' || v.lastSessionId === line || v.assignedLine === line;
+                        const stageSel = document.getElementById('crm-stage-filter')?.value || 'all';
+                        const stageMatch = stageSel === 'all' || (stageSel === 'needsAdmin' ? !!v.needsAdmin : (v.persuasionStage || 'unknown') === stageSel);
                         const nameMatch = v.name && v.name.toLowerCase().indexOf(lower) !== -1;
                         const phoneMatch = v.phone && v.phone.indexOf(lower) !== -1;
                         const tagMatch = v.tags && v.tags.some(function(t) { return t.toLowerCase().indexOf(lower) !== -1; });
@@ -4003,7 +4282,7 @@ app.get('/', (req, res) => {
                             || (currentFilterTag === 'MANUAL' && v.autoPilot === false)
                             || (v.tags && v.tags.indexOf(currentFilterTag) !== -1)
                             || v.voterSentiment === currentFilterTag;
-                        return lineMatch && searchMatch && tagFilterMatch;
+                        return lineMatch && stageMatch && searchMatch && tagFilterMatch;
                     });
                     renderVoterList(filtered);
                 }
@@ -4039,6 +4318,8 @@ app.get('/', (req, res) => {
                                 '<div class="wa-contact-sub">' +
                                     '<span>+' + v.phone + '</span>' +
                                     autoPilotBadge +
+                                    ' <span style="padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700; background:#f1f5f9;">' + ({ unknown: '⚪', undecided: '🟡', leaning: '🟢', committed: '✅ पक्का', opposed: '🔴' }[v.persuasionStage || 'unknown'] || '⚪') + '</span>' +
+                                    (v.needsAdmin ? ' <span title="Needs admin" style="font-size:11px;">🚩</span>' : '') +
                                 '</div>' +
                                 '<div class="wa-contact-snippet">' + snippet + '</div>' +
                                 '<div>' + tagsHtml + '</div>' +
@@ -4874,6 +5155,178 @@ app.get('/', (req, res) => {
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initBulkTab); else initBulkTab();
             })();
             </script>
+            <script>
+            (function () {
+                var SLOTS = [['morning', '🌅 सुबह'], ['dopahar', '☀️ दोपहर'], ['evening', '🌇 शाम'], ['night', '🌙 रात']];
+                var mediaCache = [];
+                function el(id) { return document.getElementById(id); }
+                function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                function postJson(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); }); }
+                function todayIst() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()); }
+
+                // ---------- Media Bank ----------
+                function loadMedia() {
+                    return fetch('/api/media/list').then(function (r) { return r.json(); }).then(function (d) {
+                        mediaCache = d.media || [];
+                        renderMediaList();
+                        refreshMediaSelects();
+                    }).catch(function () {});
+                }
+                function refreshMediaSelects() {
+                    var bulk = el('bulk-media');
+                    if (bulk) {
+                        var cur = bulk.value;
+                        bulk.innerHTML = '<option value="">— text only —</option>' + mediaCache.map(function (m) { return '<option value="' + esc(m.file) + '">' + (m.type === 'video' ? '🎬 ' : (m.type === 'document' ? '📄 ' : '🖼️ ')) + esc(m.file) + '</option>'; }).join('');
+                        bulk.value = cur;
+                    }
+                    document.querySelectorAll('.ha-media').forEach(function (sel) {
+                        var v = sel.value || sel.dataset.value || '';
+                        sel.innerHTML = '<option value="">— none —</option>' + mediaCache.map(function (m) { return '<option value="' + esc(m.file) + '">' + esc(m.file) + '</option>'; }).join('');
+                        sel.value = v;
+                    });
+                }
+                window.hkRefreshMediaSelects = refreshMediaSelects;
+                function renderMediaList() {
+                    var box = el('hm-list');
+                    if (!box) return;
+                    box.innerHTML = mediaCache.map(function (m) {
+                        var thumb = m.type === 'image' ? '<img src="' + esc(m.url) + '" style="width:100%; height:100px; object-fit:cover; border-radius:6px;">'
+                            : '<div style="height:100px; display:flex; align-items:center; justify-content:center; background:#0f172a; color:white; border-radius:6px; font-size:30px;">' + (m.type === 'video' ? '🎬' : '📄') + '</div>';
+                        return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:6px; font-size:11px;">' + thumb +
+                            '<div style="word-break:break-all; margin:4px 0;">' + esc(m.file) + ' (' + Math.round(m.size / 1024) + ' KB)</div>' +
+                            '<button type="button" data-media-action="use" data-file="' + esc(m.file) + '" style="font-size:11px; padding:2px 6px; border:none; border-radius:4px; background:#16a34a; color:white; cursor:pointer;">📣 Bulk Send</button> ' +
+                            '<a href="' + esc(m.url) + '" target="_blank" style="font-size:11px;">open</a> ' +
+                            (m.protected ? '' : '<button type="button" data-media-action="delete" data-file="' + esc(m.file) + '" style="font-size:11px; padding:2px 6px; border:none; border-radius:4px; background:#ef4444; color:white; cursor:pointer;">✕</button>') +
+                            '</div>';
+                    }).join('') || '<div style="color:#64748b; font-size:12px;">No media yet</div>';
+                }
+                function uploadFiles(files) {
+                    var list = Array.prototype.slice.call(files || []);
+                    if (!list.length) return;
+                    var status = el('hm-status');
+                    var done = 0;
+                    function next() {
+                        if (!list.length) { status.style.color = '#16a34a'; status.textContent = '✅ ' + done + ' file(s) uploaded'; loadMedia(); return; }
+                        var f = list.shift();
+                        if (f.size > 45 * 1024 * 1024) { status.style.color = '#dc2626'; status.textContent = '❌ ' + f.name + ' is larger than 45 MB'; return next(); }
+                        status.style.color = '#0369a1'; status.textContent = '⏳ Uploading ' + f.name + '…';
+                        var reader = new FileReader();
+                        reader.onload = function (ev) {
+                            postJson('/api/media/upload', { fileName: f.name, base64Data: ev.target.result }).then(function (d) {
+                                if (d.success) done++; else { status.style.color = '#dc2626'; status.textContent = '❌ ' + (d.error || 'Upload failed'); }
+                                next();
+                            }).catch(function (e) { status.textContent = '❌ ' + e.message; next(); });
+                        };
+                        reader.readAsDataURL(f);
+                    }
+                    next();
+                }
+
+                // ---------- Goal & progress ----------
+                function bar(v, t) { var p = t ? Math.min(100, Math.round(v / t * 100)) : 0; return '<div style="background:#e2e8f0; border-radius:5px; height:8px;"><div style="background:#16a34a; width:' + p + '%; height:8px; border-radius:5px;"></div></div>'; }
+                function table(map, keyLabel) {
+                    var keys = Object.keys(map || {});
+                    if (!keys.length) return '<span style="color:#64748b;">No activity yet today</span>';
+                    return '<table class="table"><thead><tr><th>' + keyLabel + '</th><th>Reached</th><th>Replies</th><th>Leaning</th><th>पक्के</th><th>Opposed</th></tr></thead><tbody>' +
+                        keys.map(function (k) { var v = map[k]; return '<tr><td>' + esc(k) + '</td><td>' + v.reached + '</td><td>' + v.replies + '</td><td>' + (v.leaning || 0) + '</td><td><b>' + v.committed + '</b></td><td>' + (v.opposed || 0) + '</td></tr>'; }).join('') + '</tbody></table>';
+                }
+                function loadGoal() {
+                    fetch('/api/daily-goal/progress').then(function (r) { return r.json(); }).then(function (d) {
+                        var p = d.progress, g = p.goal || {}, t = d.totals || {};
+                        if (document.activeElement && document.activeElement.id && document.activeElement.id.indexOf('hg-') === 0) { /* user typing */ } else {
+                            el('hg-title').value = g.title || ''; el('hg-instruction').value = g.instruction || '';
+                            el('hg-target').value = g.targetContacts || 0; el('hg-target-committed').value = g.targetCommitted || 0;
+                            el('hg-ward').value = g.targetWard || ''; el('hg-task').value = g.task || '';
+                        }
+                        el('hg-progress').innerHTML = '👥 पहुँचे: <b>' + p.reached + '</b> / ' + p.targetContacts + bar(p.reached, p.targetContacts) +
+                            '<div style="margin-top:6px;">✅ आज पक्के वोट: <b>' + p.committedToday + '</b> / ' + p.targetCommitted + '</div>' + bar(p.committedToday, p.targetCommitted) +
+                            '<div style="margin-top:6px; font-size:12px;">💬 ' + p.replies + ' replies from ' + p.repliedPeople + ' people • 🔴 ' + p.opposedToday + ' opposed today</div>';
+                        var sc = Object.keys(p.stageChanges || {}).map(function (k) { return esc(k) + ': ' + p.stageChanges[k]; }).join(' • ');
+                        el('hg-funnel').innerHTML = '<b>All contacts:</b> ⚪ unknown ' + (t.unknown || 0) + ' • 🟡 undecided ' + (t.undecided || 0) + ' • 🟢 leaning ' + (t.leaning || 0) + ' • ✅ committed ' + (t.committed || 0) + ' • 🔴 opposed ' + (t.opposed || 0) + ' • 🚩 needs admin ' + (t.needsAdmin || 0) +
+                            (sc ? '<div style="margin-top:4px;"><b>Stage changes today:</b> ' + sc + '</div>' : '');
+                        el('hg-by-line').innerHTML = table(p.byLine, 'Line');
+                        el('hg-by-ward').innerHTML = table(p.byWard, 'Ward');
+                        var hist = (d.history || []).filter(function (h) { return h.summary; }).map(function (h) { return h.summary.text; });
+                        el('hg-summary').textContent = (p.summary ? p.summary.text : '') + (hist.length ? String.fromCharCode(10, 10) + 'Earlier: ' + String.fromCharCode(10) + hist.slice(0, 5).join(String.fromCharCode(10)) : '');
+                    }).catch(function () {});
+                }
+
+                // ---------- Agenda per day ----------
+                function renderSlots(merged, day) {
+                    el('ha-slots').innerHTML = SLOTS.map(function (s) {
+                        var base = (merged && merged.dailySchedule && merged.dailySchedule[s[0]]) || {};
+                        var d = (day && day.slots && day.slots[s[0]]) || {};
+                        return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; font-size:12px;"><b>' + s[1] + '</b> <span style="color:#64748b;">' + esc(base.timeWindow || '') + '</span>' +
+                            '<div style="margin-top:4px;">Media: <select class="ha-media" data-slot="' + s[0] + '" data-value="' + esc(d.mediaFile || base.mediaFile || '') + '" style="max-width:170px; font-size:12px;"></select></div>' +
+                            '<textarea class="ha-hook" data-slot="' + s[0] + '" rows="3" style="width:100%; box-sizing:border-box; margin-top:4px; font-size:12px;">' + esc(d.hook || base.hook || '') + '</textarea></div>';
+                    }).join('');
+                    refreshMediaSelects();
+                }
+                function loadDay() {
+                    var date = el('ha-date').value || todayIst();
+                    fetch('/api/agenda/day?date=' + encodeURIComponent(date)).then(function (r) { return r.json(); }).then(function (d) {
+                        el('ha-topic').value = (d.day && d.day.topic) || (d.merged && d.merged.topic) || '';
+                        el('ha-points').value = (d.day && d.day.talkingPoints) || (d.merged && d.merged.talkingPoints) || '';
+                        el('ha-days').textContent = (d.days || []).length ? 'Saved days: ' + d.days.map(function (x) { return x.date; }).join(', ') : '';
+                        renderSlots(d.merged, d.day);
+                    });
+                }
+
+                function onGoalAction(a) {
+                    if (a === 'save-goal') {
+                        postJson('/api/daily-target', { title: el('hg-title').value, instruction: el('hg-instruction').value, targetContacts: el('hg-target').value, targetCommitted: el('hg-target-committed').value, targetWard: el('hg-ward').value.trim(), task: el('hg-task').value })
+                            .then(function (d) { el('hg-goal-status').textContent = d.error ? '❌ ' + d.error : '✅ Saved'; loadGoal(); });
+                    } else if (a === 'summary') {
+                        postJson('/api/daily-goal/summary', {}).then(function (d) { el('hg-summary').textContent = d.summary || ''; });
+                    } else if (a === 'load-day') {
+                        loadDay();
+                    } else if (a === 'save-day') {
+                        var slots = {};
+                        document.querySelectorAll('.ha-media').forEach(function (sel) { slots[sel.dataset.slot] = slots[sel.dataset.slot] || {}; slots[sel.dataset.slot].mediaFile = sel.value; });
+                        document.querySelectorAll('.ha-hook').forEach(function (ta) { slots[ta.dataset.slot] = slots[ta.dataset.slot] || {}; slots[ta.dataset.slot].hook = ta.value; });
+                        postJson('/api/agenda/day', { date: el('ha-date').value || todayIst(), topic: el('ha-topic').value, talkingPoints: el('ha-points').value, slots: slots })
+                            .then(function (d) { el('ha-status').textContent = d.success ? '✅ Saved' : '❌ ' + (d.error || 'Failed'); loadDay(); });
+                    }
+                }
+
+                function init() {
+                    var gb = el('tab-btn-goal');
+                    if (gb) gb.addEventListener('click', function () { switchTab(this.dataset.tab, this); loadMedia().then(loadDay); loadGoal(); });
+                    var gt = el('tab-goal');
+                    if (gt) {
+                        el('ha-date').value = todayIst();
+                        gt.addEventListener('click', function (e) { var t = e.target.closest('[data-goal-action]'); if (t) { e.preventDefault(); onGoalAction(t.dataset.goalAction); } });
+                        setInterval(function () { if (gt.style.display !== 'none') loadGoal(); }, 10000);
+                    }
+                    var drop = el('hm-drop'), file = el('hm-file');
+                    if (drop && file) {
+                        drop.addEventListener('click', function (e) { if (e.target !== file) file.click(); });
+                        file.addEventListener('change', function () { uploadFiles(this.files); this.value = ''; });
+                        drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.style.background = '#e0f2fe'; });
+                        drop.addEventListener('dragleave', function () { drop.style.background = '#f8fafc'; });
+                        drop.addEventListener('drop', function (e) { e.preventDefault(); drop.style.background = '#f8fafc'; uploadFiles(e.dataTransfer.files); });
+                    }
+                    var ml = el('hm-list');
+                    if (ml) ml.addEventListener('click', function (e) {
+                        var t = e.target.closest('[data-media-action]');
+                        if (!t) return;
+                        if (t.dataset.mediaAction === 'use') {
+                            refreshMediaSelects();
+                            var bulk = el('bulk-media'); if (bulk) bulk.value = t.dataset.file;
+                            var bb = el('tab-btn-bulk'); if (bb) bb.click();
+                        } else if (t.dataset.mediaAction === 'delete') {
+                            if (!window.confirm('Delete ' + t.dataset.file + '?')) return;
+                            postJson('/api/media/delete', { file: t.dataset.file }).then(loadMedia);
+                        }
+                    });
+                    var mb = el('tab-btn-media');
+                    if (mb) mb.addEventListener('click', function () { loadMedia(); });
+                    var sf = el('crm-stage-filter');
+                    if (sf) sf.addEventListener('change', function () { if (typeof applyVoterFilters === 'function') applyVoterFilters(); });
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+            })();
+            </script>
         </body>
         </html>
     `);
@@ -4934,9 +5387,8 @@ if (process.platform === 'linux') {
 
     // Start Proactive Daytime Nudge Interval (Every 15 mins)
     if (!DASHBOARD_ONLY) setInterval(() => {
-        const prim = SESSIONS.find(s => s.id === 'sim_636');
-        if (prim && prim.sock && prim.status === 'CONNECTED') {
-            runProactiveNudges(prim.sock);
+        for (const line of SESSIONS) {
+            if (line.sock && line.status === 'CONNECTED') runProactiveNudges(line.sock, line.id);
         }
     }, 15 * 60 * 1000);
 

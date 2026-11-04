@@ -20,6 +20,8 @@ const path = require('path');
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp'];
 const VIDEO_EXT = ['.mp4', '.3gp', '.mov', '.m4v'];
+const DOC_EXT = ['.pdf'];
+const mediaTypeOf = ext => IMAGE_EXT.includes(ext) ? 'image' : VIDEO_EXT.includes(ext) ? 'video' : DOC_EXT.includes(ext) ? 'document' : null;
 
 const DEFAULT_CAPS = {
     hourlyCap: 60,
@@ -74,7 +76,7 @@ function dedupeAndValidate(rows, isBlocked = () => null) {
     return { valid, invalid, duplicates, blocked };
 }
 
-function istDateKey(ms) { return new Date(ms + IST_OFFSET_MS).toISOString().slice(0, 10); }
+function istDateKey(ms) { const d = new Date(ms + IST_OFFSET_MS); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
 function istHour(ms) { return new Date(ms + IST_OFFSET_MS).getUTCHours(); }
 function inQuietHours(ms, caps) {
     const s = caps.quietStartHour, e = caps.quietEndHour;
@@ -129,6 +131,8 @@ class BroadcastEngine {
         this.onSent = opts.onSent || (() => {});
         // External policy hook (engagement_policy via user memory): returns a skip reason or null
         this.externalBlock = opts.isBlocked || (() => null);
+        // Sticky lines: a person always continues on the line they already talk to
+        this.getAssignedLine = opts.getAssignedLine || (() => null);
         this.log = opts.logger || console;
         this.inFlight = new Set(); // line ids currently sending
         this.ticking = false;
@@ -205,8 +209,8 @@ class BroadcastEngine {
         const base = path.basename(String(file));
         if (base !== String(file) || base.startsWith('.')) throw new Error('Invalid media file name');
         const ext = path.extname(base).toLowerCase();
-        const type = IMAGE_EXT.includes(ext) ? 'image' : VIDEO_EXT.includes(ext) ? 'video' : null;
-        if (!type) throw new Error('Media must be an image (jpg/png/webp) or video (mp4/3gp/mov)');
+        const type = mediaTypeOf(ext);
+        if (!type) throw new Error('Media must be an image (jpg/png/webp), video (mp4/3gp/mov) or PDF');
         const full = path.join(this.mediaDir, base);
         if (!fs.existsSync(full)) throw new Error(`Media file not found: ${base}`);
         return { file: base, type, path: full };
@@ -216,13 +220,13 @@ class BroadcastEngine {
         try {
             return fs.readdirSync(this.mediaDir).filter(f => {
                 const ext = path.extname(f).toLowerCase();
-                return !f.startsWith('.') && (IMAGE_EXT.includes(ext) || VIDEO_EXT.includes(ext));
+                return !f.startsWith('.') && !!mediaTypeOf(ext);
             }).map(f => {
                 const ext = path.extname(f).toLowerCase();
-                let size = 0;
-                try { size = fs.statSync(path.join(this.mediaDir, f)).size; } catch (_) {}
-                return { file: f, type: IMAGE_EXT.includes(ext) ? 'image' : 'video', size };
-            });
+                let size = 0, mtime = 0;
+                try { const st = fs.statSync(path.join(this.mediaDir, f)); size = st.size; mtime = st.mtimeMs; } catch (_) {}
+                return { file: f, type: mediaTypeOf(ext), size, mtime, url: '/media/' + encodeURIComponent(f) };
+            }).sort((a, b) => b.mtime - a.mtime);
         } catch (e) { return []; }
     }
 
@@ -409,8 +413,14 @@ class BroadcastEngine {
                 const use = this.lineUsage(id);
                 if (use.day >= c.caps.dailyCap) { waiting = 'daily_cap'; continue; }
                 if (use.hour >= c.caps.hourlyCap) { waiting = waiting || 'hourly_cap'; continue; }
-                const r = c.recipients.find(x => x.status === 'pending');
-                if (!r) break;
+                const r = c.recipients.find(x => {
+                    if (x.status !== 'pending') return false;
+                    let assigned = null;
+                    try { assigned = this.getAssignedLine(x.phone); } catch (_) {}
+                    // assigned to another line of this campaign -> leave it for that line
+                    return !assigned || assigned === id || !c.lines.includes(assigned);
+                });
+                if (!r) continue;
                 const sess = sessions.find(x => x.id === id);
                 r.status = 'checking'; r.line = id;
                 this.inFlight.add(id);
@@ -500,7 +510,9 @@ class BroadcastEngine {
                 if (!fs.existsSync(mediaPath)) throw Object.assign(new Error('media file missing: ' + c.media.file), { noLineError: true });
                 content = c.media.type === 'video'
                     ? { video: { url: mediaPath }, caption: text }
-                    : { image: { url: mediaPath }, caption: text };
+                    : c.media.type === 'document'
+                        ? { document: { url: mediaPath }, mimetype: 'application/pdf', fileName: c.media.file, caption: text }
+                        : { image: { url: mediaPath }, caption: text };
             } else {
                 content = { text };
             }
@@ -603,6 +615,7 @@ class BroadcastEngine {
 }
 
 module.exports = {
+    mediaTypeOf, IMAGE_EXT, VIDEO_EXT, DOC_EXT,
     BroadcastEngine, normalizePhone, spin, renderMessage, dedupeAndValidate,
     normalizeCaps, inQuietHours, istDateKey, DEFAULT_CAPS
 };

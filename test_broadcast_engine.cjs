@@ -241,3 +241,23 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     console.log(`RESULT ${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
 })().catch(e => { console.error(e); process.exitCode = 1; });
+
+// ---- sticky line assignment ----
+(async () => {
+    await new Promise(r => setTimeout(r, 300));
+    const fs2 = require('fs'), os2 = require('os'), path2 = require('path');
+    const { BroadcastEngine } = require('./broadcast_engine.js');
+    const dir = fs2.mkdtempSync(path2.join(os2.tmpdir(), 'bc-sticky-'));
+    let T = Date.UTC(2026, 10, 4, 6, 30);
+    const mk = () => { const s = { sent: [] }; s.onWhatsApp = async p => [{ exists: true, jid: p + '@s.whatsapp.net' }]; s.sendMessage = async (j) => { s.sent.push(j); return { key: { id: 'x' } }; }; return s; };
+    const a = mk(), b = mk();
+    const eng = new BroadcastEngine({ stateFile: path2.join(dir, 's.json'), mediaDir: dir, now: () => T, sleep: async () => {}, logger: { log() {}, warn() {}, error() {} },
+        getSessions: () => [{ id: 'sim_636', status: 'CONNECTED', sock: a }, { id: 'canada', status: 'CONNECTED', sock: b }],
+        getAssignedLine: p => (p === '919000000001' || p === '919000000002') ? 'canada' : null });
+    eng.create({ phones: '9000000001\n9000000002\n9000000003\n9000000004', message: 'x' });
+    for (let i = 0; i < 30 && eng.active().status === 'running'; i++) { await Promise.all(await eng.tick()); T += 61000; }
+    const ok = b.sent.includes('919000000001@s.whatsapp.net') && b.sent.includes('919000000002@s.whatsapp.net') && !a.sent.includes('919000000001@s.whatsapp.net') && a.sent.length >= 1;
+    console.log((ok ? 'PASS' : 'FAIL') + ' sticky: assigned voters only go out on their own line; new ones round-robin');
+    if (!ok) process.exitCode = 1;
+    fs2.rmSync(dir, { recursive: true, force: true });
+})();

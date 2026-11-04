@@ -747,10 +747,18 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (process.env.REPLY_BRAIN !== 'off') {
         const brainUser = user || { history: [], context: {} };
         let goalText = '';
-        try { const g = require('./daily_goal.js').get(); goalText = [g.title, g.instruction].filter(Boolean).join(' — '); } catch (e) {}
+        let dailyGoalMod = null;
+        try {
+            dailyGoalMod = require('./daily_goal.js');
+            const g = dailyGoalMod.get();
+            goalText = [g.title, g.instruction, g.targetCommitted ? `target: ${g.targetCommitted} committed votes today` : ''].filter(Boolean).join(' — ');
+        } catch (e) {}
         const llm = hasAnyLLM(apiKey) ? (sys, history, msg) => callLLMCascade(sys, history, msg, apiKey, 7000) : null;
         const result = await brain.respond(userMessage, brainUser, { llm, goal: goalText, history: conversationHistory });
         lastBrainResult = result;
+        if (user && result.stage !== result.previousStage && dailyGoalMod && dailyGoalMod.recordEvent) {
+            try { dailyGoalMod.recordEvent('stage', { phone, line: user.assignedLine, ward: user.ward, from: result.previousStage, to: result.stage }); } catch (e) {}
+        }
         if (user) userMemory.save();
         return result.text;
     }
