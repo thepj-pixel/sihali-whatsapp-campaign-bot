@@ -89,6 +89,7 @@ function seq(seed = 7) { let x = seed; return () => { x = (x * 16807) % 21474836
         assert.ok(/contactCard\.needsCard\(u, sessionObj\.id\)/.test(src));
         assert.ok(/contactCardQueued/.test(src));
         assert.ok(!/u\.contactCardSent \|\| u\.broadcastOptOut/.test(src));
+        assert.ok(/sendLineContactCardOnce\(sock, replyJid, senderPhone, sessionObj, \{ withPrompt: false \}\)/.test(src), 'card right after the first reply (intro)');
     });
 
     console.log('— Overview / निष्कर्ष');

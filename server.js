@@ -811,7 +811,10 @@ async function startSession(sessionObj) {
                     await sendSafeMessage(sock, replyJid, { text: consentPrompt });
                     userMemory.recordMessage(senderPhone, 'bot', consentPrompt, 'consent_prompt', sessionObj.name);
                     operationsTracker.record('consent_prompt', 'sent', { lineId: sessionObj.id });
-                    continue; // contact card follows later with a real reply (anti-ban hook), not stacked on the intro
+                    // Owner (5 Nov): this line's vCard arrives instantly after the first reply, once per contact per line.
+                    // Card only — no extra "please save" text stacked on the short intro.
+                    sendLineContactCardOnce(sock, replyJid, senderPhone, sessionObj, { withPrompt: false }).catch(() => {});
+                    continue;
                 }
 
                 const substantiveFirstReply = consentDecision === 'accepted' &&
@@ -1252,7 +1255,7 @@ function autoSaveContact({ phone, name, pushName, lineId, sock, jid, source }) {
 
 /** Send this line's contact card + "please save" line exactly once per person. */
 const contactCard = require('./contact_card.js');
-async function sendLineContactCardOnce(sock, jid, phone, sessionObj) {
+async function sendLineContactCardOnce(sock, jid, phone, sessionObj, { withPrompt = true } = {}) {
     const u = userMemory.getUser(phone);
     if (!u || !contactCard.needsCard(u, sessionObj.id)) return false; // once per contact PER LINE (contact_card.js)
     contactCard.markSent(u, sessionObj.id);
@@ -1260,6 +1263,11 @@ async function sendLineContactCardOnce(sock, jid, phone, sessionObj) {
     try {
         await new Promise(r => setTimeout(r, 1200 + Math.random() * 1500));
         await sendMultiContactCard(sock, jid, sessionObj.id);
+        if (!withPrompt) {
+            userMemory.recordMessage(phone, 'bot', '📇 [Line contact card sent]', null, sessionObj.name);
+            operationsTracker.record('contact_card', 'sent', { lineId: sessionObj.id, withPrompt: false });
+            return true;
+        }
         const l = u.languagePreference === 'hinglish' ? 'hinglish' : 'hi';
         const hon = replyBrain.honorific(replyBrain.personOf(u, ''), l === 'hi' ? 'hi' : 'en');
         const savePrompt = `${l === 'hi' ? 'राम राम' : 'Ram Ram'} ${hon}! 🙏 ${engagementPolicy.buildSaveContactPrompt(sessionObj.id, u.languagePreference)}`;
