@@ -15,6 +15,9 @@ const POSITIVE_RX = /(pakka|पक्का|saath (hai|hain|denge)|साथ (�
 const TOPIC_HI = { water: 'पानी', road: 'सड़क', health: 'स्वास्थ्य', education: 'शिक्षा', youth: 'युवा', farming: 'खेती', safety: 'सुरक्षा', electricity: 'बिजली', drainage: 'नाली', pension: 'पेंशन', housing: 'आवास', light: 'रोशनी', other: 'अन्य' };
 const INTENT_HI = { voter_slip: 'पर्ची माँगी', works: 'काम पूछे', future: 'आगे की योजना पूछी', about_baba: 'प्रत्याशी के बारे में पूछा', polling: 'मतदान जानकारी', ballot: 'मतपत्र/क्रम', meeting: 'मुलाक़ात की बात', commit: 'साथ देने का वादा', family_votes: 'परिवार के वोट बताए', undecided: 'अभी सोच रहे', opposed: 'असहमति जताई', taunt: 'ताना मारा', abuse: 'नाराज़गी/गाली', bribe: 'पैसे की बात', complaint: 'शिकायत', grievance: 'शिकायत', positive: 'तारीफ़', opponent: 'विरोधी की बात', corruption: 'भ्रष्टाचार आरोप', health_concern: 'स्वास्थ्य चिंता' };
 
+let CAT_LABEL = {};
+try { CAT_LABEL = require('./knowledge_base.js').CATEGORY_LABEL || {}; } catch (e) {}
+const catLabel = c => CAT_LABEL[c] || TOPIC_HI[c] || c || 'अन्य';
 const clip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const lastTime = u => {
     const h = Array.isArray(u.history) ? u.history : [];
@@ -46,7 +49,7 @@ function summaryOf(u, { samasya = [], mulaqat = [] } = {}) {
     if (topics.length) bits.push('मुद्दे: ' + topics.slice(0, 3).join(', '));
     if (m.familyVotes) bits.push(`घर के ${m.familyVotes} वोट`);
     bits.push(...intents.slice(-3));
-    if (samasya.length) bits.push(`समस्या ${samasya.map(s => TOPIC_HI[s.category] || s.category).join(', ')}`);
+    if (samasya.length) bits.push(`समस्या ${samasya.map(s => catLabel(s.category)).join(', ')}`);
     if (mulaqat.length) bits.push('मुलाक़ात माँगी');
     const lastUser = [...(u.history || [])].reverse().find(h => h.role === 'user' && h.text && !/^\[/.test(h.text));
     const base = bits.filter(Boolean).join(' · ');
@@ -92,7 +95,7 @@ function build({ users = [], samasya = [], mulaqat = [], isVirodhi = () => false
             lastAt: lastTime(u) ? new Date(lastTime(u)).toISOString() : null,
             userMsgs: h.filter(x => x.role === 'user').length,
             summary: summaryOf(u, { samasya: s, mulaqat: mq }),
-            samasya: s.map(r => ({ id: r.id, category: r.category, status: r.status })),
+            samasya: s.map(r => ({ id: r.id, category: catLabel(r.category), status: r.status })),
             mulaqat: mq.map(r => ({ id: r.id, status: r.status, when: r.preferredWhen || r.preferredDate || '', place: r.place || '' })),
             familyVotes: mm.familyVotes || null,
             optedOut: !!u.broadcastOptOut,
@@ -104,7 +107,7 @@ function build({ users = [], samasya = [], mulaqat = [], isVirodhi = () => false
     const totals = { conversations: rows.length, commit: 0, 'समर्थक': 0, 'सोच रहे': 0, 'विरोधी': 0, 'नाराज़': 0, samasyaByCategory: {}, samasyaTotal: 0, mulaqatTotal: 0 };
     for (const r of rows) {
         totals[r.stance] = (totals[r.stance] || 0) + 1;
-        for (const s of r.samasya) { const k = TOPIC_HI[s.category] || s.category || 'अन्य'; totals.samasyaByCategory[k] = (totals.samasyaByCategory[k] || 0) + 1; totals.samasyaTotal++; }
+        for (const s of r.samasya) { const k = catLabel(s.category); totals.samasyaByCategory[k] = (totals.samasyaByCategory[k] || 0) + 1; totals.samasyaTotal++; }
         totals.mulaqatTotal += r.mulaqat.length;
     }
     const mulaqatScheduled = mulaqat.filter(r => (filter.includeTest || !r.test) && r.status !== 'cancelled').map(r => ({
