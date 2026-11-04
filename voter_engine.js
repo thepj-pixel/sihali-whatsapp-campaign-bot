@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-// Load master cleaned voter data
-const votersPath = path.join(__dirname, 'voters.json');
+// Load the VM-safe tracked database. Older installations may still have
+// voters.json, while clean deployments contain voters_cleaned.json.
+const legacyVotersPath = path.join(__dirname, 'voters.json');
+const votersPath = process.env.VOTERS_PATH
+    || (fs.existsSync(legacyVotersPath) ? legacyVotersPath : path.join(__dirname, 'voters_cleaned.json'));
 let VOTERS = [];
 
 try {
@@ -10,7 +13,7 @@ try {
     VOTERS = JSON.parse(raw);
     console.log(`[VoterEngine] Loaded ${VOTERS.length} voters for Sihali Khurd.`);
 } catch (e) {
-    console.error('[VoterEngine] Error loading voters.json:', e);
+    console.error(`[VoterEngine] Error loading ${path.basename(votersPath)}:`, e);
 }
 
 // Comprehensive Hinglish to Hindi transliteration mapping for local names and surnames

@@ -124,6 +124,9 @@ async function run() {
     const importedVcf = contactsManager.parseVCF('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Contact Only\r\nTEL;TYPE=CELL:+919876504322\r\nEND:VCARD\r\n');
     check('VCF contact import remains supported', importedVcf.length === 1 && importedVcf[0].phone === '919876504322');
     check('voter database import does not fabricate phone numbers', !fs.readFileSync(path.join(__dirname, 'contacts_manager.js'), 'utf8').includes('pseudoPhone'));
+    const voterEngineSource = fs.readFileSync(path.join(__dirname, 'voter_engine.js'), 'utf8');
+    const contactsSource = fs.readFileSync(path.join(__dirname, 'contacts_manager.js'), 'utf8');
+    check('clean deployments load the tracked voter database', voterEngineSource.includes('voters_cleaned.json') && contactsSource.includes('voters_cleaned.json'));
     contactsManager.contacts = originalContacts;
     contactsManager.save = originalContactSave;
 

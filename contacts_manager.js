@@ -2,7 +2,9 @@ const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = process.env.CONTACTS_DB_PATH || path.join(__dirname, 'contacts_db.json');
-const VOTERS_PATH = process.env.VOTERS_PATH || path.join(__dirname, 'voters.json');
+const LEGACY_VOTERS_PATH = path.join(__dirname, 'voters.json');
+const VOTERS_PATH = process.env.VOTERS_PATH
+    || (fs.existsSync(LEGACY_VOTERS_PATH) ? LEGACY_VOTERS_PATH : path.join(__dirname, 'voters_cleaned.json'));
 
 class ContactsManager {
     constructor() {

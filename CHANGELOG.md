@@ -42,6 +42,7 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ### Fixed
 
+- Clean VM deployments now load the tracked `voters_cleaned.json` database when the legacy ignored `voters.json` file is absent.
 - Standardized automatic deployment on `codex/production-readiness`: fast-forward-only merge, production dependency install, and restart of only the bot process; the legacy hard reset of `main` was removed.
 - Removed the live `user_memory.json` database from Git tracking so VM deployments preserve conversation state and are no longer blocked by runtime memory changes.
 - Repaired two inline dashboard-script syntax errors that prevented every non-default tab from opening.
