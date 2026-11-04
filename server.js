@@ -274,6 +274,13 @@ app.use((req, res, next) => {
     `);
 });
 
+// Incoming message queue (volume: 200+ simultaneous chats)
+const { ChatQueue } = require('./chat_queue.js');
+const incomingQueue = new ChatQueue({
+    concurrency: Number(process.env.INCOMING_CONCURRENCY) || 12,
+    jobTimeoutMs: Number(process.env.INCOMING_JOB_TIMEOUT_MS) || 45000
+});
+
 // Configured WhatsApp Sessions
 const SESSIONS = [
     { id: 'sim_636', name: 'Primary Line (6367810227)', status: 'DISCONNECTED', qr: null, sock: null },
@@ -517,7 +524,7 @@ async function startSession(sessionObj) {
     });
 
     // Handle Incoming Messages
-    sock.ev.on('messages.upsert', async (m) => {
+    const handleIncomingUpsert = async (m) => {
         try {
             console.log(`[${sessionObj.id}] Incoming messages.upsert: type=${m.type}, count=${m.messages?.length}`);
             if (!m.messages || m.messages.length === 0) return;
@@ -1196,6 +1203,17 @@ async function startSession(sessionObj) {
             }
         } catch (err) {
             console.error(`[${sessionObj.id}] Error in messages.upsert:`, err);
+        }
+    };
+
+    // Volume safety: every message goes through the shared queue (per-chat serialization,
+    // global concurrency limit, duplicate-id suppression). See chat_queue.js.
+    sock.ev.on('messages.upsert', (m) => {
+        if (!m || !Array.isArray(m.messages) || !m.messages.length) return;
+        for (const one of m.messages) {
+            const chatKey = one.key?.remoteJid || 'unknown';
+            const dedupeId = one.key?.id ? `${sessionObj.id}:${chatKey}:${one.key.id}:${one.key.fromMe ? 1 : 0}` : null;
+            incomingQueue.enqueue(chatKey, () => handleIncomingUpsert({ ...m, messages: [one] }), dedupeId);
         }
     });
 }
@@ -4868,6 +4886,7 @@ app.get('/health', (req, res) => {
         mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live',
         publicDashboardUrl: PUBLIC_DASHBOARD_URL || null,
         uptime: process.uptime(),
+        incomingQueue: incomingQueue.status(),
         sessions: SESSIONS.map(s => ({
             id: s.id,
             status: s.status,
