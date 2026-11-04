@@ -214,6 +214,8 @@ function classify(text, user = {}) {
     if (RX.moneyAsk.test(t) && !RX.bribe.test(t)) return out('money_ask');
     if (RX.dialectSwitch.test(t)) return out('dialect_switch', { dialect: /(rajasthani|marwari|marwadi|राजस्थानी|मारवाड़ी)/i.test(t) ? 'rajasthani' : 'haryanvi' });
     if (RX.wasSarpanch.test(t)) return out('was_sarpanch');
+    // "kab banegi / kya hoga iska" about a concern they already told us: no date promised, it is in the register
+    if (/(kab (tak )?(banegi|banega|bane gi|hogi|hoga|lagegi|lagega|thik hogi|theek hogi|sudhregi|khulegi)|kya hoga (iska|uska|is ka)|कब (तक )?(बनेगी|बनेगा|होगी|होगा|लगेगी|ठीक होगी)|क्या होगा (इसका|उसका))/i.test(t) && user && user.memory && (user.memory.concerns || []).length && !kb.detectTopics(t).some(x => !(user.memory.concerns || []).some(c => c.topic === x))) return out('concern_when');
     if (RX.commitYes.test(t) && !/\?|kya\b|क्या/.test(t.slice(-8)) && !NEG_COMMIT.test(t) && !THIRD_PARTY.test(t)) return out('commit', { family: RX.family.test(t), familyVotes: voterMemory.extractFamilyVotes(t) });
     if (mentionsOpponent(t)) return out('opponent', { taunt: RX.taunt.test(t) });
     if (stageOf(user) === 'opposed' && THIRD_PARTY_PRAISE.test(t) && !RX.taunt.test(t)) return out('opponent', { praise: true });
@@ -451,6 +453,14 @@ function compose(cls, ctx) {
             used.push(id);
             mem.grievanceOpenAt = new Date().toISOString();
             return { text: negLine(user, l, H, 'corruption') + S('जैसे ', 'jaise ') + SHORT[id][l === 'hi' ? 0 : 1] + S('। फिर भी किसी ख़ास काम को लेकर शिकायत हो तो बताइए, मैं सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।', '. Phir bhi kisi khaas kaam ko lekar shikayat ho to bataiye, main sabse pehle Abhay Singh ji tak pahunchati hoon.'), ask: false, used };
+        }
+        case 'concern_when': {
+            const c = (mem.concerns || []).slice(-1)[0];
+            const label = c ? kb.topicLabel(c.topic, l) : S('आपकी', 'aapki');
+            const sk = c ? kb.sankalpFor(c.topic, { village: mem.village }) : null;
+            const skLine = sk && !mem.toldItems.includes(sk.id) ? S(' आगे का संकल्प भी यही है: ', ' Aage ka sankalp bhi yahi hai: ') + kb.render(sk, l) : '';
+            if (skLine && sk) used.push(sk.id);
+            return { text: S(`पक्की तारीख़ का वादा मैं नहीं करूँगी${H} 🙏 आपकी ${c && c.ward ? 'वार्ड ' + c.ward + ' की ' : ''}${label} वाली बात रजिस्टर में दर्ज है और अभय सिंह जी तक पहुँच चुकी है।`, `Pakki tareekh ka vaada main nahi karungi${H} 🙏 Aapki ${c && c.ward ? 'ward ' + c.ward + ' ki ' : ''}${label} wali baat register me darj hai aur Abhay Singh ji tak pahunch chuki hai.`) + skLine, ask: false, used };
         }
         case 'emoji_only':
             return { text: vary(user, [S(`🙏 राम राम${H}! बताइए, क्या सेवा करूँ—पर्ची, बूथ या गाँव का कोई काम?`, `🙏 Ram Ram${H}! Bataiye, kya seva karun—parchi, booth ya gaon ka koi kaam?`), S(`😊🙏 आपका संदेश मिला${H}। कुछ पूछना हो तो लिख दीजिए।`, `😊🙏 Aapka sandesh mila${H}. Kuch poochna ho to likh dijiye.`)]), ask: false };

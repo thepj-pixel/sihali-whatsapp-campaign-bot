@@ -744,7 +744,7 @@ C.push({ name: 'reg-slip-keeps-context-pipeline', pipeline: true, turns: [
     { m: 'Krishan Kumar', has: ['1️⃣'], not: /samajh gayi/ },
     { m: '1', has: ['डिजिटल मतदाता पर्ची'] },
     { m: 'meri sadak wali baat yaad hai?', intent: 'memory_check', has: ['sadak'], not: /(डिजिटल मतदाता पर्ची|वोटर लिस्ट)/ },
-    { m: 'nahi pata kab banegi', not: /(डिजिटल मतदाता पर्ची|वोटर लिस्ट)/ },
+    { m: 'nahi pata kab banegi', intent: 'concern_when', has: ['vaada', 'register'], not: /(डिजिटल मतदाता पर्ची|वोटर लिस्ट|denge na)/ },
     { m: 'mera naam yaad hai?', intent: 'memory_check', has: ['कृष्ण', 'Krishan'], not: /Yaad ji/ }
 ], after: (u) => {
     const m = u.memory || {};
