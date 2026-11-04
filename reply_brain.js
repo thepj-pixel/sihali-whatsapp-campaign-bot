@@ -846,7 +846,7 @@ function buildLLMPrompt(cls, ctx, draft) {
 // reviewed templates; the LLM rewrites the conversational ones.
 // Short, exact replies (greeting, thanks, intro with booth, commitment/family votes, who-are-you) also stay on templates:
 // live runs showed the model appending broken sentences to them.
-const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'daily_life']);
+const LLM_INTENTS = new Set(['grievance', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'daily_life']);
 
 const STOPW = new Set('aur ke ki ka ko me mein se par hai hain gaye gayi gaya gayi. liye jaane wali wale abhay singh panchayat pichhle karyakal tahat jayegi jayega karwayi karwaya banwayi banwaya banwaye lagwayi kiya kiye sabhi unke unhone apni apne aapke aapki aapka और के की का को में से पर है हैं गए गई गया लिए वाली वाले अभय सिंह पंचायत पिछले कार्यकाल तहत जाएगी जाएगा करवाई करवाया बनवाई बनवाया बनवाए लगवाई किया किए उनके उन्होंने अपनी अपने आपके आपकी आपका'.split(/\s+/));
 const keyTokens = s => String(s || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOPW.has(w));
