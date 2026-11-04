@@ -148,7 +148,7 @@ function metaOf(ctx) {
     const m = voterMemory.ensure(u);
     return {
         phone: (ctx.meta && ctx.meta.phone) || u.phone || null,
-        name: m.name || u.name || (u.lastFoundVoter && (u.lastFoundVoter.name_hi || u.lastFoundVoter.name)) || null,
+        name: [m.name, u.name, u.lastFoundVoter && (u.lastFoundVoter.name_hi || u.lastFoundVoter.name)].find(n => n && !/^(mera|meri|main|mai|hum|ham|kya|nahi|haan|ji|ok|मेरा|मैं|हम|क्या|नहीं|जी|ग्रामवासी)$/i.test(String(n).trim().split(/\s+/)[0]) && !/self-test|ग्रामवासी/i.test(n)) || null,
         village: m.village || null,
         ward: u.ward || m.ward || (u.lastFoundVoter && Number(u.lastFoundVoter.ward)) || null,
         line: (ctx.meta && ctx.meta.line) || u.lastSessionId || u.assignedLine || null,

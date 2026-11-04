@@ -75,11 +75,14 @@ function honorific(person, l) {
 }
 const isJi = hon => /^(जी|ji)$/i.test(hon);
 
+// words that are never a person's first name (stale/bad extractions must never be used to greet someone)
+const NOT_A_NAME = /^(mera|meri|mere|mero|mhara|main|mai|hum|ham|aap|ap|tum|kya|nahi|haan|ha|ji|ok|okay|theek|thik|bhai|sab|koi|kaun|ye|wo|abhi|baad|bas|achha|accha|hello|hi|ram|baba|abhay|मेरा|मेरी|मेरे|म्हारा|मैं|हम|आप|तुम|क्या|नहीं|हाँ|जी|ठीक|भाई|सब|कोई|कौन|ये|वो|अभी|बस|अच्छा|राम|बाबा|अभय)$/i;
 function nameFor(user, l) {
     if (!user) return '';
     const v = user.lastFoundVoter || user.voterProfile || {};
     const cands = [user.memory && user.memory.name, user.name, l === 'hi' ? v.name_hi : v.name_en, v.name].filter(Boolean)
-        .filter(n => !/ग्रामवासी|contact|voter|समर्थक|self-test|test/i.test(n));
+        .filter(n => !/ग्रामवासी|contact|voter|समर्थक|self-test|test/i.test(n))
+        .filter(n => !NOT_A_NAME.test(String(n).trim().split(/\s+/)[0]));
     const ok = cands.find(n => (l === 'hi' ? hasDevanagari(n) : !hasDevanagari(n)));
     return ok ? String(ok).trim().split(/\s+/)[0] : '';
 }

@@ -27,7 +27,13 @@ const POSTERS = [
         title: 'विकास रिपोर्ट कार्ड',
         tags: ['vikas', 'kaam', 'report', 'card', 'विकास', 'काम'],
         caption: 'बाबा अभय सिंह (मोटी आंगली वाले बाबा) — ग्राम पंचायत सिहाली खुर्द 🚩\nसच्चा विकास, ईमानदार नेतृत्व।\nवोटर पर्ची देखने के लिए अपना नाम लिखकर भेजें!'
-    },
+    }
+];
+
+// Retired from AUTO-SEND on 4 Nov 2026 (Brain v3 review): these images carry claims that are not on the owner's parcha —
+// rupee budgets ("₹3.21 करोड़+"), "48 घंटे में हल", invented counts/sankalp (3-phase bijli, smart class...), and a second
+// person's photo. The files stay in the media bank for the owner; the bot never picks them by itself.
+const RETIRED_POSTERS = [
     {
         id: 'poster_sankalp_3d',
         filename: 'poster_sankalp.png',
@@ -77,7 +83,7 @@ try {
 }
 
 // Mode toggle: Use clean demo poster while campaign posters are being finalized
-let USE_DEMO_POSTERS = true;
+let USE_DEMO_POSTERS = process.env.USE_DEMO_POSTERS === "true"; // production default OFF: the demo poster says "Testing Mode"
 
 const DEMO_POSTER = {
     id: 'poster_demo_test',
