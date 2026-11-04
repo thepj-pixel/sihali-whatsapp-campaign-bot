@@ -5,6 +5,7 @@ const campaignAgenda = require('./campaign_agenda.js');
 const voterEngine = require('./voter_engine.js');
 const replyQuality = require('./reply_quality.js');
 const campaignProfile = require('./campaign_profile.js');
+const brain = require('./reply_brain.js');
 
 const kbPath = path.join(__dirname, 'campaign_knowledge_base.json');
 let KB = {};
@@ -742,70 +743,72 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
         }
     }
 
+    // ---- Reply Brain: classify intent, answer that thing from verified facts, one persuasion step ----
+    if (process.env.REPLY_BRAIN !== 'off') {
+        const brainUser = user || { history: [], context: {} };
+        let goalText = '';
+        try { const g = require('./daily_goal.js').get(); goalText = [g.title, g.instruction].filter(Boolean).join(' — '); } catch (e) {}
+        const llm = hasAnyLLM(apiKey) ? (sys, history, msg) => callLLMCascade(sys, history, msg, apiKey, 7000) : null;
+        const result = await brain.respond(userMessage, brainUser, { llm, goal: goalText, history: conversationHistory });
+        lastBrainResult = result;
+        if (user) userMemory.save();
+        return result.text;
+    }
+
+    // ---- Legacy path (REPLY_BRAIN=off) ----
     const ragContext = phone ? userMemory.getUserContextRAG(phone) : '';
     const agendaContext = campaignAgenda ? campaignAgenda.getAgendaRAGPrompt() : '';
     let systemPromptWithRAG = SYSTEM_PROMPT;
     if (agendaContext) systemPromptWithRAG += `\n\n${agendaContext}`;
     systemPromptWithRAG += `\n\n${campaignProfile.getPrompt()}`;
     if (ragContext) systemPromptWithRAG += `\n\n${ragContext}`;
-
-    const messages = [
-        { role: 'system', content: systemPromptWithRAG },
-        ...conversationHistory.slice(-6),
-        { role: 'user', content: userMessage }
-    ];
-
-    // Tier 1: Primary NVIDIA (Key 1)
-    const nvidiaKey1 = apiKey || CONFIG.nvidia_keys[0];
-    if (nvidiaKey1) {
-        try {
-            const reply = await callNvidia(messages, nvidiaKey1);
-            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
-        } catch (e) {
-            console.warn('[AI Assistant] NVIDIA Key 1 failed:', e.message);
-        }
-    }
-
-    // Tier 2: Secondary NVIDIA (Key 2)
-    const nvidiaKey2 = CONFIG.nvidia_keys[1];
-    if (nvidiaKey2 && nvidiaKey2 !== nvidiaKey1) {
-        try {
-            const reply = await callNvidia(messages, nvidiaKey2);
-            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
-        } catch (e) {
-            console.warn('[AI Assistant] NVIDIA Key 2 failed:', e.message);
-        }
-    }
-
-    // Tier 3: Groq Fallback (If configured)
-    const groqKey = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
-    if (groqKey) {
-        try {
-            const reply = await callGroq(messages, groqKey);
-            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
-        } catch (e) {
-            console.warn('[AI Assistant] Groq fallback failed:', e.message);
-        }
-    }
-
-    // Tier 4: Gemini Fallback (If configured)
-    const geminiKey = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
-    if (geminiKey) {
-        try {
-            const reply = await callGemini(systemPromptWithRAG, conversationHistory.slice(-6), userMessage, geminiKey);
-            if (!isCannedRejection(reply)) return replyQuality.improve(reply, userMessage, user);
-        } catch (e) {
-            console.warn('[AI Assistant] Gemini fallback failed:', e.message);
-        }
-    }
-
-    // Tier 5: Local Offline Fast Engine (<0.001s, 100% Reliable Guaranteed)
+    const reply = await callLLMCascade(systemPromptWithRAG, conversationHistory.slice(-6), userMessage, apiKey, 12000);
+    if (reply) return replyQuality.improve(reply, userMessage, user);
     console.log('[AI Assistant] All external LLMs unavailable or filtered, using local fast engine.');
     return getFastLocalAnswer(userMessage, phone);
 }
 
+let lastBrainResult = null;
+
+function hasAnyLLM(apiKey) {
+    return Boolean(apiKey || CONFIG.nvidia_keys[0] || CONFIG.nvidia_keys[1] || CONFIG.groq_api_key || CONFIG.gemini_api_key);
+}
+
+/**
+ * NVIDIA key1 -> NVIDIA key2 -> Groq -> Gemini, with an overall time budget so a slow provider
+ * can never hold a chat for 25+ seconds. Returns null when nothing usable came back.
+ */
+async function callLLMCascade(systemPrompt, history = [], userMessage = '', apiKey = null, budgetMs = 9000) {
+    const deadline = Date.now() + budgetMs;
+    const messages = [{ role: 'system', content: systemPrompt }, ...history.filter(h => h && h.role && h.content), { role: 'user', content: userMessage }];
+    const tiers = [];
+    const k1 = apiKey || CONFIG.nvidia_keys[0];
+    if (k1) tiers.push(['nvidia1', () => callNvidia(messages, k1)]);
+    const k2 = CONFIG.nvidia_keys[1];
+    if (k2 && k2 !== k1) tiers.push(['nvidia2', () => callNvidia(messages, k2)]);
+    const gq = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
+    if (gq) tiers.push(['groq', () => callGroq(messages, gq)]);
+    const gm = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
+    if (gm) tiers.push(['gemini', () => callGemini(systemPrompt, history, userMessage, gm)]);
+    for (const [name, fn] of tiers) {
+        const left = deadline - Date.now();
+        if (left < 800) break;
+        try {
+            const reply = await Promise.race([fn(), new Promise((_, rej) => setTimeout(() => rej(new Error('budget timeout')), left))]);
+            if (reply && !isCannedRejection(reply)) return reply;
+        } catch (e) {
+            console.warn(`[AI Assistant] ${name} failed:`, e.message);
+        }
+    }
+    return null;
+}
+
+function getLastBrainResult() { return lastBrainResult; }
+
 module.exports = {
     getAIResponse,
+    getLastBrainResult,
+    callLLMCascade,
     getFastLocalAnswer,
     SYSTEM_PROMPT,
     CONFIG
