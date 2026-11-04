@@ -51,7 +51,7 @@ const TOPIC_SYNONYMS = {
     ambulance: /(ambulance|emergency|एम्बुलेंस|एंबुलेंस|आपातकाल)/i,
     medicine: /(jan aushadhi|generic|sasti dawai|(dawai|dawa|davai|dava)(i)?\s*(bahut |bohot |kaafi |ghani )?(mehngi|mahangi|mehangi|nahi milti|nhi milti)|mehngi dawa|जन औषधि|जेनेरिक|सस्ती दवा|(दवाई|दवा)\s*(बहुत |काफी |घणी )?(महंगी|महँगी|नहीं मिलती)|महंगी दवा)/i,
     animal: /(pashu|janwar|\bgaay\b|\bgay ko\b|bhains|\bvet\b|पशु|जानवर|गाय|भैंस)/i,
-    education: /(school|skool|college|library|padhai|padhaai|kitab|teacher|master ji nahi|shiksha|स्कूल|विद्यालय|कॉलेज|लाइब्रेरी|पढ़ाई|पढाई|किताब|शिक्षा|अध्यापक)/i,
+    education: /(school|skool|college|library|padhai|padhaai|padhne|padhna|padhaayi|ladkiyon ki padh|chhatra|chhatraon|पढ़ने|पढ़ना|छात्र|kitab|teacher|master ji nahi|shiksha|स्कूल|विद्यालय|कॉलेज|लाइब्रेरी|पढ़ाई|पढाई|किताब|शिक्षा|अध्यापक)/i,
     youth: /(\byuva|naujawan|\byouth\b|\bkhel\b|khelkud|khelne|\bground\b|maidan|\bgym\b|stadium|running|\btrack\b|cricket|kabaddi|volleyball|basketball|badminton|युवा|नौजवान|खेल|मैदान|जिम|स्टेडियम|रनिंग|ट्रैक|क्रिकेट|कबड्डी)/i,
     jobs: /(naukri|\bjob\b|rozgar|rojgar|berozgar|berojgar|नौकरी|रोजगार|रोज़गार|बेरोजगार)/i,
     farming: /(kisan|kisaan|kheti|\bkhet\b|fasal|\bkhad\b|khaad|urea|\bdap\b|\bbeej\b|krishi|sarson|bajra|बाजरा|सरसों|किसान|खेती|खेत|फसल|खाद|यूरिया|बीज|कृषि)/i,

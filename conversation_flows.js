@@ -177,11 +177,15 @@ function inFlow(user) { const f = user && user.memory && user.memory.flow; retur
 
 // Intents that always end a flow (the voter moved on)
 const BREAKERS = new Set(['abuse', 'bribe', 'opposed', 'wrong_number', 'condolence', 'who_are_you', 'was_sarpanch', 'voter_slip', 'opponent', 'taunt', 'memory_check', 'polling', 'ballot', 'commit', 'joke', 'about_baba', 'future', 'works']);
-const isQuestion = t => /\?|^(kya|kaise|kab|kahan|kaun|kyon|kyu)\b|(क्या|कैसे|कब|कहाँ|कौन|क्यों)/i.test(clean(t));
+const isQuestion = t => /\?|\b(kya|kaise|kab|kahan|kaha|kaun|kon|kyon|kyu|kyun|kitna|kitne|kitni|kidhar|konsa|kaunsa|kaunsi)\b|(क्या|कैसे|कब|कहाँ|कहां|कौन|क्यों|कितन|किधर)/i.test(clean(t));
+const WHAT_NEXT = /(kya hoga|kab hoga|kab tak|kuch hoga|hoga kuch|kab theek|kab thik|kab banegi|kab banega|kab lagegi|kab lagega|iska kya|uska kya|क्या होगा|कब होगा|कब तक|कुछ होगा|कब ठीक|कब बनेगी|कब बनेगा|इसका क्या)/i;
+const PURPOSE_RX = /(baat karni|baat karna|baat krni|baat hai|baare me|bare me|ke liye|samasya|problem|shikayat|aashirwad|ashirwad|milna julna|milna-julna|chai pani|chai-pani|बात करनी|बात करना|के बारे में|के लिए|समस्या|शिकायत|आशीर्वाद|मिलना-जुलना|चाय)/i;
+const THANKS_ACK = /(dhanyavad|dhanyawad|shukriya|thanks|thank you|धन्यवाद|शुक्रिया)/i;
 
 // ---------------- SAMASYA ----------------
 function canOfferMulaqat(user) {
     const m = voterMemory.ensure(user);
+    if (m.told.mulaqatDeferredAt && Date.now() - Date.parse(m.told.mulaqatDeferredAt) < 20 * 3600e3) return false;
     if (m.told.mulaqatOffer || m.condolenceAt && Date.now() - Date.parse(m.condolenceAt) < 3 * 86400e3) return false;
     if (user.persuasionStage === 'opposed' || m.commitment.status === 'opposed') return false;
     try { const { mulaqatStore: ms } = stores(); if (user.phone && ms.openForPhone(user.phone).length) return false; } catch (e) {}
@@ -237,6 +241,10 @@ function startSamasya(ctx, { topic = null, explicit = false } = {}) {
     if (!cur.ward && !cur.location) {
         setFlow(user, { type: 'samasya', step: 'where', recordId: rec.id, asked: 1, topic });
         return { text: `${lead} ${whereQ(topic, l, cur.village)}`, flow: true, samasyaId: rec.id };
+    }
+    if (!cur.location && cur.ward && !loc.ward && !loc.village && !PERSONAL.has(topic) && !lmItems.length) {
+        setFlow(user, { type: 'samasya', step: 'where', recordId: rec.id, asked: 1, topic });
+        return { text: `${lead} ` + S(`वार्ड ${cur.ward} में किस गली में, या किसके घर के पास?`, `Ward ${cur.ward} me kis gali me, ya kiske ghar ke paas?`), flow: true, samasyaId: rec.id };
     }
     if (!cur.since) {
         setFlow(user, { type: 'samasya', step: 'since', recordId: rec.id, asked: 1, topic });
@@ -336,11 +344,62 @@ function finalizeMulaqat(ctx, id, lead = '') {
     const ok = s => s && (l === 'hi' || !hasDev(s));
     const parts = [];
     if (ok(r.preferredWhen)) parts.push(r.preferredWhen);
-    if (ok(r.place)) parts.push(r.place.slice(0, 60)); else if (r.ward) parts.push(S(`वार्ड ${r.ward}`, `ward ${r.ward}`));
+    if (ok(r.place)) parts.push(r.place.slice(0, 60));
+    if (r.ward && !(ok(r.place) && /(ward|वार्ड)\s*\d/i.test(r.place))) parts.push(S(`वार्ड ${r.ward}`, `ward ${r.ward}`));
+    if (ok(r.purpose) && !/^samasya S-/.test(r.purpose)) parts.push(S(`विषय: ${r.purpose.slice(0, 50)}`, `vishay: ${r.purpose.slice(0, 50)}`));
+    voterMemory.ensure(user).lastMulaqat = { id, at: new Date().toISOString() };
     if (r.familyMembers) parts.push(S(`परिवार के ${r.familyMembers} लोग`, `parivar ke ${r.familyMembers} log`));
     const sum = parts.length ? '—' + parts.join(', ') : '';
+    if (/^(जी, नोट किया।|Ji, note kiya\.)$/.test(lead)) lead = '';
     const text = (lead ? lead + ' ' : '') + S(`नोट कर लिया ${hon} 🙏${sum}। अभय सिंह जी की टीम समय पक्का करके आपको फ़ोन करेगी। आपके बुलावे के लिए दिल से धन्यवाद!`, `Note kar liya ${hon} 🙏${sum}. Abhay Singh ji ki team samay pakka karke aapko phone karegi. Aapke bulawe ke liye dil se dhanyavad!`);
     return { text, flow: true, mulaqatId: id, ask: false };
+}
+
+/** The one question an open (parked) flow is still waiting for — used to resume after answering a detour. */
+function pendingQuestion(user, l) {
+    const f = getFlow(user);
+    if (!f || f.type !== 'samasya' || !f.recordId) return null;
+    const { samasyaStore: ss } = stores();
+    const rec = ss.get(f.recordId);
+    if (!rec) return null;
+    const label = kb.topicLabel(rec.topic, l);
+    if (!rec.ward && !rec.location) return l === 'hi' ? `और आपकी ${label} वाली दिक्कत किस वार्ड या गली में है?` : `Aur aapki ${label} wali dikkat kis ward ya gali me hai?`;
+    if (!rec.since) return l === 'hi' ? `और ${label} वाली दिक्कत कब से है?` : `Aur ${label} wali dikkat kab se hai?`;
+    return null;
+}
+
+/** "gaon ki baat karni hai" right after a visit request was noted -> it is the purpose: update the record. */
+function mulaqatPurposeFollowUp(ctx) {
+    const { user, message, l, hon } = ctx;
+    const m = voterMemory.ensure(user);
+    const last = m.lastMulaqat;
+    if (!last || Date.now() - Date.parse(last.at || 0) > 2 * 3600e3) return null;
+    const t = clean(message);
+    if (!PURPOSE_RX.test(t) || t.length > 160 || isQuestion(t)) return null;
+    const { mulaqatStore: ms } = stores();
+    const r = ms.get(last.id);
+    if (!r) return null;
+    const generic = !r.purpose || /^(samasya S-|milna-julna|मिलना-जुलना)/i.test(r.purpose);
+    ms.update(r.id, { purpose: generic ? t.slice(0, 200) : (r.purpose + ' | ' + t).slice(0, 300) }, 'bot');
+    m.lastMulaqat = null;
+    const ji = /^(जी|ji)$/i.test(hon);
+    return { text: l === 'hi' ? `जी${ji ? '' : ' ' + hon}, ये भी जोड़ दिया—"${t.slice(0, 60)}"। अभय सिंह जी को पहले से पता रहेगा कि किस बारे में बात करनी है 🙏` : `Ji${ji ? '' : ' ' + hon}, ye bhi jod diya—"${t.slice(0, 60)}". Abhay Singh ji ko pehle se pata rahega ki kis baare me baat karni hai 🙏`, flow: true, ask: false, mulaqatId: r.id };
+}
+
+/** Pull every field a voter packs into one message ("shiv mandir ke paas, 8 log hai ghar me"). */
+function absorbMulaqatFields(rec, t, ms) {
+    const patch = {};
+    const w = parseWhen(t);
+    if (w && !rec.preferredWhen) { patch.preferredWhen = w.text; patch.preferredDate = w.date; }
+    const loc = parseLocation(t);
+    if (loc && loc.place && !rec.place && !(w && loc.place === t.slice(0, 80))) patch.place = loc.place;
+    if (loc && loc.ward && !rec.ward) patch.ward = loc.ward;
+    if (loc && loc.village && !rec.village) patch.village = loc.village;
+    const n = /(log|jane|jan\b|member|sadasya|लोग|जने|सदस्य)/i.test(t) ? parseCount(t) : null;
+    if (n && !rec.familyMembers) patch.familyMembers = n;
+    if (PURPOSE_RX.test(t) && !/(ghar bula|ghar par bula|घर बुला)/i.test(t) && (!rec.purpose || /^samasya S-/.test(rec.purpose))) patch.purpose = t.slice(0, 200);
+    if (Object.keys(patch).length) ms.update(rec.id, patch, 'bot');
+    return patch;
 }
 
 // ---------------- continue an open flow ----------------
@@ -351,13 +410,20 @@ function continueFlow(ctx) {
     const { user, message, cls, l, hon } = ctx;
     const S = (h, e) => (l === 'hi' ? h : e);
     const f = getFlow(user);
-    if (!f) return null;
+    if (!f) return mulaqatPurposeFollowUp(ctx);
     const t = clean(message);
     const { samasyaStore: ss, mulaqatStore: ms } = stores();
 
     if (f.type === 'mulaqat_offer') {
-        const bareAck = /^(ok+|okay|theek( hai)?|thik( hai)?|ठीक है|achha|accha|अच्छा)[\s!.🙏👍]*$/i.test(t);
-        if (cls.intent === 'meeting' || (isYes(t) && !NO.test(t) && !bareAck) || parseWhen(t)) return startMulaqat(ctx, { fromOffer: true });
+        const bareAck = /^(ok+|okay|theek( hai)?|thik( hai)?|ठीक है|achha|accha|अच्छा|hmm+)[\s!.🙏👍]*$/i.test(t);
+        if (cls.intent === 'meeting' || parseWhen(t) || (isYes(t) && !NO.test(t) && !bareAck && !THANKS_ACK.test(t))) return startMulaqat(ctx, { fromOffer: true });
+        if (bareAck || THANKS_ACK.test(t) || cls.intent === 'thanks') {
+            setFlow(user, null);
+            const m = voterMemory.ensure(user);
+            m.told.mulaqatOffer = null; m.told.mulaqatDeferredAt = new Date().toISOString();
+            const ji = /^(जी|ji)$/i.test(hon);
+            return { text: S(`आपका भी दिल से धन्यवाद${ji ? '' : ' ' + hon} 🙏 जब भी अभय सिंह जी को घर बुलाना हो, बस यहाँ लिख दीजिएगा।`, `Aapka bhi dil se dhanyavad${ji ? '' : ' ' + hon} 🙏 Jab bhi Abhay Singh ji ko ghar bulana ho, bas yahan likh dijiyega.`), flow: true, ask: false };
+        }
         if (isNo(t)) {
             setFlow(user, null);
             const ji = /^(जी|ji)$/i.test(hon);
@@ -393,7 +459,7 @@ function continueFlow(ctx) {
         // that message normally and the flow stays open for the next message (max 2 parked messages).
         const park = () => { const n = (f.parked || 0) + 1; setFlow(user, n > 2 ? null : { ...f, parked: n }); return null; };
         if (f.step === 'where') {
-            const loc = ['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention', 'complaint'].includes(cls.intent) ? parseLocation(t, { loose: true }) : null;
+            const loc = ['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention', 'complaint'].includes(cls.intent) && !isQuestion(t) ? parseLocation(t, { loose: true }) : null;
             const short = t.split(/\s+/).length <= 8 && !isQuestion(t);
             const otherTopic = kb.primaryTopic(t, null);
             const sinceAns = parseSince(t);
@@ -408,7 +474,12 @@ function continueFlow(ctx) {
                 if (ward) { const m = voterMemory.ensure(user); if (!m.ward) m.ward = ward; if (!user.ward) user.ward = ward; }
                 const since = parseSince(t);
                 if (since) ss.update(rec.id, { since }, 'bot');
+            } else if (WHAT_NEXT.test(t) && !f.reassured) {
+                setFlow(user, { ...f, reassured: true, parked: 0 });
+                const sk = rec.sankalpId ? kb.getItem(rec.sankalpId) : null;
+                return { text: S(`${hon}, पक्की तारीख़ का वादा मैं नहीं करूँगी, पर आपकी बात अभय सिंह जी के रजिस्टर में दर्ज है और उन तक पहुँचेगी 🙏`, `${hon}, pakki tareekh ka vaada main nahi karungi, par aapki baat Abhay Singh ji ke register me darj hai aur un tak pahunchegi 🙏`) + ' ' + whereQ(rec.topic, l, rec.village).replace(/^Ye /, 'Bas ye bata dijiye, ye ').replace(/^ये /, 'बस ये बता दीजिए, ये '), flow: true, samasyaId: rec.id };
             } else if (isAck(t) && (f.parked || 0) > 0) {
+                if ((f.asked || 1) < 2) { setFlow(user, { ...f, asked: (f.asked || 1) + 1, parked: 0 }); return { text: S(`${hon}, आपकी ${kb.topicLabel(rec.topic, l)} वाली बात नोट है 🙏 बस इतना बता दीजिए—ये किस गली या वार्ड में है, ताकि सही जगह पहुँचे?`, `${hon === 'ji' ? 'Ji' : hon}, aapki ${kb.topicLabel(rec.topic, l)} wali baat note hai 🙏 Bas itna bata dijiye—ye kis gali ya ward me hai, taaki sahi jagah pahunche?`), flow: true, samasyaId: rec.id }; }
                 return finalizeSamasya(ctx, rec.id); // an "ok" after a detour is not an answer: confirm with what we have
             } else if (isSkip(t) || isAck(t)) {
                 // fine, move on without a place
@@ -417,7 +488,7 @@ function continueFlow(ctx) {
                 // more detail about the same problem: keep it, ask the place once more
                 ss.update(rec.id, { description: (rec.description + ' | ' + t).slice(0, 400) }, 'bot');
                 if ((f.asked || 1) < 2) { setFlow(user, { ...f, asked: (f.asked || 1) + 1 }); return { text: S('जी, ये भी नोट कर लिया। ', 'Ji, ye bhi note kar liya. ') + whereQ(rec.topic, l), flow: true, samasyaId: rec.id }; }
-            } else if (breaker || !short || (otherTopic && otherTopic !== rec.topic) || !['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention'].includes(cls.intent)) {
+            } else if (breaker || !short || isQuestion(t) || (otherTopic && otherTopic !== rec.topic) || !['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention'].includes(cls.intent)) {
                 return park();
             } else {
                 ss.update(rec.id, { location: t.slice(0, 120) }, 'bot');
@@ -433,7 +504,7 @@ function continueFlow(ctx) {
             const since = parseSince(t);
             const short = t.split(/\s+/).length <= 8 && !isQuestion(t);
             const LOC_OK = ['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention', 'complaint'];
-            const locAns = !since && LOC_OK.includes(cls.intent) ? parseLocation(t, { loose: true }) : null;
+            const locAns = !since && LOC_OK.includes(cls.intent) && !isQuestion(t) ? parseLocation(t, { loose: true }) : null;
             if (locAns && (locAns.ward || locAns.place)) {
                 ss.update(rec.id, { ward: locAns.ward || rec.ward, village: locAns.village || (locAns.ward ? voterMemory.WARD_VILLAGE[locAns.ward] : null) || rec.village, location: locAns.place || rec.location }, 'bot');
                 const cur2 = ss.get(rec.id);
@@ -442,6 +513,10 @@ function continueFlow(ctx) {
                 const noted2 = locAns.ward ? S(`जी, वार्ड ${locAns.ward} नोट कर लिया${b2 ? ` (आपका बूथ ${b2.booth}, कमरा ${b2.room})` : ''}। `, `Ji, ward ${locAns.ward} note kar liya${b2 ? ` (aapka booth ${b2.booth}, room ${b2.room})` : ''}. `) : S('जी, नोट कर लिया। ', 'Ji, note kar liya. ');
                 if ((f.asked || 1) < 2 && !cur2.since) { setFlow(user, { ...f, asked: (f.asked || 1) + 1 }); return { text: noted2 + q('since', l), flow: true, samasyaId: rec.id }; }
                 return finalizeSamasya(ctx, rec.id);
+            }
+            if (!since && WHAT_NEXT.test(t) && !f.reassured) {
+                setFlow(user, { ...f, reassured: true, parked: 0 });
+                return { text: S(`${hon}, पक्की तारीख़ का वादा मैं नहीं करूँगी, पर आपकी बात अभय सिंह जी के रजिस्टर में दर्ज है और उन तक पहुँचेगी 🙏 बस ये बता दीजिए, दिक्कत कब से है?`, `${hon === 'ji' ? 'Ji' : hon}, pakki tareekh ka vaada main nahi karungi, par aapki baat Abhay Singh ji ke register me darj hai aur un tak pahunchegi 🙏 Bas ye bata dijiye, dikkat kab se hai?`), flow: true, samasyaId: rec.id };
             }
             if (since) ss.update(rec.id, { since }, 'bot');
             else if (isSkip(t) || isAck(t)) { /* move on without "since" */ }
@@ -457,6 +532,20 @@ function continueFlow(ctx) {
         if (!rec) { setFlow(user, null); return null; }
         const short = t.split(/\s+/).length <= 14 && !isQuestion(t);
         const skip = () => setFlow(user, { ...f, skipped: (f.skipped || []).concat([f.step]) });
+        const restate = !parseWhen(t) && (cls.intent === 'meeting' || /(ghar bula|ghar par bula|ghar aa|घर बुला|घर आ)/i.test(t)) && !(f.reaskedWhen);
+        if (f.step === 'when' && restate) {
+            setFlow(user, { ...f, reaskedWhen: true });
+            return { text: S(`ज़रूर${/^(जी|ji)$/i.test(hon) ? ' जी' : ' ' + hon}, घर पर ही मुलाक़ात की बात नोट कर रही हूँ 🙏 कौन-सा दिन और समय ठीक रहेगा?`, `Zaroor${/^(जी|ji)$/i.test(hon) ? ' ji' : ' ' + hon}, ghar par hi mulaqat ki baat note kar rahi hoon 🙏 Kaun sa din aur samay theek rahega?`), flow: true, mulaqatId: rec.id };
+        }
+        if (!breaker && !['thanks'].includes(cls.intent)) {
+            const got = absorbMulaqatFields(rec, t, ms);
+            const cur = ms.get(rec.id);
+            const stepFilled = { when: !!cur.preferredWhen, place: !!cur.place, family: !!cur.familyMembers, purpose: !!cur.purpose }[f.step];
+            if (Object.keys(got).length && stepFilled) {
+                if (f.callFirst) ms.update(rec.id, { type: 'visit' }, 'bot');
+                return askNextMulaqat(ctx, rec.id, S('जी, नोट किया।', 'Ji, note kiya.'));
+            }
+        }
         if (f.step === 'when') {
             const w = parseWhen(t);
             if (w) ms.update(rec.id, { preferredWhen: w.text, preferredDate: w.date }, 'bot');
@@ -497,4 +586,4 @@ function continueFlow(ctx) {
     return null;
 }
 
-module.exports = { isAck, parseSince, parseLocation, parseWhen, parseCount, isYes, isNo, isSkip, startSamasya, finalizeSamasya, startMulaqat, continueFlow, offerMulaqat, canOfferMulaqat, inFlow, getFlow, setFlow, setStores, stores, OFFER };
+module.exports = { pendingQuestion, mulaqatPurposeFollowUp, isQuestion, isAck, parseSince, parseLocation, parseWhen, parseCount, isYes, isNo, isSkip, startSamasya, finalizeSamasya, startMulaqat, continueFlow, offerMulaqat, canOfferMulaqat, inFlow, getFlow, setFlow, setStores, stores, OFFER };

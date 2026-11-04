@@ -381,7 +381,8 @@ C.push({ name: 'planner-followups', mode: 'brain', turns: [
     const d3 = new Date(day.getTime() + 48 * 3600e3);
     const res3 = await planner.runCycle({ users: [u], lineId: 'sim_636', now: d3, send: async (x, t) => sent.push(t) });
     check('[planner] stops after 2 unanswered', res3.sent === 0 && res3.skipped.unanswered_limit === 1 && sent.length === 2);
-    check('[planner] day-2 message is the poll reminder with booth 97 + family votes', /97/.test(sent[1]) && /3 vote/.test(sent[1]));
+    // v3.1: a "dhanyavad" to the ghar-visit offer defers it; the planner may re-ask it the next day instead of the poll reminder
+    check('[planner] day-2 message is the poll reminder (booth 97 + family votes) or the deferred ghar-visit re-ask', (/97/.test(sent[1]) && /3 vote/.test(sent[1])) || /ghar bulana/i.test(sent[1]));
     check('[planner] proactive texts pass hard rules', sent.every(t => HARD.every(([, rx]) => !rx.test(t))));
     voterMemory.updateFromVoterMessage(u, 'haan ji', {});
     check('[planner] voter reply resets unanswered counter', u.memory.proactive.unanswered === 0);

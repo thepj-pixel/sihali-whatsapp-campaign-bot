@@ -47,6 +47,7 @@ function globalChecks(tag, msg, reply, prev) {
     for (const [name, rx] of HARD) check(`${tag} no ${name}`, !rx.test(reply));
     check(`${tag} length <= 480`, reply.length <= 480);
     check(`${tag} at most one question`, (reply.match(/\?/g) || []).length <= 1);
+    check(`${tag} never a bare Ji/Achha`, !/^(ji|जी|achha|accha|अच्छा|samajh gayi|समझ गई)[\s.,!🙏]*((dada|tau|tai|mata|behan|bhai sahab|दादा|ताऊ|ताई|माता|बहन|भाई साहब)\s*(ji|जी)?)?[\s.,!🙏]*$/i.test(reply.trim()));
     if (prev) check(`${tag} not a repeat of previous bot reply`, replyQuality.normalize(reply) !== replyQuality.normalize(prev));
     if (/[a-z\u0900-\u097F]/i.test(msg) && !brain.MEDIA_RX.test(msg.trim())) {
         const hi = /[\u0900-\u097F]/.test(msg);
@@ -92,6 +93,7 @@ async function runConversation(n, spec) {
         prev = r.text;
     }
     if (spec.after) await spec.after(u, replies);
+    if (spec.llm === stubLLM && !spec.allFlow) check(`[${spec.name}] LLM path used for at least one reply`, replies.some(x => x.r.source === 'llm'));
 }
 
 const recs = (u, store) => store.list({ phone: u.phone, includeTest: true });
@@ -436,7 +438,7 @@ C.push({ name: 'memory-yaad-hai', turns: [
     { m: '2 mahine se', has: ['darj'] },
     { m: 'nahi' },
     { m: 'ram ram' },
-    { m: 'meri paani wali baat yaad hai?', intent: 'memory_check', hasAll: ['ward 3', 'S-'] },
+    { m: 'meri paani wali baat yaad hai?', intent: 'memory_check', hasAll: ['ward 3'], not: /S-\d{4}/ },
     { m: 'dhanyavad' }
 ] });
 
@@ -477,7 +479,7 @@ C.push({ name: 'health-medicine-ambulance-hindi', turns: [
 ] });
 
 C.push({ name: 'opposed-then-problem', turns: [
-    { m: 'vote nahi denge', intent: 'opposed', has: ['khatakti'] },
+    { m: 'vote nahi denge', intent: 'opposed', has: ['zaroori'] },
     { m: 'kyunki gali me naali tooti hai', intent: 'complaint' },
     { m: 'ward 5', has: ['kab se'] },
     { m: 'saal bhar se', has: ['darj'], not: /ghar bulana/i },
@@ -571,8 +573,115 @@ C.push({ name: 'planner-samasya-followup', turns: [
     check('[plan-samasya] concern follow-up quotes the register number', plan && plan.kind === 'concern_followup' && /S-\d{4}/.test(plan.text) && !brain.PROMISED_DATE.test(plan.text));
 } });
 
+// ---------------- v3.1 regressions from the 4 Nov live self-test (each runs with LLM off AND with a stub LLM) ----------------
+const stubLLM = async (sys) => { const m = String(sys).split('SAFE DRAFT')[1] || ''; return m.slice(m.indexOf(':') + 1).trim(); };
+const REG = [];
+REG.push({ name: 'reg-opponent-support', turns: [
+    { m: 'hum to dusre candidate ke saath hain', intent: 'opposed', has: ['samman'], not: /(dhanyavad|taakat|kitne vote|bharosa)/i },
+    { m: 'unka parivar purana hai', intent: 'opponent', has: ['samman'] },
+    { m: 'abhay singh me kya khaas hai', intent: 'about_baba', hasAll: ['40 saal'], has: ['zameen', 'up-swasthya'] },
+    { m: 'acha library ke baare me batao', intent: 'works', has: ['library'], not: /(Moti Aangli|pratyashi hain)/i },
+    { m: 'dusre wale to de rahe hain', intent: 'bribe_others', has: ['swabhimaan', 'izzat'], not: /(chor|jhoothe|bikau)/i },
+    { m: 'theek hai' }
+], after: (u) => check('[reg-opponent] stage opposed, never committed', u.persuasionStage === 'opposed' && !(u.persuasionHistory || []).some(h => h.to === 'committed')) });
+REG.push({ name: 'reg-angry-grievance', turns: [
+    { m: 'tum log chunav me hi yaad karte ho', intent: 'grievance', has: ['jaayaz', 'naraazgi'], not: /samajh nahi/i },
+    { m: '5 saal kuch nahi kiya, sab jhooth', intent: 'taunt' },
+    { m: 'hamare yahan to sadak tooti padi hai', intent: 'complaint' },
+    { m: 'kaunsi sadak banwai bata', intent: 'works', has: ['sadak'] },
+    { m: 'hmm', has: ['gali'], not: /darj kar li/i },
+    { m: 'bus stand ke paas wali gali' }
+], after: (u) => check('[reg-angry] exactly one samasya record, no duplicate on filler', recs(u, samasya).length === 1) });
+REG.push({ name: 'reg-chitchat-no-bare-ji', turns: [
+    { m: 'aaj to bahut thand hai' },
+    { m: 'fasal ki kataai chal rahi hai, thak gaye' },
+    { m: 'beti ki shaadi hai agle mahine', has: ['badhai', 'khushi'] },
+    { m: 'haan aap bhi aana', intent: 'invite', has: ['nyot'] },
+    { m: 'vote ki baat baad me karenge', has: ['jaldi', 'fursat'], noVoteAsk: true },
+    { m: 'theek hai beta' }
+] });
+REG.push({ name: 'reg-money-ask', turns: [
+    { m: 'kya abhay singh pehle sarpanch the?', intent: 'was_sarpanch' },
+    { m: 'to kaam kisne karwaye', intent: 'works' },
+    { m: 'chunav chinh kya hai', intent: 'ballot' },
+    { m: 'kitne crore kharch kiye', intent: 'money_ask', has: ['aankde'] },
+    { m: 'acha ok' },
+    { m: 'dhanyavad' }
+] });
+REG.push({ name: 'reg-youth-haryanvi', turns: [
+    { m: 'bhai kya scene hai', intent: 'greeting', has: ['badhiya'], noVoteAsk: true },
+    { m: 'gaon me khelne ki jagah kya hai', intent: 'works' },
+    { m: 'aur gym?', has: ['gym'] },
+    { m: 'haryanvi me bol bhai', intent: 'dialect_switch', has: ['sai', 'Haryanvi'] },
+    { m: 'thik hai bhai vote pakka', intent: 'commit' },
+    { m: 'ghar ke 4 vote' }
+], after: (u) => check('[reg-youth] Haryanvi remembered', u.dialectPref === 'haryanvi') });
+REG.push({ name: 'reg-question-breaks-samasya', turns: [
+    { m: 'namaste bhaiya, main Sihali Khurd se bol rahi hu', has: ['Behan ji'] },
+    { m: 'hamare yahan paani ki dikkat hai, nal me paani kam aata hai', intent: 'complaint' },
+    { m: 'ladkiyon ke padhne ke liye kya hai', intent: 'works', has: ['library'], not: /kab se/i },
+    { m: 'acha library kahan hai', has: ['library'] },
+    { m: 'ward 6 me' },
+    { m: 'pakka vote denge, ghar ke 3 vote', intent: 'commit', has: ['3 vote'] }
+], after: (u) => { const r = recs(u, samasya)[0] || {}; check('[reg-question] question never stored as the location', !/padhne|library/i.test(r.location || '')); } });
+REG.push({ name: 'reg-ghar-visit-multifield', turns: [
+    { m: 'Ram Ram sa' },
+    { m: 'main Sihali Kalan ward 7 se, Abhay singh ji se milna hai', intent: 'meeting', has: ['din aur samay'] },
+    { m: 'haan ghar bulana hai', has: ['din aur samay'] },
+    { m: 'parso shaam 6 baje', has: ['pehchaan'] },
+    { m: 'shiv mandir ke paas, 8 log hai ghar me', has: ['kis baare'] },
+    { m: 'gaon ki baat karni hai', hasAll: ['shiv mandir', 'parso', '8 log', 'gaon ki baat'] }
+], after: (u) => { const r = recs(u, mulaqat)[0] || {}; check('[reg-visit] place, when, family, purpose parsed', /shiv mandir/i.test(r.place || '') && /parso/.test(r.preferredWhen || '') && r.familyMembers === 8 && /gaon ki baat/.test(r.purpose || '') && !/ghar bulana/.test(r.purpose || '') && !/ghar bulana/.test(r.preferredWhen || '')); } });
+REG.push({ name: 'reg-visit-purpose-followup', allFlow: true, turns: [
+    { m: 'abhay singh ji ko ghar bulana hai', intent: 'meeting' },
+    { m: 'kal shaam 5 baje' },
+    { m: 'ward 2 school ke paas' },
+    { m: '6 log' },
+    { m: 'pata nahi', has: ['team'] },
+    { m: 'gaon ki sadak ki baat karni hai', has: ['jod diya'] }
+], after: (u) => { const r = recs(u, mulaqat)[0] || {}; check('[reg-purpose] purpose follow-up updates the record', /sadak ki baat/.test(r.purpose || '') && recs(u, mulaqat).length === 1); } });
+REG.push({ name: 'reg-samasya-place-before-since', turns: [
+    { m: 'Namaste ji' },
+    { m: 'main Haraheri ward 10 se hu', intent: 'introduce' },
+    { m: 'hamari gali me naali band padi hai, ganda paani bhar jata hai', intent: 'complaint', has: ['gali'], not: /kab se/i },
+    { m: 'madan panch ke ghar ke paas wali gali', has: ['kab se'] },
+    { m: 'do mahine se', has: ['darj'] },
+    { m: 'theek hai, dhanyavad', has: ['dhanyavad'], not: /(din aur samay|kaun sa din)/i }
+], after: (u) => { const r = recs(u, samasya)[0] || {}; check('[reg-samasya] gali + since stored, no visit pushed', /madan panch/i.test(r.location || '') && /do mahine/.test(r.since || '') && recs(u, mulaqat).length === 0); } });
+REG.push({ name: 'reg-elder-knee', turns: [
+    { m: 'ram ram beta, main 72 saal ka hu', has: ['Dada ji'] },
+    { m: 'mera ghutna dard karta hai, hospital me doctor nahi milta', intent: 'health_concern', hasAll: ['dard', 'up-swasthya', 'doctor'] },
+    { m: 'aage kya karoge hospital ke liye', intent: 'future' },
+    { m: 'vote kahan dena hai mera ward 2 hai', has: ['95'] },
+    { m: 'theek hai beta', has: ['dhyan', 'aashirwad'] },
+    { m: 'ram ram', has: ['Dada ji'] }
+] });
+REG.push({ name: 'reg-devanagari-works', turns: [
+    { m: 'राम राम जी', intent: 'greeting' },
+    { m: 'अभय सिंह ने क्या काम करवाए?', intent: 'works' },
+    { m: 'हम तो दूसरे उम्मीदवार के साथ हैं', intent: 'opposed', has: ['सम्मान'] },
+    { m: 'अभय सिंह में क्या ख़ास है', intent: 'about_baba', has: ['40 साल'] },
+    { m: 'तुम लोग चुनाव में ही याद करते हो', intent: 'grievance' },
+    { m: 'ठीक है' }
+] });
+for (const r of REG) {
+    C.push({ ...r, name: r.name + '-nollm' });
+    C.push({ ...r, name: r.name + '-stubllm', llm: stubLLM, after: async (u, rs) => { if (r.after) await r.after(u, rs); } });
+}
+C.push({ name: 'reg-memory-name-ward-pipeline', pipeline: true, turns: [
+    { m: 'namaste' },
+    { m: 'main ward 4 se hu, mera naam Suresh hai', has: ['Suresh'], not: /(वोटर लिस्ट|पिताजी का नाम)/ },
+    { m: 'bijli ki problem hai, street light nahi hai', intent: 'complaint' },
+    { m: 'kya hoga iska', has: ['vaada'] },
+    { m: 'mera naam aur ward yaad hai?', intent: 'memory_check', hasAll: ['Suresh', 'ward 4'], not: /S-\d{4}/ },
+    { m: 'vote kab hai aur booth kaunsa', intent: 'polling', has: ['96'] }
+], after: (u) => check('[reg-memory] name stored even though a voter-list match exists', u.memory && u.memory.name === 'Suresh' && u.memory.ward === 4) });
+
 // ---------------- unit checks ----------------
 function unitChecks() {
+    const CL = { 'hum to dusre candidate ke saath hain': 'opposed', 'dusre wale to de rahe hain': 'bribe_others', 'vote pakka nahi': 'undecided', 'unko vote denge': 'opposed', 'abhay singh ko vote nahi denge': 'opposed', 'hum aapke saath hain': 'commit', 'मैं अभय सिंह जी के साथ हूँ': 'commit', 'हम तो दूसरे उम्मीदवार के साथ हैं': 'opposed', 'pakka vote denge': 'commit', 'kitne crore kharch kiye': 'money_ask', 'tum log chunav me hi yaad karte ho': 'grievance', 'abhay singh me kya khaas hai': 'about_baba', 'acha library ke baare me batao': 'works', 'samne wale ke saath hain': 'opposed', 'baba ke against hain': 'opposed' };
+    for (const [m, want] of Object.entries(CL)) check(`[classify] "${m}" -> ${want}`, brain.classify(m, { history: [] }).intent === want);
+    check('[llm] cleanLLM strips think blocks / labels', brain.cleanLLM('<think>x</think>Reply: "Ji, dhanyavad"') === 'Ji, dhanyavad');
     check('[parse] since', flows.parseSince('do mahine se pani nahi') === 'do mahine se' && /साल/.test(flows.parseSince('एक साल से टूटी है')) && flows.parseSince('kaafi time se') && !flows.parseSince('pakka vote denge'));
     check('[parse] when', flows.parseWhen('kal shaam 6 baje') && flows.parseWhen('ravivar dopahar') && flows.parseWhen('शनिवार शाम') && !flows.parseWhen('dhanyavad'));
     const w = flows.parseWhen('15 tarikh ko');
@@ -603,7 +712,7 @@ function unitChecks() {
     unitChecks();
     let i = 0;
     for (const spec of C) { i++; await runConversation(i, spec); }
-    check(`[suite] at least 40 conversations (${C.length})`, C.length >= 40);
+    check(`[suite] at least 60 conversations (${C.length})`, C.length >= 60);
     check('[suite] every conversation has >= 6 turns', C.every(c => c.turns.length >= 6));
     // cleanup of test-flagged records (what the dashboard cleanup endpoint does)
     const removed = samasya.removeWhere(r => !!r.test) + mulaqat.removeWhere(r => !!r.test);

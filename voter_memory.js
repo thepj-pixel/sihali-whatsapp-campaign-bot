@@ -74,8 +74,8 @@ function extractName(text, lastBotText) {
     return /[a-z]/.test(cand) ? titleCase(cand.toLowerCase()) : cand;
 }
 
-const MALE_SELF = /(\b(raha|rha|karta|jaata|jata|aata|baitha|rehta|sochta|chahta|janta|jaanta|bolta)\s+(hu|hoon|hun|hu\.)\b|\b(dunga|dalunga|daalunga|aaunga|aunga|karunga|lunga|bataunga|sochunga|jaunga|dekhunga)\b|रहा हूँ|रहा हूं|करता हूँ|करता हूं|चाहता हूँ|चाहता हूं|रहता हूँ|रहता हूं|जानता हूँ|दूँगा|दूंगा|डालूँगा|डालूंगा|आऊँगा|आऊंगा|करूँगा|करूंगा|बताऊँगा|सोचूँगा)/i;
-const FEMALE_SELF = /(\b(rahi|rhi|karti|jaati|jati|aati|baithi|rehti|sochti|chahti|janti|jaanti|bolti)\s+(hu|hoon|hun|hu\.)\b|\b(dungi|dalungi|daalungi|aaungi|aungi|karungi|lungi|bataungi|sochungi|jaungi|dekhungi)\b|रही हूँ|रही हूं|करती हूँ|करती हूं|चाहती हूँ|चाहती हूं|रहती हूँ|रहती हूं|जानती हूँ|दूँगी|दूंगी|डालूँगी|डालूंगी|आऊँगी|आऊंगी|करूँगी|करूंगी|बताऊँगी|सोचूँगी|main (ek )?(mahila|aurat|ladki|bahu|beti)|मैं (एक )?(महिला|औरत|लड़की|बहू|बेटी))/i;
+const MALE_SELF = /(\b(saal|sal|baras|varsh)\s+ka\s+(hu|hoon|hun)\b|साल का (हूँ|हूं|हु)|\b(raha|rha|karta|jaata|jata|aata|baitha|rehta|sochta|chahta|janta|jaanta|bolta)\s+(hu|hoon|hun|hu\.)\b|\b(dunga|dalunga|daalunga|aaunga|aunga|karunga|lunga|bataunga|sochunga|jaunga|dekhunga)\b|रहा हूँ|रहा हूं|करता हूँ|करता हूं|चाहता हूँ|चाहता हूं|रहता हूँ|रहता हूं|जानता हूँ|दूँगा|दूंगा|डालूँगा|डालूंगा|आऊँगा|आऊंगा|करूँगा|करूंगा|बताऊँगा|सोचूँगा)/i;
+const FEMALE_SELF = /(\b(saal|sal|baras|varsh)\s+ki\s+(hu|hoon|hun)\b|साल की (हूँ|हूं|हु)|\b(rahi|rhi|karti|jaati|jati|aati|baithi|rehti|sochti|chahti|janti|jaanti|bolti)\s+(hu|hoon|hun|hu\.)\b|\b(dungi|dalungi|daalungi|aaungi|aungi|karungi|lungi|bataungi|sochungi|jaungi|dekhungi)\b|रही हूँ|रही हूं|करती हूँ|करती हूं|चाहती हूँ|चाहती हूं|रहती हूँ|रहती हूं|जानती हूँ|दूँगी|दूंगी|डालूँगी|डालूंगी|आऊँगी|आऊंगी|करूँगी|करूंगी|बताऊँगी|सोचूँगी|main (ek )?(mahila|aurat|ladki|bahu|beti)|मैं (एक )?(महिला|औरत|लड़की|बहू|बेटी))/i;
 
 function extractGender(text) {
     const t = String(text || '');

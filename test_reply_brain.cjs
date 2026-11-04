@@ -113,7 +113,7 @@ function freshUser(extra = {}) { return { phone: '919000000000', name: '', histo
     const ou = freshUser();
     const o1 = await brain.respond('vote nahi denge', ou, {});
     const o2 = await brain.respond('vote nahi denge', ou, {});
-    check('opposed: asks reason first, backs off second', /baat|khatak/i.test(o1.text) && o2.text !== o1.text && !/vote denge na/i.test(o2.text));
+    check('opposed: asks reason first, backs off second', /zaroori|baat|khatak/i.test(o1.text) && o2.text !== o1.text && !/vote denge na/i.test(o2.text));
 
     // Unclear -> clarifying question + admin flag
     const uu = freshUser();

@@ -766,7 +766,20 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     // Direct voter search interception ONLY if message is likely a name or voter query
     // (never while the voter is answering an open samasya/mulaqat question, unless they explicitly ask for a parchi)
     const explicitParchi = /(parchi|पर्ची|voter slip|voter id|epic|slip)/i.test(lowerMsg);
-    if (voterEngine && voterEngine.isLikelyNameOrVoterQuery(userMessage) && !(user && brain.inFlow(user) && !explicitParchi)) {
+    // A self-introduction mid-chat ("main ward 4 se hu, mera naam Suresh hai") is remembered and answered by the
+    // brain; it never silently turns into a voter-list search. An explicit parchi ask still searches.
+    const selfIntro = /((mera|meri|mero|mhara|my)\s+(naam|name|nam)|(मेरा|म्हारा)\s+नाम)/i.test(userMessage) && !explicitParchi;
+    if (user && selfIntro) {
+        try {
+            const vm = require('./voter_memory.js');
+            const m = vm.ensure(user);
+            const nm = vm.extractName(userMessage);
+            if (nm) { m.name = nm; m.nameSource = 'message'; }
+            const w = userMessage.match(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?)?\s*(\d{1,2})\b/i);
+            if (w && Number(w[1]) >= 1 && Number(w[1]) <= 11) { m.ward = Number(w[1]); if (!user.ward) user.ward = Number(w[1]); }
+        } catch (e) {}
+    }
+    if (voterEngine && !selfIntro && voterEngine.isLikelyNameOrVoterQuery(userMessage) && !(user && brain.inFlow(user) && !explicitParchi)) {
         const candidateTerms = ['baba abhay singh', 'abhay singh', 'baba ji', 'babaji', 'baba'];
         const isCandidateQuery = candidateTerms.some(t => lowerMsg.includes(t));
         if (!isCandidateQuery) {
@@ -812,6 +825,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
             ? (prompt) => callLLMCascade(prompt, [], 'Return the JSON now.', apiKey, 2500) : null;
         const result = await brain.respond(userMessage, brainUser, { llm, llmJson, goal: goalText, history: conversationHistory, meta: { phone, line: meta.line || null, test: !!meta.test } });
         AI_STATUS.lastReply = { at: new Date().toISOString(), source: result.source, intent: result.intent, llmConfigured: !!llm };
+        recordReplyStat(result, userMessage, !!llm);
         lastBrainResult = result;
         if (user && result.stage !== result.previousStage && dailyGoalMod && dailyGoalMod.recordEvent) {
             try { dailyGoalMod.recordEvent('stage', { phone, line: user.assignedLine, ward: user.ward, from: result.previousStage, to: result.stage }); } catch (e) {}
@@ -835,6 +849,22 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
 
 let lastBrainResult = null;
 const AI_STATUS = { lastReply: null, lastProviderOk: null, lastProviderError: null, calls: 0, failures: 0 };
+// Rolling reply statistics (in memory, reset on restart): where replies came from and why LLM output was rejected.
+const REPLY_STATS = { since: new Date().toISOString(), total: 0, bySource: { llm: 0, template: 0, flow: 0, llm_rejected: 0, llm_error: 0 }, rejectReasons: {}, byIntent: {}, recent: [] };
+function recordReplyStat(result, msg, llmConfigured) {
+    try {
+        const src = String(result.source || 'template');
+        REPLY_STATS.total++;
+        const kind = /llm_rejected/.test(src) ? 'llm_rejected' : (/llm_error/.test(src) ? 'llm_error' : (src.startsWith('llm') ? 'llm' : (src.startsWith('flow') ? 'flow' : 'template')));
+        REPLY_STATS.bySource[kind] = (REPLY_STATS.bySource[kind] || 0) + 1;
+        const why = (src.match(/llm_rejected:([a-z_]+(?::[^)+]*)?)/) || [])[1];
+        if (why) { const key = why.split(':')[0]; REPLY_STATS.rejectReasons[key] = (REPLY_STATS.rejectReasons[key] || 0) + 1; }
+        const bi = REPLY_STATS.byIntent[result.intent] = REPLY_STATS.byIntent[result.intent] || {};
+        bi[kind] = (bi[kind] || 0) + 1;
+        REPLY_STATS.recent.push({ at: new Date().toISOString(), intent: result.intent, source: src, llmConfigured, msg: String(msg || '').slice(0, 80), reply: String(result.text || '').slice(0, 200), rejectedOut: result.rejected ? result.rejected.out : undefined });
+        if (REPLY_STATS.recent.length > 60) REPLY_STATS.recent.shift();
+    } catch (e) {}
+}
 
 function hasAnyLLM(apiKey) {
     return Boolean(apiKey || CONFIG.nvidia_keys[0] || CONFIG.nvidia_keys[1] || CONFIG.groq_api_key || CONFIG.gemini_api_key);
@@ -883,7 +913,8 @@ function aiStatus() {
         anyLLM: hasAnyLLM(null),
         nvidiaModel: 'nvidia/nemotron-3.5-bolt-e4b',
         mode: hasAnyLLM(null) ? 'llm_with_template_fallback' : 'templates_only (no LLM key configured)',
-        ...AI_STATUS
+        ...AI_STATUS,
+        replyStats: REPLY_STATS
     };
 }
 
