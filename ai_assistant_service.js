@@ -721,6 +721,20 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
         return voterEngine.formatSlipResponse(user.lastFoundVoter);
     }
 
+    // Pending slip: person answered with father/husband name -> deliver only on a real match
+    if (user && user.pendingParchiCandidate) {
+        const pv = user.pendingParchiCandidate;
+        const relHi = (pv.rel_name_hi || '').toLowerCase();
+        const relEn = String(pv.rel_name_en || '').toLowerCase();
+        if ((relHi && lowerMsg.includes(relHi)) || (relEn && relEn.length > 2 && lowerMsg.includes(relEn))) {
+            delete user.pendingParchiCandidate;
+            user.lastFoundVoter = pv;
+            if (!user.ward && pv.ward) user.ward = pv.ward;
+            userMemory.save();
+            return voterEngine.formatSlipResponse(pv);
+        }
+    }
+
     // Direct voter search interception ONLY if message is likely a name or voter query
     if (voterEngine && voterEngine.isLikelyNameOrVoterQuery(userMessage)) {
         const candidateTerms = ['baba abhay singh', 'abhay singh', 'baba ji', 'babaji', 'baba'];
@@ -737,8 +751,18 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
                     if (!user.name) user.name = matches[0].name;
                     userMemory.save();
                 }
+                const tv = matches[0];
+                const relLow = (tv.rel_name_hi || '').toLowerCase();
+                const fatherGiven = (relLow && lowerMsg.includes(relLow)) || (tv.rel_name_en && lowerMsg.includes(String(tv.rel_name_en).toLowerCase()));
+                if (!fatherGiven) {
+                    // Privacy: never hand out a slip on a bare name match; confirm father/husband first
+                    if (user) { user.pendingParchiCandidate = tv; userMemory.save(); }
+                    const relLabel = tv.rel_type === 'H' ? 'पति' : 'पिताजी';
+                    console.log('[AI Assistant] Name match; asking relative confirmation before slip for:', userMessage);
+                    return `वोटर लिस्ट में *${tv.name_hi || tv.name}* नाम मिला है 📋\n\nपर्ची भेजने से पहले बस पुष्टि कर दीजिए — आपके ${relLabel} का नाम क्या है? 🙏`;
+                }
                 console.log('[AI Assistant] Auto-intercepted high-precision voter query for:', userMessage);
-                return voterEngine.formatSlipResponse(matches[0]);
+                return voterEngine.formatSlipResponse(tv);
             }
         }
     }
