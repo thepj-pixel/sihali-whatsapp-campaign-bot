@@ -5837,7 +5837,7 @@ app.get('/health', (req, res) => {
         mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live',
         publicDashboardUrl: PUBLIC_DASHBOARD_URL || null,
         uptime: process.uptime(),
-        brain: 'v2',
+        brain: 'v3',
         selfTest: liveSelfTest.isActive() ? 'running' : 'idle',
         silencePeriod: followupPlanner.inSilencePeriod(new Date()),
         incomingQueue: incomingQueue.status(),
