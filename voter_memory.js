@@ -350,7 +350,9 @@ function recallPhrase(user, l = 'hi', opts = {}) {
         : [`Aapne ${where}${label} wali baat batayi thi—wo Abhay Singh ji ke register me darj hai.`,
             `${where}${label} wali aapki baat main bhooli nahi hoon—wo register me darj hai.`,
             `Aur haan, ${where}${label} wali jo baat aapne batayi thi, us par team ki nazar hai.`];
-    const v = variants[(m.recallCount - 1) % variants.length];
+    let v = variants[(m.recallCount - 1) % variants.length];
+    // only a logged samasya is "in the register"; a concern merely mentioned is "noted"
+    if (!c.samasyaId && !(m.samasyaIds || []).length) v = v.replace('वो अभय सिंह जी के रजिस्टर में दर्ज है।', 'वो मैंने नोट की है और अभय सिंह जी तक पहुँचाऊँगी।').replace('वो रजिस्टर में दर्ज है।', 'वो मैंने नोट की है।').replace('wo Abhay Singh ji ke register me darj hai.', 'wo maine note ki hai aur Abhay Singh ji tak pahunchaungi.').replace('wo register me darj hai.', 'wo maine note ki hai.');
     return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
