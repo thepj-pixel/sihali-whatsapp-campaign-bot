@@ -1,3 +1,31 @@
+# HARK_CHANGES — v4 (4 Nov 2026, late night: owner's phone test + "no pings" rule)
+
+**Owner rule: "dont send any ping message other than our dashboard".** The bot never starts a conversation by itself any more.
+- New `outbound_settings.js` (state in `outbound_settings.json`, gitignored so a toggle never dirties the VM's git tree). `proactiveOutbound` is **OFF by default**: `runProactiveNudges` (planner follow-ups, persuasion nudges, consent reminders) returns at once, and `followup_planner.runCycle` refuses to send unless the toggle is on (`enabled` param, defaults to the setting). The admin boot ping stays opt-in (`ADMIN_BOOT_REPORT=on`). The night summary only builds on the dashboard; it never sends.
+- What still goes out: replies to incoming messages (including the contact card on the first replies) and what the operator triggers from the dashboard (Bulk Send, single send, agenda when the operator presses send).
+- **Quiet hours** for Bulk Send (21:00–08:00 IST) are a toggle, **ON by default**. Replies are never blocked by it.
+- Dashboard → **📣 Bulk Send → 3️⃣ Lines & Safety Caps → 🔒 Outbound rules**: two checkboxes. API: `GET/POST /api/settings/outbound {proactiveOutbound, quietHours}`. `/health` now shows `outbound`.
+
+**Voter slip (core feature) — new `slip_flow.js`, used by `server.js` and `ai_assistant_service.js`.**
+- "Krishan/Krishna/Kishan Kumar" matches the full name (कृष्ण कुमार) before any single word. A ward the voter mentioned for a complaint is only a tie-breaker; only a ward written in the slip message filters.
+- With a numbered list pending, "1", "1️⃣", "pehla", "no 2", "dusra" select that entry and the slip (image card) goes out. A number is never read as a ward there.
+- Privacy rule kept: a single match asks "क्या आपके पिता/पति का नाम … है?" and sends on "हाँ" (or the father's name). A list shows father/husband names and the voter picks their own entry.
+- "meri parchi bhejo" reuses the name already given (or the voter already found). "maine abhi bataya" re-shows the pending list/confirmation, or recalls the found voter.
+- Abuse, the candidate's name, news and questions never trigger a slip search.
+
+**Brain v4 (`reply_brain.js`).**
+- "Kaam bata saara ka saara" / "सारे काम बताओ" / "what work has been done": a short list of the major done works, then "kisi ek kaam ke baare me vistaar se jaanna ho to bataiye".
+- "Elon Musk kon h", "zuckerberg ki news": a light, polite line that the bot only helps with Sihali Khurd panchayat and Abhay Singh ji's works (reviewed template, no LLM).
+- Abuse ("kutta", "harami", "bsdk", "nalayak", Devanagari too): calm and dignified, no counter-abuse, four varied lines.
+- Corruption allegation ("kha gaya saare paise", "ghotala", "भ्रष्ट"): new `corruption` intent. Calm, no figures, 40 saal nishkalank seva, one work on the ground, and an invitation to name the specific concern.
+- Plain insults ("bekar aadmi hai", "chup kar"): respect plus an open door, no works pitch. Taunts keep one work.
+- Every negative reply takes an opener not used in the last 8 bot messages; the repeat guard uses the same pool for negative intents.
+- Emoji-only and gibberish first messages; English "who is abhay singh / how are you / who are you".
+
+**Tests.** `test:brainv3` adds the owner's transcript, abuse variants, first-message cases and a Devanagari negative run (each with the LLM off and with a stub LLM), slip-flow units (full name, "1", "pehla", reuse of the name, "maine abhi bataya", single-match confirmation), and an assertion that with default settings the proactive timer path and the broadcast timer send nothing.
+
+---
+
 # HARK_CHANGES — Brain v3.1–3.5 (4 Nov 2026, night: fixes from the live self-test)
 
 LLM keys are live on the VM (2 NVIDIA keys). These fixes come from a human read of 11 live self-test scripts.

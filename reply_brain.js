@@ -95,7 +95,7 @@ const RX = {
     bribe: /(daru|daaru|sharab|botal|bottle|kitna doge|kitne doge|paise doge|paisa doge|paise milenge|paisa milega|paise do|paisa do|note do|kuch (to )?milega|kya milega vote|vote ka kya milega|kuch (to )?doge|पैसे दो|पैसा दो|पैसे दोगे|पैसा दोगे|पैसे मिलेंगे|पैसा मिलेगा|कितना दोगे|कुछ (तो )?मिलेगा|क्या मिलेगा|दारू|शराब|बोतल)/i,
     taunt: /((40 saal|चालीस साल|40 साल|aaj tak|आज तक|5 saal|पाँच साल)[^?]{0,20}(kya kiya|क्या किया)|kuch nahi kiya|kuch nhi kiya|kuchh nahi kiya|jhoot|jhooth|\bchor\b|farji|farzi|dhongi|bekar|bakwas|kaam hi nahi|koi kaam nahi|कुछ नहीं किया|झूठ|चोर|फर्जी|बेकार|बकवास|कोई काम नहीं)/i,
     abuse: /(\bmc\b|\bbc\b|\bmkc\b|bsdk|bhosd|madarc|behenc|bhenc|\bkutt?[aeiy]\b|kutton|kutiya|kamine|kamina|harami|haraami|saala|saale|chutiy|gandu|\blavd|\blaud|\blod[ue]\b|\bsuar\b|suwar|\bgadh[ae]\b|ullu ka|nalayak|naalayak|tatti|कुत्त[ाेी]|कुतिया|कमीन[ेा]|हरामी|साले|साला|भोस|मादर|चुतिय|गांडू|सूअर|गधे|नालायक)/i,
-    corruption: /(kha (gaya|gye|gaye|gya|liya|liye|jayega|jaega)|kha (gaya|gye|gaye) (saare|sare|sab|saara|sara)?\s*(paise|paisa)|(paise|paisa|fund|funds|bajat|budget)\s*(kha|khaa|hadap|dakar|loot|lut)|kha (gaya|gye|gaye) (sab|saara|sare)|hadap (liya|liye|gaya)|ghotal|ghotaal|ghapla|ghaple|bhrasht|bhrashtachar|corrupt|commission khor|kamishan|\bloot (liya|liye|li|gaya|gaye|rahe)|lut (liya|liye)|lootera|lutera|chori (ki|kar|karke)|खा (गया|गए|गये|लिया|लिए)|पैसे खा|पैसा खा|हड़प|घोटाला|घपला|भ्रष्ट|लूट (लिया|लिए|ली|गया)|लुटेरा|कमीशन)/i,
+    corruption: /(\bchor (hai|h|he|hain|aadmi|insaan|log)\b|(abhay|baba|sarpanch|panchayat)[a-z ]{0,12}\bchor\b|चोर (है|हैं|आदमी)|kha (gaya|gye|gaye|gya|liya|liye|jayega|jaega)|kha (gaya|gye|gaye) (saare|sare|sab|saara|sara)?\s*(paise|paisa)|(paise|paisa|fund|funds|bajat|budget)\s*(kha|khaa|hadap|dakar|loot|lut)|kha (gaya|gye|gaye) (sab|saara|sare)|hadap (liya|liye|gaya)|ghotal|ghotaal|ghapla|ghaple|bhrasht|bhrashtachar|corrupt|commission khor|kamishan|\bloot (liya|liye|li|gaya|gaye|rahe)|lut (liya|liye)|lootera|lutera|chori (ki|kar|karke)|खा (गया|गए|गये|लिया|लिए)|पैसे खा|पैसा खा|हड़प|घोटाला|घपला|भ्रष्ट|लूट (लिया|लिए|ली|गया)|लुटेरा|कमीशन)/i,
     insult: /(\bchup\b|chup (kar|kr|reh|raho)|\bbekar\b|bekaar|nikamm|faltu|faltoo|ghatiya|gatiya|wahiyat|\bdhongi\b|jhootha|jhutha|naatak|natak baaz|drama|chamcha|चुप|बेकार|निकम्म|फालतू|फ़ालतू|घटिया|वाहियात|ढोंगी|झूठा|नाटक)/i,
     wrongNumber: /(galat number|galat no|wrong number|wrong no|kaun hai ye|kon hai ye|kaun ho aap\b.*number|kisne (diya|di) (mera )?number|number kahan se|number kaha se|mera number kaise|main (is|us) gaon ka nahi|main yahan ka nahi|गलत नंबर|ये कौन है|नंबर कहाँ से|मेरा नंबर किसने|मैं इस गाँव का नहीं)/i,
     condolence: /(guzar gaye|guzar gayi|gujar gaye|gujar gayi|dehant|dehaant|nahi rahe|nhi rahe|swargwas|swargvas|maut ho|death ho|shant ho gaye|chal base|गुज़र गए|गुजर गए|गुज़र गईं|देहांत|नहीं रहे|स्वर्गवास|मृत्यु|मौत हो|चल बसे|शांत हो गए)/i,
@@ -202,6 +202,7 @@ function classify(text, user = {}) {
     if (ci) return out(ci.intent, ci);
     if (MEDIA_RX.test(t)) return out('media', { media: t.replace(/[\[\]]/g, '').toLowerCase() });
     if (RX.abuse.test(t)) return out('abuse', { alsoTopic: topic && CONCERN_RX.test(t) });
+    if (/(chor|jhoot|jhooth|bekar|चोर|झूठ|बेकार)\s*(nahi|nhi|nahin|नहीं)/i.test(t) && (RX.positive.test(t) || /(achha|accha|imandar|सच्चे|अच्छे)/i.test(t))) return out('positive');
     if (RX.corruption.test(t)) return out('corruption');
     if (/^[\s\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f❤♥]+$/u.test(t) && !/^[\s🙏👍😂🤣]+$/u.test(t)) return out('emoji_only');
     if (RX.bribeOthers.test(t)) return out('bribe_others');
@@ -882,6 +883,7 @@ function validateLLM(reply, { allowedText, user, l } = {}) {
     if (SYMBOL.test(r)) return 'symbol_claim';
     if (PROMISED_DATE.test(r)) return 'promised_date';
     if ((r.match(/\?/g) || []).length > 1) return 'multi_question';
+    if (/[,;:—\-]\s*$/.test(r) || (!/[.?!।🙏😊🙂)\]]\s*$/u.test(r) && r.length > 60)) return 'truncated';
     if (l === 'hi' && !hasDevanagari(r)) return 'wrong_script';
     if (l === 'en' && hasDevanagari(r)) return 'wrong_script';
     const nums = r.match(/\d+(?:[.:]\d+)?/g) || [];

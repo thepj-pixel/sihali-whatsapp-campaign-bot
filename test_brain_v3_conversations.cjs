@@ -683,11 +683,11 @@ REG.push({ name: 'reg-owner-transcript', templateOnly: true, turns: [
     check('[owner] four negative replies all open differently', new Set(neg).size === neg.length);
     check('[owner] road complaint logged with ward 3 + since', (() => { const r = recs(u, samasya)[0] || {}; return r.category && r.ward === 3 && /3 saal/.test(r.since || ''); })());
 } });
-REG.push({ name: 'reg-abuse-variants', turns: [
+REG.push({ name: 'reg-abuse-variants', templateOnly: true, turns: [
     { m: 'kutte', intent: 'abuse' },
     { m: 'harami log ho tum sab', intent: 'abuse' },
     { m: 'bsdk', intent: 'abuse' },
-    { m: 'chor hai abhay singh', intent: 'taunt', not: /chor/i },
+    { m: 'chor hai abhay singh', intent: 'corruption', not: /chor/i },
     { m: 'ghotala kiya hai panchayat me', intent: 'corruption' },
     { m: 'nalayak', intent: 'abuse' }
 ], after: (u, rs) => {
@@ -728,7 +728,7 @@ C.push({ name: 'reg-memory-name-ward-pipeline', pipeline: true, turns: [
 
 // ---------------- unit checks ----------------
 function unitChecks() {
-    const CL = { 'hum to dusre candidate ke saath hain': 'opposed', 'dusre wale to de rahe hain': 'bribe_others', 'vote pakka nahi': 'undecided', 'unko vote denge': 'opposed', 'abhay singh ko vote nahi denge': 'opposed', 'hum aapke saath hain': 'commit', 'मैं अभय सिंह जी के साथ हूँ': 'commit', 'हम तो दूसरे उम्मीदवार के साथ हैं': 'opposed', 'pakka vote denge': 'commit', 'kitne crore kharch kiye': 'money_ask', 'tum log chunav me hi yaad karte ho': 'grievance', 'abhay singh me kya khaas hai': 'about_baba', 'acha library ke baare me batao': 'works', 'samne wale ke saath hain': 'opposed', 'baba ke against hain': 'opposed' };
+    const CL = { 'hum to dusre candidate ke saath hain': 'opposed', 'dusre wale to de rahe hain': 'bribe_others', 'vote pakka nahi': 'undecided', 'unko vote denge': 'opposed', 'abhay singh ko vote nahi denge': 'opposed', 'hum aapke saath hain': 'commit', 'मैं अभय सिंह जी के साथ हूँ': 'commit', 'हम तो दूसरे उम्मीदवार के साथ हैं': 'opposed', 'pakka vote denge': 'commit', 'kitne crore kharch kiye': 'money_ask', 'tum log chunav me hi yaad karte ho': 'grievance', 'abhay singh me kya khaas hai': 'about_baba', 'acha library ke baare me batao': 'works', 'samne wale ke saath hain': 'opposed', 'baba ke against hain': 'opposed', 'Kutta abhay Singh': 'abuse', 'Kha gaya saare paise': 'corruption', 'chor hai abhay singh': 'corruption', 'wo chor nahi hai, achha aadmi hai': 'positive', 'Elon Musk kon h': 'off_topic', 'Kaam bata saara ka saara': 'works', 'moti aangli wale kaun': 'about_baba' };
     for (const [m, want] of Object.entries(CL)) check(`[classify] "${m}" -> ${want}`, brain.classify(m, { history: [] }).intent === want);
     check('[llm] dropped facts rejected', brain.validateAgainstDraft('Ji, bahut achha kaam hua hai.', 'x', { used: ['M8'], l: 'en', person: {} }) === 'dropped_facts');
     check('[llm] vote push not in draft rejected', brain.validateAgainstDraft('Library bani hai. 16 Nov ko saath denge na?', 'Library bani hai.', { l: 'en', person: {} }) === 'unasked_vote_push');
