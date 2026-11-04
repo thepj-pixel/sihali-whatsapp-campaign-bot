@@ -371,22 +371,22 @@ C.push({ name: 'planner-followups', mode: 'brain', turns: [
     check('[planner] silence period (14 Nov 18:00 IST) blocks', planner.blockReason(u, new Date('2026-11-14T12:31:00Z')) === 'silence_period');
     check('[planner] 13:00 IST on 14 Nov still allowed', planner.blockReason(u, new Date('2026-11-14T07:30:00Z')) === null);
     const sent = [];
-    const res1 = await planner.runCycle({ users: [u], lineId: 'sim_636', now: day, send: async (x, t) => sent.push(t) });
+    const res1 = await planner.runCycle({ enabled: true, users: [u], lineId: 'sim_636', now: day, send: async (x, t) => sent.push(t) });
     check('[planner] runCycle sent 1', res1.sent === 1 && sent.length === 1);
-    const res2 = await planner.runCycle({ users: [u], lineId: 'sim_636', now: new Date(day.getTime() + 3 * 3600e3), send: async (x, t) => sent.push(t) });
+    const res2 = await planner.runCycle({ enabled: true, users: [u], lineId: 'sim_636', now: new Date(day.getTime() + 3 * 3600e3), send: async (x, t) => sent.push(t) });
     check('[planner] max 1 per voter per day', res2.sent === 0 && res2.skipped.daily_limit === 1);
     u.memory.proactive.lastUserAt = new Date(day.getTime() - 30 * 3600e3).toISOString();
     const d2 = new Date(day.getTime() + 24 * 3600e3);
-    await planner.runCycle({ users: [u], lineId: 'sim_636', now: d2, send: async (x, t) => sent.push(t) });
+    await planner.runCycle({ enabled: true, users: [u], lineId: 'sim_636', now: d2, send: async (x, t) => sent.push(t) });
     const d3 = new Date(day.getTime() + 48 * 3600e3);
-    const res3 = await planner.runCycle({ users: [u], lineId: 'sim_636', now: d3, send: async (x, t) => sent.push(t) });
+    const res3 = await planner.runCycle({ enabled: true, users: [u], lineId: 'sim_636', now: d3, send: async (x, t) => sent.push(t) });
     check('[planner] stops after 2 unanswered', res3.sent === 0 && res3.skipped.unanswered_limit === 1 && sent.length === 2);
     // v3.1: a "dhanyavad" to the ghar-visit offer defers it; the planner may re-ask it the next day instead of the poll reminder
     check('[planner] day-2 message is the poll reminder (booth 97 + family votes) or the deferred ghar-visit re-ask', (/97/.test(sent[1]) && /3 vote/.test(sent[1])) || /ghar bulana/i.test(sent[1]));
     check('[planner] proactive texts pass hard rules', sent.every(t => HARD.every(([, rx]) => !rx.test(t))));
     voterMemory.updateFromVoterMessage(u, 'haan ji', {});
     check('[planner] voter reply resets unanswered counter', u.memory.proactive.unanswered === 0);
-    const res4 = await planner.runCycle({ users: [u], lineId: 'other_line', now: d3, send: async () => {} });
+    const res4 = await planner.runCycle({ enabled: true, users: [u], lineId: 'other_line', now: d3, send: async () => {} });
     check('[planner] sticky line: other line never messages this voter', res4.sent === 0);
 } });
 

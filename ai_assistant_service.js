@@ -742,6 +742,20 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
 
     const user = phone ? userMemory.getUser(phone) : null;
 
+    // Voter-slip state first (numbered choice, "हाँ", "maine abhi bataya", parchi ask with a remembered name)
+    if (user && !(brain.inFlow(user) && !/(parchi|पर्ची|slip)/i.test(lowerMsg))) {
+        try {
+            const sf = require('./slip_flow.js');
+            const sp = sf.decide(userMessage, user, { slipIntent: false });
+            if (sp) {
+                userMemory.save();
+                lastBrainResult = { intent: 'voter_slip', source: 'slip_flow:' + sp.kind, stage: user.persuasionStage, previousStage: user.persuasionStage };
+                if (sp.kind === 'deliver' && sp.voter) return voterEngine.formatShortSlipResponse(sp.voter) + sf.FAMILY_TAIL;
+                return sp.text;
+            }
+        } catch (e) { console.error('[AI Assistant] slip flow error:', e.message); }
+    }
+
     // Check if voter is giving a contextual follow-up confirmation ("ye hie details h", "yahi h", etc.)
     const isFollowUpDetails = lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi') || lowerMsg.includes('yahi h') || lowerMsg.includes('yahi he');
     if (isFollowUpDetails && user && user.lastFoundVoter) {

@@ -22,6 +22,7 @@ const engagementPolicy = require('./engagement_policy.js');
 const replyQuality = require('./reply_quality.js');
 const kb = require('./knowledge_base.js');
 const voterMemory = require('./voter_memory.js');
+const outboundSettings = require('./outbound_settings.js');
 
 const DEFAULTS = {
     pollDate: '2026-11-16',
@@ -228,8 +229,10 @@ function sentTodayOnLine(users, lineId, now = new Date()) {
  * @param {object} p { users, lineId, send: async (user, text) => void, goal, now, cfg, onSent }
  * @returns {Promise<{sent: number, skipped: object, reason?: string}>}
  */
-async function runCycle({ users, lineId, send, goal = {}, now = new Date(), cfg = config(), onSent = () => {}, gapMs = null }) {
+async function runCycle({ users, lineId, send, goal = {}, now = new Date(), cfg = config(), onSent = () => {}, gapMs = null, enabled = outboundSettings.proactiveEnabled() }) {
     const skipped = {};
+    // Owner rule: the bot never starts a conversation unless the dashboard toggle "Proactive outbound" is ON (default OFF)
+    if (!enabled) return { sent: 0, skipped, reason: 'proactive_off' };
     if (inSilencePeriod(now, cfg)) return { sent: 0, skipped, reason: 'silence_period' };
     if (inQuietHours(now, cfg)) return { sent: 0, skipped, reason: 'quiet_hours' };
     let budget = Math.max(0, cfg.proactivePerLinePerDay - sentTodayOnLine(users, lineId, now));

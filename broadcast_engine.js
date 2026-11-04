@@ -133,6 +133,8 @@ class BroadcastEngine {
         this.externalBlock = opts.isBlocked || (() => null);
         // Campaign silence period (e.g. 48h before the poll): no bulk campaigning at all while true
         this.isSilenced = opts.isSilenced || (() => false);
+        // Dashboard toggle (outbound_settings.json): quiet hours on/off for bulk sends. Default ON. Replies are never affected.
+        this.quietHoursEnabled = opts.quietHoursEnabled || (() => true);
         // Sticky lines: a person always continues on the line they already talk to
         this.getAssignedLine = opts.getAssignedLine || (() => null);
         this.log = opts.logger || console;
@@ -382,7 +384,7 @@ class BroadcastEngine {
                 return [];
             }
             if (this.isSilenced(now)) { c.waitingReason = 'silence_period'; return []; }
-            if (inQuietHours(now, c.caps)) { c.waitingReason = 'quiet_hours'; return []; }
+            if (this.quietHoursEnabled() && inQuietHours(now, c.caps)) { c.waitingReason = 'quiet_hours'; return []; }
 
             // Update line connection state
             let changed = false;
@@ -590,7 +592,8 @@ class BroadcastEngine {
             lines,
             connectedLines: lines.filter(l => l.connected).length,
             optOutCount: Object.keys(this.state.optOuts).length,
-            quietHoursNow: c ? inQuietHours(this.now(), c.caps) : inQuietHours(this.now(), DEFAULT_CAPS),
+            quietHoursEnabled: this.quietHoursEnabled(),
+            quietHoursNow: this.quietHoursEnabled() && (c ? inQuietHours(this.now(), c.caps) : inQuietHours(this.now(), DEFAULT_CAPS)),
             defaults: DEFAULT_CAPS,
             history: Object.values(this.state.campaigns).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 10).map(x => ({ id: x.id, status: x.status, createdAt: x.createdAt, counts: this.counts(x) }))
         };

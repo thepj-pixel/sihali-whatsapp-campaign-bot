@@ -4,6 +4,8 @@
 // campaign.silenceStartIST), max 1 per voter per day, stop after 2 unanswered, per-line daily cap, never our own lines.
 let proactiveBusy = {};
 async function runProactiveNudges(sock, lineId = 'sim_636') {
+    // Owner rule: no automatic outbound (follow-ups, nudges, consent reminders) unless the dashboard toggle is ON
+    if (!require('./outbound_settings.js').proactiveEnabled()) return { disabled: true };
     if (proactiveBusy[lineId]) return;
     proactiveBusy[lineId] = true;
     try {
@@ -64,6 +66,7 @@ const {
 } = require('@whiskeysockets/baileys');
 
 const voterEngine = require('./voter_engine.js');
+const slipFlow = require('./slip_flow.js');
 const voterCardGen = require('./voter_card_generator.js');
 const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
@@ -957,6 +960,12 @@ async function startSession(sessionObj) {
                         isFollowUpDetails
                     );
 
+                    let slipPlan = null;
+                    if (!imageAnalysis && !isPosterGenQuery && !isVideoQuery && !isPhotoQuery) {
+                        try { slipPlan = slipFlow.decide(body, user, { slipIntent: isVoterSlipIntent, searchText: effectiveSearchText, blocked: inBrainFlow || isSelfIntro }); }
+                        catch (e) { console.error(`[${sessionObj.id}] slip flow error:`, e.message); slipPlan = null; }
+                    }
+
                     if (imageAnalysis) {
                         const voterName = user.name || 'भैया';
                         if (imageAnalysis.suggestedTag) {
@@ -1038,224 +1047,30 @@ async function startSession(sessionObj) {
                         }
                         mediaTypeSent = poster.id.includes('demo') ? 'demoPoster' : 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster (${poster.id}) to ${senderPhone}`);
-                    } else if (isVoterSlipIntent) {
-                        let targetVoter = null;
-
-                        // Check if voter is actively confirming a pending single-voter father check
-                        const isYesConfirmation = lower === 'ha' || lower === 'haan' || lower === 'हाँ' || lower === 'yes' || lower === 'sahi h' || lower === 'sahi hai' || lower === 'yahi h' || lower === 'yahi he' || lower === 'shi h' || lower === 'ji' || lower === 'theek h' || lower === 'thik h';
-
-                        if (user && user.pendingParchiCandidate && isYesConfirmation) {
-                            targetVoter = user.pendingParchiCandidate;
-                            delete user.pendingParchiCandidate;
-                            user.ward = targetVoter.ward;
-                            user.lastFoundVoter = targetVoter;
+                    } else if (slipPlan) {
+                        // Voter slip (slip_flow.js): numbered choice, "हाँ" confirmation, remembered name, full-name match
+                        const targetVoter = slipPlan.voter || null;
+                        if (slipPlan.kind === 'deliver' && targetVoter) {
                             userMemory.save();
-
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter) +
-                                `\n\n👨‍👩‍👧 *क्या आपको अपने परिवार के अन्य सदस्यों (माताजी, पिताजी, भाई, भाभी) की भी वोटर पर्ची चाहिए भैया? बस उनका नाम लिखकर भेज दीजिए!* 🚩\n\n*(अगर किसी बात में थोड़ी बहुत गलती हो जाए तो छोटा मानकर माफ करना भैया... बाकी हमारी नीयत में कोई खोट नहीं है, हम तो बस पूरे गाँव की सेवा में हाजिर हैं! 🙏)*`;
-
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.FAMILY_TAIL;
                             let cardBuffer = null;
-                            try {
-                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
-                            } catch (e) {
-                                console.error(`[${sessionObj.id}] Error generating voter card:`, e.message);
-                            }
-
+                            try { cardBuffer = await voterCardGen.generateVoterCard(targetVoter); }
+                            catch (cardErr) { console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message); }
                             if (cardBuffer) {
-                                await sendSafeMessage(sock, replyJid, {
-                                    image: cardBuffer,
-                                    caption: replyText
-                                });
+                                try { fs.writeFileSync(path.join(__dirname, 'media', 'uploads', `parchi_${targetVoter.id || targetVoter.sr_no}.jpg`), cardBuffer); } catch (e) {}
+                                await sendSafeMessage(sock, replyJid, { image: cardBuffer, caption: replyText });
                                 mediaTypeSent = 'voterSlipCard';
-                                console.log(`[${sessionObj.id}] ✅ Delivered confirmed voter slip JPG card to ${senderPhone} (${targetVoter.name_hi})`);
                             } else {
                                 await sendSafeMessage(sock, replyJid, { text: replyText });
                                 mediaTypeSent = 'voterSlip';
                             }
-                            userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
-                            logMessage({
-                                session: sessionObj.name,
-                                phone: senderPhone,
-                                incoming: body,
-                                reply: replyText,
-                                status: 'CONFIRMED_PARCHI_DELIVERED'
-                            });
-                            continue;
-                        }
-
-                        // Check if voter asked for parchi without any name or EPIC
-                        const cleanParchiQuery = effectiveSearchText.replace(/parchi|voter|slip|card|id|bhej|do|bhejo|nikalo|mera|meri|mujhe|पर्ची|कार्ड|आईडी|भेज|दो|भेजो|निकालो|मेरी|मेरा|मुझे/gi, '').trim();
-                        if (!cleanParchiQuery && (hasExplicitParchiKeyword || hasParchiPhrase)) {
-                            replyText = `राम राम भाई जी! 🙏\nअधिकृत डिजिटल मतदाता पर्ची देखने के लिए कृपया अपना *शुभ नाम* (या पहचान पत्र / EPIC नंबर) लिखकर भेजें! 🚩\n\n*(उदा: 'प्रिंस यादव' या 'IED1610633')*`;
-                            await sendSafeMessage(sock, replyJid, { text: replyText });
-                            mediaTypeSent = 'parchiNamePrompt';
-                            userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
-                            logMessage({
-                                session: sessionObj.name,
-                                phone: senderPhone,
-                                incoming: body,
-                                reply: replyText,
-                                status: 'ASKED_VOTER_NAME'
-                            });
-                            continue;
-                        }
-
-                        // Check if voter is answering an active disambiguation prompt (e.g. typing "1", "2", or father's name)
-                        if (user && user.disambiguationMatches && user.disambiguationMatches.length > 0) {
-                            const choiceNum = parseInt(body.trim());
-                            if (!isNaN(choiceNum) && choiceNum >= 1 && choiceNum <= user.disambiguationMatches.length) {
-                                targetVoter = user.disambiguationMatches[choiceNum - 1];
-                            } else {
-                                for (const cand of user.disambiguationMatches) {
-                                    const candRel = ((cand.rel_name_hi || '') + ' ' + (cand.rel_name_en || '')).toLowerCase();
-                                    const candWard = String(cand.ward);
-                                    if (candRel.includes(lower) || lower.includes(candWard) || candWard === body.trim()) {
-                                        targetVoter = cand;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (targetVoter) {
-                                delete user.disambiguationMatches;
-                                user.ward = targetVoter.ward;
-                                user.lastFoundVoter = targetVoter;
-                                userMemory.save();
-                            }
-                        }
-
-                        let matches = targetVoter ? [targetVoter] : voterEngine.searchVoters(effectiveSearchText, 5, user.ward);
-
-                        // If multiple distinct people share the same name and user hasn't specified father's name or ward:
-                        if (!targetVoter && matches && matches.length > 1) {
-                            const sameNameList = matches.filter(m => (m.name_hi === matches[0].name_hi || (m.name_en && m.name_en.toLowerCase() === matches[0].name_en.toLowerCase())));
-                            if (sameNameList.length > 1) {
-                                user.disambiguationMatches = sameNameList;
-                                userMemory.save();
-                                replyText = voterEngine.formatDisambiguationPrompt(sameNameList, matches[0].name_hi);
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                                mediaTypeSent = 'disambiguation';
-                                console.log(`[${sessionObj.id}] ⚠️ Disambiguation requested for ${matches[0].name_hi} (${sameNameList.length} matches)`);
-                                userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
-                                logMessage({
-                                    session: sessionObj.name,
-                                    phone: senderPhone,
-                                    incoming: body,
-                                    reply: replyText,
-                                    status: 'DISAMBIGUATION_SENT'
-                                });
-                                continue;
-                            }
-                        }
-
-                        // If single candidate found: ask father confirmation first (and pre-generate card in background)
-                        if (!targetVoter && matches && matches.length >= 1) {
-                            targetVoter = matches[0];
-                            const relNameLow = (targetVoter.rel_name_hi || '').toLowerCase();
-                            const alreadySpecifiedFather = lower.includes(relNameLow) || (targetVoter.rel_name_en && lower.includes(targetVoter.rel_name_en.toLowerCase()));
-
-                            if (!alreadySpecifiedFather) {
-                                user.lastSearchedQuery = effectiveSearchText;
-                                user.lastSearchedName = targetVoter.name;
-                                user.pendingParchiCandidate = targetVoter;
-                                userMemory.save();
-
-                                // Pre-generate card in background so it is ready instantaneously
-                                voterCardGen.generateVoterCard(targetVoter).catch(() => {});
-
-                                const relLabel = targetVoter.rel_type === 'H' ? 'पति' : 'पिताजी';
-                                replyText = `राम राम भाई जी! 🙏 वोटर लिस्ट में *${targetVoter.name_hi}* नाम मिल गया है: 📋\n\nक्या आपके ${relLabel} का नाम *${targetVoter.rel_name_hi}* (वार्ड नं. ${targetVoter.ward}, मकान नं. ${targetVoter.house_no}) है?\n\nकृपया *'हाँ'* या *'सही है'* लिखकर बताएं, ताकि मैं आपकी अधिकृत डिजिटल पर्ची तुरंत भेज सकूँ! 😊🚩\n*(अगर कोई अन्य नाम है तो सही नाम लिखकर भेजें)*`;
-
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                                mediaTypeSent = 'parchiConfirmation';
-                                userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
-                                logMessage({
-                                    session: sessionObj.name,
-                                    phone: senderPhone,
-                                    incoming: body,
-                                    reply: replyText,
-                                    status: 'FATHER_CONFIRMATION_ASKED'
-                                });
-                                continue;
-                            }
-                        }
-
-                        if (matches && matches.length > 0) {
-                            targetVoter = targetVoter || matches[0];
-                            user.lastSearchedQuery = effectiveSearchText;
-                            user.lastSearchedName = targetVoter.name;
-                            user.lastFoundVoter = targetVoter;
-                            if (!user.ward && targetVoter.ward) user.ward = targetVoter.ward;
-                            if (!user.name) user.name = targetVoter.name;
-                            userMemory.save();
-
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter) +
-                                `\n\n👨‍👩‍👧 *क्या आपको अपने परिवार के अन्य सदस्यों की भी वोटर पर्ची चाहिए भैया? बस उनका नाम लिखकर भेज दीजिए!* 🚩\n\n*(अगर किसी बात में थोड़ी बहुत गलती हो जाए तो छोटा मानकर माफ करना भैया... बाकी हमारी नीयत में कोई खोट नहीं है! 🙏)*`;
-
-                            // Generate Official JPG Voter Card with Baba's Photo
-                            let cardBuffer = null;
-                            try {
-                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
-                            } catch (cardErr) {
-                                console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message);
-                            }
-
-                            if (cardBuffer) {
-                                const cardFileName = `parchi_${targetVoter.id || targetVoter.sr_no}.jpg`;
-                                const cardFilePath = path.join(__dirname, 'media', 'uploads', cardFileName);
-                                try { fs.writeFileSync(cardFilePath, cardBuffer); } catch(e) {}
-                                await sendSafeMessage(sock, replyJid, {
-                                    image: cardBuffer,
-                                    caption: replyText
-                                });
-                                mediaTypeSent = 'voterSlipCard';
-                                console.log(`[${sessionObj.id}] ✅ Sent voter slip JPG card + details to ${senderPhone} (${targetVoter.name_hi})`);
-                            } else {
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                                mediaTypeSent = 'voterSlip';
-                                console.log(`[${sessionObj.id}] ✅ Sent text voter slip to ${senderPhone} (${targetVoter.name_hi})`);
-                            }
-                        } else if (isFollowUpDetails && user && user.lastFoundVoter) {
-                            targetVoter = user.lastFoundVoter;
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter);
-
-                            let cardBuffer = null;
-                            try {
-                                cardBuffer = await voterCardGen.generateVoterCard(targetVoter);
-                            } catch (cardErr) {
-                                console.error(`[${sessionObj.id}] Error generating follow-up voter card:`, cardErr.message);
-                            }
-
-                            if (cardBuffer) {
-                                await sendSafeMessage(sock, replyJid, {
-                                    image: cardBuffer,
-                                    caption: replyText
-                                });
-                                mediaTypeSent = 'voterSlipCard';
-                                console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip JPG card upon follow-up to ${senderPhone}`);
-                            } else {
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                                mediaTypeSent = 'voterSlip';
-                                console.log(`[${sessionObj.id}] ✅ Delivered stored voter slip text upon follow-up to ${senderPhone}`);
-                            }
+                            console.log(`[${sessionObj.id}] ✅ Sent voter slip to ${senderPhone} (${targetVoter.name_hi})`);
                         } else {
-                            if (hasExplicitParchiKeyword || hasEpicPattern || hasParchiPhrase || lower.includes("mera naam") || lower.includes("parchi")) {
-                                replyText = voterEngine.formatFallbackResponse();
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                                console.log(`[${sessionObj.id}] ⚠️ Parchi requested but voter not found: "${effectiveSearchText}"`);
-                            } else {
-                                // Casual chat / AI query! Fall through to conversational AI & Fast Local Engine
-                                console.log(`[${sessionObj.id}] 💬 Message "${effectiveSearchText}" had no parchi match and no explicit parchi keyword. Falling through to conversational AI.`);
-                                const history = userMemory.getUserHistory(senderPhone).slice(0, -1).map(h => ({
-                                    role: h.role === "bot" ? "assistant" : "user",
-                                    content: h.text
-                                }));
-
-                                replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter });
-                                if (!replyText || replyText.trim() === "") {
-                                    replyText = aiService.getSafeFallback(body, senderPhone);
-                                }
-                                await sendSafeMessage(sock, replyJid, { text: replyText });
-                            }
+                            if (slipPlan.kind === 'confirm' && targetVoter) voterCardGen.generateVoterCard(targetVoter).catch(() => {});
+                            userMemory.save();
+                            replyText = slipPlan.text;
+                            await sendSafeMessage(sock, replyJid, { text: replyText });
+                            mediaTypeSent = { confirm: 'parchiConfirmation', choose: 'disambiguation', ask_name: 'parchiNamePrompt', not_found: 'parchiNotFound' }[slipPlan.kind] || 'parchi';
                         }
                     } else if (body.toLowerCase().trim() === 'prince' || body.toLowerCase().trim() === 'admin') {
                         replyText = `राम राम प्रिंस भाई जी! 🙏\nआप बाबा अभय सिंह (मोटी आंगली वाले) के मुख्य चुनाव प्रचारक व डिजिटल सेवा प्रभारी हैं।\nसिहाली खुर्द 2026 का डिजिटल अभियान 24/7 पूरे दम-खम के साथ लाइव है! 🚩\nबताइए भाई जी, आज के प्रचार या सिस्टम में क्या नया अपडेट करना है?`;
@@ -1456,6 +1271,7 @@ const broadcastEngine = new BroadcastEngine({
     getSessions: () => SESSIONS,
     isBlocked: (phone) => (liveSelfTest.ownLineOf([phone]) ? 'own_line' : engagementPolicy.broadcastBlockReason(userMemory.users[phone])),
     isSilenced: (ms) => followupPlanner.inSilencePeriod(new Date(ms)),
+    quietHoursEnabled: () => require('./outbound_settings.js').quietHoursEnabled(),
     getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
     onSent: ({ phone, name, text, line, lineName, media, sent }) => {
         const sess = SESSIONS.find(x => x.id === line);
@@ -2208,6 +2024,16 @@ app.post('/api/broadcast/create', (req, res) => {
         console.error('Error in /api/broadcast/create:', e);
         res.status(500).json({ success: false, error: e.message });
     }
+});
+
+// Outbound rules (owner): proactive outbound default OFF; Bulk Send quiet hours default ON. Stored in outbound_settings.json.
+app.get('/api/settings/outbound', (req, res) => res.json({ success: true, settings: require('./outbound_settings.js').get() }));
+app.post('/api/settings/outbound', (req, res) => {
+    const b = req.body || {};
+    const ch = {};
+    if (b.proactiveOutbound !== undefined) ch.proactiveOutbound = b.proactiveOutbound === true || b.proactiveOutbound === 'true' || b.proactiveOutbound === 'on';
+    if (b.quietHours !== undefined) ch.quietHours = !(b.quietHours === false || b.quietHours === 'false' || b.quietHours === 'off');
+    res.json({ success: true, settings: require('./outbound_settings.js').set(ch) });
 });
 
 app.get('/api/broadcast/status', (req, res) => {
@@ -3839,6 +3665,13 @@ app.get('/', (req, res) => {
 
                         <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
                             <h4 style="margin: 0 0 8px 0;">3️⃣ Lines & Safety Caps</h4>
+                            <div id="outbound-settings" style="border: 1px dashed #94a3b8; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; background: #f8fafc;">
+                                <div style="font-weight: 800; margin-bottom: 4px;">🔒 Outbound rules (saved on the server)</div>
+                                <label style="display: block; margin: 3px 0;"><input type="checkbox" id="ob-proactive" onchange="saveOutboundSettings()"> <b>Proactive outbound</b> (bot starts chats on its own: follow-ups, nudges, consent reminders) — <span id="ob-proactive-state">OFF</span></label>
+                                <label style="display: block; margin: 3px 0;"><input type="checkbox" id="ob-quiet" onchange="saveOutboundSettings()"> <b>Quiet hours for Bulk Send</b> (no bulk sends 21:00–08:00 IST; replies always go) — <span id="ob-quiet-state">ON</span></label>
+                                <div style="color: #64748b;">Replies to incoming messages and the sends you trigger here always work.</div>
+                            </div>
+
                             <div id="bulk-lines" style="font-size: 13px;">Loading lines…</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px;">
                                 <label>Per line / hour <input type="number" id="bulk-hourly" value="60" min="1" max="200" style="width: 60px;"></label>
@@ -5325,6 +5158,19 @@ app.get('/', (req, res) => {
                 var NL = String.fromCharCode(10);
 
                 function el(id) { return document.getElementById(id); }
+                window.renderOutboundSettings = function (d) {
+                    if (!d || !document.getElementById('ob-proactive')) return;
+                    document.getElementById('ob-proactive').checked = !!d.proactiveOutbound;
+                    document.getElementById('ob-quiet').checked = d.quietHours !== false;
+                    document.getElementById('ob-proactive-state').textContent = d.proactiveOutbound ? 'ON' : 'OFF';
+                    document.getElementById('ob-quiet-state').textContent = d.quietHours !== false ? 'ON' : 'OFF';
+                };
+                window.saveOutboundSettings = function () {
+                    var body = { proactiveOutbound: document.getElementById('ob-proactive').checked, quietHours: document.getElementById('ob-quiet').checked };
+                    fetch('/api/settings/outbound', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).then(function (j) { window.renderOutboundSettings(j && j.settings); }).catch(function () {});
+                };
+                fetch('/api/settings/outbound').then(function (r) { return r.json(); }).then(function (j) { window.renderOutboundSettings(j && j.settings); }).catch(function () {});
+
                 function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
                 function setStatus(msg, ok) { var s = el('bulk-action-status'); if (!s) return; s.style.color = ok ? '#16a34a' : '#dc2626'; s.textContent = msg; }
                 function fmtEta(sec) {
@@ -5858,6 +5704,7 @@ app.get('/health', (req, res) => {
         brain: 'v3',
         selfTest: liveSelfTest.isActive() ? 'running' : 'idle',
         silencePeriod: followupPlanner.inSilencePeriod(new Date()),
+        outbound: require('./outbound_settings.js').get(),
         incomingQueue: incomingQueue.status(),
         sessions: SESSIONS.map(s => ({
             id: s.id,
