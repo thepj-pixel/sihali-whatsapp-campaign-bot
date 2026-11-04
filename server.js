@@ -2373,6 +2373,22 @@ function selfTestPinOk(req) {
     const pin = req.headers['x-campaign-pin'] || req.query.pin || (req.body && req.body.pin) || (cookiePin && decodeURIComponent(cookiePin));
     return pin === CAMPAIGN_PIN;
 }
+// POST /api/ai-keys {nvidia_keys?:[..], groq_api_key?, gemini_api_key?} -> writes gitignored api_config.json and hot-reloads (PIN required)
+app.post('/api/ai-keys', (req, res) => {
+    try {
+        const cfgPath = path.join(__dirname, 'api_config.json');
+        let cur = {};
+        try { if (fs.existsSync(cfgPath)) cur = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) || {}; } catch (e) {}
+        const b = req.body || {};
+        if (Array.isArray(b.nvidia_keys)) cur.nvidia_keys = b.nvidia_keys.map(String).map(s => s.trim()).filter(Boolean);
+        if (typeof b.groq_api_key === 'string') cur.groq_api_key = b.groq_api_key.trim();
+        if (typeof b.gemini_api_key === 'string') cur.gemini_api_key = b.gemini_api_key.trim();
+        fs.writeFileSync(cfgPath, JSON.stringify(cur, null, 2), { mode: 0o600 });
+        const providers = aiService.reloadKeys();
+        res.json({ success: true, providers });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/self-test/status', (req, res) => {
     if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
     res.json({ ...liveSelfTest.status(), lines: SESSIONS.map(s => ({ id: s.id, name: s.name, status: s.status })), defaultScript: require('./self_test.js').DEFAULT_SCRIPT });

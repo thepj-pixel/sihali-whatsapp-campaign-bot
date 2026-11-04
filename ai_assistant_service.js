@@ -903,7 +903,16 @@ async function probeProviders() {
     return out;
 }
 
+function reloadKeys() {
+    const fresh = loadApiConfig();
+    CONFIG.nvidia_keys = fresh.nvidia_keys || [];
+    CONFIG.groq_api_key = fresh.groq_api_key || '';
+    CONFIG.gemini_api_key = fresh.gemini_api_key || '';
+    return { nvidia: CONFIG.nvidia_keys.length, groq: !!CONFIG.groq_api_key, gemini: !!CONFIG.gemini_api_key };
+}
+
 module.exports = {
+    reloadKeys,
     getAIResponse,
     getLastBrainResult,
     aiStatus,
