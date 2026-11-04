@@ -841,7 +841,7 @@ function compose(cls, ctx) {
             break;
         default: {
             const words = String(message || '').trim().split(/\s+/).length;
-            if (words <= 6 && !/\?/.test(message) && !/^[^a-z\u0900-\u097F]*$/i.test(message)) {
+            if (!cls.gibberish && words <= 6 && !/\?/.test(message) && !/^[^a-z\u0900-\u097F]*$/i.test(message)) {
                 // a normal short remark we have no rule for: acknowledge like a person, ask one open question at most
                 const r = recall(user, l);
                 needsAdmin = true; return { needsAdmin, text: vary(user, [S(`अच्छा${H} 🙏`, `Achha${H} 🙏`), S(`जी${H}, समझ गई 🙏`, `Ji${H}, samajh gayi 🙏`)]) + (r ? ' ' + r : S(' और बताइए, आपके यहाँ सब ठीक चल रहा है?', ' Aur bataiye, aapke yahan sab theek chal raha hai?')), ask: false, used };
@@ -1067,7 +1067,7 @@ async function respond(message, user = {}, opts = {}) {
     let { text } = t;
     let source = t.flowResult ? 'flow' : 'template';
     let rejected = null;
-    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !cls.person && !cls.news && !cls.insult && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
+    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !cls.person && !cls.news && !cls.insult && !cls.gibberish && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));

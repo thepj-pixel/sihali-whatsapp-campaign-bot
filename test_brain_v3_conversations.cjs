@@ -699,7 +699,7 @@ REG.push({ name: 'reg-first-messages', turns: [
     { m: 'hi', intent: 'greeting' },
     { m: 'kaun ho tum', intent: 'who_are_you' },
     { m: '❤️', intent: 'emoji_only' },
-    { m: 'asdf qwer zxcv', intent: 'unclear', not: /(denge na\?)/i },
+    { m: 'asdf qwer zxcv', intent: 'unclear', has: ['samajh nahi', 'khulkar'], not: /(denge na\?|koi baat nahi)/i },
     { m: 'who is abhay singh', intent: 'about_baba', has: ['40 saal'] },
     { m: 'what work has been done', intent: 'works', has: ['Jal Jeevan'] },
     { m: 'how are you', intent: 'greeting' }
