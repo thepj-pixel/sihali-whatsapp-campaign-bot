@@ -452,6 +452,51 @@ async function resolveTargetJid(sock, key) {
     return jid;
 }
 
+
+// ---- Admin boot report: tells the campaign admin where the dashboard lives (once per boot) ----
+let adminReportSent = false;
+async function discoverDashboardUrls() {
+    const urls = [];
+    if (PUBLIC_DASHBOARD_URL) urls.push(PUBLIC_DASHBOARD_URL);
+    try {
+        const os = require('os');
+        const logDir = path.join(os.homedir(), '.pm2', 'logs');
+        if (fs.existsSync(logDir)) {
+            const files = fs.readdirSync(logDir).map(f => path.join(logDir, f))
+                .filter(f => fs.statSync(f).mtimeMs > Date.now() - 7 * 864e5)
+                .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+            for (const f of files) {
+                const txt = fs.readFileSync(f, 'utf8').slice(-200000);
+                const m = txt.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/g);
+                if (m && m.length) { urls.push(m[m.length - 1]); break; }
+            }
+        }
+    } catch (e) {}
+    try {
+        const r = await fetch('https://api.ipify.org', { signal: AbortSignal.timeout(5000) });
+        const ip = (await r.text()).trim();
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) urls.push(`http://${ip}`, `http://${ip}:${PORT}`);
+    } catch (e) {}
+    return [...new Set(urls)];
+}
+
+async function sendAdminBootReport(sessionObj) {
+    if (adminReportSent || process.env.ADMIN_BOOT_REPORT === 'off') return;
+    const admin = String(process.env.ADMIN_PHONE || '917976410227').replace(/\D/g, '');
+    if (!admin) return;
+    adminReportSent = true;
+    await new Promise(r => setTimeout(r, 8000));
+    let commit = '';
+    try { commit = require('child_process').execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim(); } catch (e) {}
+    const urls = await discoverDashboardUrls();
+    const lines = SESSIONS.map(s => `${s.status === 'CONNECTED' ? '🟢' : '🔴'} ${s.name}`).join('\n');
+    const text = `🤖 Campaign bot online${commit ? ' (v ' + commit + ')' : ''}\n\nDashboard:\n${urls.length ? urls.join('\n') : '(URL not detected)'}\n\nLines:\n${lines}`;
+    try {
+        await sessionObj.sock.sendMessage(`${admin}@s.whatsapp.net`, { text });
+        console.log('[AdminReport] Sent boot report to admin');
+    } catch (e) { adminReportSent = false; throw e; }
+}
+
 // Start a WhatsApp Session
 async function startSession(sessionObj) {
     if (sessionObj.reconnectTimer) {
@@ -527,6 +572,7 @@ async function startSession(sessionObj) {
             sessionObj.status = 'CONNECTED';
             sessionObj.qr = null;
             console.log(`[${sessionObj.id}] ✅ WhatsApp Connected & Healthy!`);
+            sendAdminBootReport(sessionObj).catch(e => console.warn('[AdminReport]', e.message));
         }
     });
 
