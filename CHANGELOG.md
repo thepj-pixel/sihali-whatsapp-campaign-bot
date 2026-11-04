@@ -7,6 +7,7 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ### Added
 
+- Portable agent-takeover guide and environment template for clean repository transfers.
 - Seven-section dashboard smoke coverage, dashboard-only test mode, and CRM filtering by WhatsApp line.
 - One-click `.txt`, `.md`, `.json`, or `.csv` verified-facts import with replace/append modes.
 - Exact-name voter matching metadata for imported VCF/CSV contacts.
