@@ -104,6 +104,8 @@ class ScheduledCampaigns {
         this.ownLineOf = o.ownLineOf || (() => null);
         this.getAssignedLine = o.getAssignedLine || (() => null);
         this.isSilenced = o.isSilenced || (() => false);
+        // own-line TEST campaigns wait while a Live Self-Test runs between our lines (never pollute its transcript)
+        this.isTestBusy = o.isTestBusy || (() => false);
         this.onSent = o.onSent || (() => {});
         this.now = o.now || (() => Date.now());
         this.random = o.random || Math.random;
@@ -342,6 +344,7 @@ class ScheduledCampaigns {
                 for (const c of active) {
                     if (c.status !== 'running' || !c.lines.includes(s.id)) continue;
                     if (silenced && !c.test) { c.waitingReason = 'silence_period'; continue; }
+                    if (c.test && this.isTestBusy()) { c.waitingReason = 'self_test_running'; continue; }
                     if (c.quietHours && inQuietHours(now, { quietStartHour: 21, quietEndHour: 8 })) { c.waitingReason = 'quiet_hours'; continue; }
                     const use = this.lineUsage(s.id);
                     if (use.day >= c.caps.dailyCap) { c.waitingReason = 'daily_cap'; continue; }

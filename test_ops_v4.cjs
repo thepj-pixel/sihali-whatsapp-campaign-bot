@@ -274,6 +274,18 @@ function seq(seed = 7) { let x = seed; return () => { x = (x * 16807) % 21474836
         for (let i = 0; i < 200; i++) { await Promise.all(await sc.tick()); clock += 3000; }
         assert.strictEqual(sc.counts(c).sent, 2);
     });
+    await t('test campaign waits while a Live Self-Test is running', async () => {
+        clock += 3 * 3600e3;
+        let busy = true;
+        sc.isTestBusy = () => busy;
+        const r = sc.create({ test: true, recipients: [{ phone: '14502790497', line: 'sim_636' }], messages: 'x', startInMinutes: 0, durationMinutes: 2, lines: ['sim_636'] });
+        for (let i = 0; i < 30; i++) { await Promise.all(await sc.tick()); clock += 3000; }
+        assert.strictEqual(sc.counts(sc.get(r.campaign.id)).sent, 0);
+        assert.strictEqual(sc.get(r.campaign.id).waitingReason, 'self_test_running');
+        busy = false;
+        for (let i = 0; i < 30; i++) { await Promise.all(await sc.tick()); clock += 3000; }
+        assert.strictEqual(sc.counts(sc.get(r.campaign.id)).sent, 1);
+    });
     await t('agenda slot window + preview hides full numbers', () => {
         const p = sc.preview({ phones: '9810000601\n9810000602', messages: 'hi', preset: 'evening', date: new Date(clock + 86400e3).toISOString().slice(0, 10), lines: ['sim_636'] });
         assert.ok(p.ok, JSON.stringify(p));

@@ -22,6 +22,7 @@ function install(app, d) {
         isBlocked: (phone) => (liveSelfTest.ownLineOf([phone]) ? 'own_line' : engagementPolicy.broadcastBlockReason(userMemory.users[phone])),
         isVirodhi: (phone) => contactTags.isVirodhi(phone) || !!(userMemory.users[phone] && userMemory.users[phone].virodhi === true),
         ownLineOf: (phone) => liveSelfTest.ownLineOf([phone]),
+        isTestBusy: () => { try { return liveSelfTest.isActive(); } catch (e) { return false; } },
         getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
         isSilenced: (ms) => { try { return followupPlanner.inSilencePeriod(new Date(ms)); } catch (e) { return false; } },
         onSent: (info) => {
