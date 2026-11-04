@@ -507,7 +507,7 @@ async function discoverDashboardUrls() {
 }
 
 async function sendAdminBootReport(sessionObj) {
-    if (adminReportSent || process.env.ADMIN_BOOT_REPORT === 'off') return;
+    if (adminReportSent || process.env.ADMIN_BOOT_REPORT !== 'on') return; // off by default: owner wants no WhatsApp pings
     const admin = String(process.env.ADMIN_PHONE || '917976410227').replace(/\D/g, '');
     if (!admin) return;
     adminReportSent = true;
