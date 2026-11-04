@@ -8,7 +8,7 @@ This document is the current technical handoff for the WhatsApp campaign bot. It
 - Runtime: Node.js, Express, Baileys, PM2, and Nginx
 - Main entry point: `server.js`
 - Dashboard port inside the VM: `3000`
-- Dashboard PIN: `CAMPAIGN_PIN` environment variable; application fallback is `2026`
+- Dashboard PIN: `CAMPAIGN_PIN` environment variable; a built-in fallback is used if unset
 - Permanent address: `PUBLIC_DASHBOARD_URL`; Nginx proxies port 80/443 to `127.0.0.1:3000`
 - Voter database: `voters_cleaned.json`, containing 3,636 records
 - Updated verified facts: `campaign_profile.json`

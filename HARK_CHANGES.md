@@ -13,7 +13,7 @@ git push origin codex/production-readiness main           # the VM picks this up
 Do these on the VM once, **before** the update lands:
 
 1. **Rotate both NVIDIA keys.** The old keys are still in Git history and in every clone. Put the new keys in `api_config.json` (already gitignored, and it keeps working) or in `NVIDIA_API_KEYS=key1,key2` in PM2.
-2. Change `CAMPAIGN_PIN` from `2026`.
+2. Set `CAMPAIGN_PIN` on the VM if you want a PIN other than the built-in one.
 3. After the update: `pm2 restart whatsapp-bot --update-env`, then `curl localhost:3000/health`. The health output now includes `incomingQueue`.
 
 ## What changed

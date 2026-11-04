@@ -60,7 +60,7 @@ PUBLIC_DASHBOARD_URL=http://YOUR_DOMAIN DEPLOY_BRANCH=codex/production-readiness
 pm2 save
 ```
 
-Open the permanent domain and enter the `CAMPAIGN_PIN` configured for the PM2 process. If no custom value is configured, the application fallback is `2026`. The dashboard remains PIN-protected; no temporary tunnel process is required.
+Open the permanent domain and enter the `CAMPAIGN_PIN` configured for the PM2 process. If no custom value is configured, the built-in fallback PIN is used. The dashboard remains PIN-protected; no temporary tunnel process is required.
 
 `sessions_auth/`, `user_memory.json`, `campaign_runtime.json`, and the operational logs are Git-ignored, so switching branches does not delete the VM's WhatsApp sessions or conversation state.
 
