@@ -23,3 +23,8 @@ samasya_log.json.tmp
 mulaqat_requests.json
 mulaqat_requests.json.tmp
 outbound_settings.json
+contact_tags.json
+contact_tags.json.tmp
+scheduled_campaigns.json
+scheduled_campaigns.json.tmp
+scheduled_campaigns.json.corrupt-*

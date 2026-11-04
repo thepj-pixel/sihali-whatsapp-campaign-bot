@@ -1087,6 +1087,7 @@ function think(message, user, opts = {}, memoryDone = false) {
             if (closer) text += ' ' + closer;
         }
     }
+    if (require('./contact_tags.js').isVirodhiUser(user)) text = require('./contact_tags.js').gentle(text, l); // विरोधी: gentle mode, no vote asks
     return { text, pendingQ, cls, stage, previousStage, ctx, c, flowResult: fr, l, person, hon };
 }
 

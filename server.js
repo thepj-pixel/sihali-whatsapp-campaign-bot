@@ -1119,9 +1119,8 @@ async function startSession(sessionObj) {
                     const userMsgCount = (u.history || []).filter(h => h.role === 'user').length;
 
                     // Send on interaction 1, 2, or 3 if not already sent
-                    if (engagementPolicy.shouldSendContactCard(u, userMsgCount)) {
-                        u.contactCardSent = true;
-                        u.contactCardSentAt = new Date().toISOString();
+                    if (contactCard.needsCard(u, sessionObj.id) && userMsgCount >= 1) {
+                        contactCard.markSent(u, sessionObj.id);
                         userMemory.save();
 
                         setTimeout(async () => {
@@ -1252,11 +1251,11 @@ function autoSaveContact({ phone, name, pushName, lineId, sock, jid, source }) {
 }
 
 /** Send this line's contact card + "please save" line exactly once per person. */
+const contactCard = require('./contact_card.js');
 async function sendLineContactCardOnce(sock, jid, phone, sessionObj) {
     const u = userMemory.getUser(phone);
-    if (!u || u.contactCardSent || u.broadcastOptOut || u.consentStatus === 'REJECTED') return false;
-    u.contactCardSent = true;
-    u.contactCardSentAt = new Date().toISOString();
+    if (!u || !contactCard.needsCard(u, sessionObj.id)) return false; // once per contact PER LINE (contact_card.js)
+    contactCard.markSent(u, sessionObj.id);
     userMemory.save();
     try {
         await new Promise(r => setTimeout(r, 1200 + Math.random() * 1500));
@@ -1452,11 +1451,18 @@ app.post('/api/send-message', async (req, res) => {
             template: template || 'custom'
         });
 
+        // Operator single-send: attach this line's contact card once (per contact per line) if they don't have it yet
+        let contactCardQueued = false;
+        if (!(targetUser.broadcastOptOut) && contactCard.needsCard(targetUser, active.session.id)) {
+            contactCardQueued = true;
+            sendLineContactCardOnce(sock, jid, cleanedPhone, active.session).catch(() => {});
+        }
         res.json({
             success: true,
             phone: cleanedPhone,
             line: sessionName,
-            message: messageText
+            message: messageText,
+            contactCardQueued
         });
     } catch (err) {
         console.error('Error in /api/send-message:', err);
@@ -2238,7 +2244,7 @@ app.get('/api/self-test/status', (req, res) => {
 app.post('/api/self-test/start', (req, res) => {
     if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
     try {
-        const st = liveSelfTest.start({ testerLine: req.body.testerLine, targetLine: req.body.targetLine, script: req.body.script && String(req.body.script).trim() ? req.body.script : null });
+        const st = liveSelfTest.start({ testerLine: req.body.testerLine, targetLine: req.body.targetLine, script: req.body.script && String(req.body.script).trim() ? req.body.script : null, freshContact: req.body.freshContact === true });
         operationsTracker.record('self_test', 'started', { lineId: req.body.targetLine });
         res.json({ success: true, ...st });
     } catch (e) {
@@ -2315,6 +2321,9 @@ app.post('/api/mulaqat/delete', (req, res) => {
     const ok = mulaqatStore.remove(String((req.body || {}).id || ''));
     res.json({ success: ok });
 });
+// ==================== OPS v4: Overview / विरोधी list / Scheduled bulk (logic in ops_routes.js) ====================
+const opsRoutes = require('./ops_routes.js');
+const ops = opsRoutes.install(app, { SESSIONS, broadcastEngine, userMemory, liveSelfTest, engagementPolicy, followupPlanner, contactsManager, samasyaStore, mulaqatStore, campaignAgenda, replyBrain, logMessage, onBulkSent: (info) => broadcastEngine.onSent(info), dailyIstDate: () => dailyGoal.currentIstDate(), resolveAudience: resolveBroadcastAudience });
 /** Removes every samasya/mulaqat record created by a Live Self-Test (flag test=true). */
 app.post('/api/test-records/cleanup', (req, res) => {
     const s1 = samasyaStore.removeWhere(r => !!r.test);
@@ -2881,7 +2890,7 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-selftest" class="tab-btn" type="button" data-tab="selftest">🧪 Live Self-Test</button>
                     <button id="tab-btn-samasya" class="tab-btn" type="button" data-tab="samasya">📋 Samasya</button>
                     <button id="tab-btn-mulaqat" class="tab-btn" type="button" data-tab="mulaqat">🤝 Mulaqat</button>
-                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>
+                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>${opsRoutes.ui.tabButtons()}
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -3838,7 +3847,7 @@ app.get('/', (req, res) => {
                         <span id="vp-total" style="color:#475569;"></span>
                     </div>
                     <div id="vp-list" style="font-size:12px; margin-top:10px; max-height:640px; overflow:auto;"></div>
-                </div>
+                </div>${opsRoutes.ui.tabPanes()}
             </div>
 
             <!-- Dashboard JavaScript -->
@@ -5702,7 +5711,7 @@ app.get('/', (req, res) => {
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
-            </script>
+            </script>${opsRoutes.ui.script()}
         </body>
         </html>
     `);

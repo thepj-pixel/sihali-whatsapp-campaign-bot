@@ -105,12 +105,17 @@ class LiveSelfTest {
     prepareRecord(phone) {
         if (!this.isActive() || !phone || !this.userMemory) return null;
         const key = this.userMemory.cleanPhone(phone);
+        let fresh = false;
         if (!this.run.preparedKeys.includes(key)) {
             delete this.userMemory.users[key];
             this.run.preparedKeys.push(key);
+            fresh = true;
         }
         const u = this.userMemory.getUser(key);
+        if (this.run.freshContact && !fresh) { Object.assign(u, { selfTest: this.run.id, autoPilot: true }); return u; }
         Object.assign(u, { consented: true, consentStatus: 'ACCEPTED', autoPilot: true, contactCardSent: true, selfTest: this.run.id, assignedLine: this.run.targetLine, broadcastOptOut: false, languagePreference: 'auto', name: u.name || '' });
+        // freshContact: behave exactly like a brand-new number (consent prompt + this line's contact card on the first reply)
+        if (this.run.freshContact && fresh) Object.assign(u, { consented: null, consentStatus: 'PENDING', contactCardSent: false, contactCardLines: {} });
         return u;
     }
 
@@ -128,7 +133,7 @@ class LiveSelfTest {
         return r ? { id: r.id, status: r.status, testerLine: r.testerLine, targetLine: r.targetLine, startedAt: r.startedAt, endedAt: r.endedAt, turn: r.turns.length, total: r.script.length, passed: r.passed, failed: r.failed, error: r.error || null, turns: r.turns } : { status: 'idle' };
     }
 
-    start({ testerLine, targetLine, script, replyTimeoutMs = 60000, settleMs = 5000, gapMs = 4000 } = {}) {
+    start({ testerLine, targetLine, script, replyTimeoutMs = 60000, settleMs = 5000, gapMs = 4000, freshContact = false } = {}) {
         if (this.isActive()) throw new Error('A self-test is already running');
         if (!testerLine || !targetLine || testerLine === targetLine) throw new Error('Pick two different lines (tester and target)');
         const sessions = this.getSessions() || [];
@@ -141,7 +146,7 @@ class LiveSelfTest {
         const steps = normalizeScript(script);
         if (!steps.length) throw new Error('Script is empty');
         const id = 'st_' + new Date(this.now()).toISOString().replace(/[-:T]/g, '').slice(0, 14) + '_' + Math.random().toString(36).slice(2, 6);
-        this.run = { id, status: 'running', testerLine, targetLine, targetJid: targetNumber + '@s.whatsapp.net', script: steps, turns: [], startedAt: new Date(this.now()).toISOString(), endedAt: null, passed: 0, failed: 0, preparedKeys: [], config: { replyTimeoutMs, settleMs, gapMs } };
+        this.run = { id, status: 'running', testerLine, targetLine, targetJid: targetNumber + '@s.whatsapp.net', script: steps, turns: [], startedAt: new Date(this.now()).toISOString(), endedAt: null, passed: 0, failed: 0, preparedKeys: [], freshContact: !!freshContact, config: { replyTimeoutMs, settleMs, gapMs } };
         // pre-reset the tester's phone record (target side sees it under this key unless WhatsApp uses a LID)
         for (const k of this.identitiesFor(testerLine)) if (k.length >= 10) this.prepareRecord(k);
         this._loop().catch(e => { this.run.status = 'error'; this.run.error = e.message; this._finish(); });
