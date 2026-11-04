@@ -118,22 +118,6 @@ app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ limit: '60mb', extended: true }));
 app.use('/media', express.static(path.join(__dirname, 'media')));
 
-// Endpoints to view registered complaints & ground intel
-app.get('/api/baba-register', (req, res) => {
-    const regFile = path.join(__dirname, 'baba_direct_register.json');
-    if (fs.existsSync(regFile)) {
-        try { return res.json(JSON.parse(fs.readFileSync(regFile, 'utf8'))); } catch(e) {}
-    }
-    res.json([]);
-});
-
-app.get('/api/ground-intel', (req, res) => {
-    const intelFile = path.join(__dirname, 'ground_intelligence_feed.json');
-    if (fs.existsSync(intelFile)) {
-        try { return res.json(JSON.parse(fs.readFileSync(intelFile, 'utf8'))); } catch(e) {}
-    }
-    res.json([]);
-});
 
 
 const PORT = process.env.PORT || 3000;
@@ -277,6 +261,24 @@ app.use((req, res, next) => {
         </body>
         </html>
     `);
+});
+
+// (moved below the PIN gate so complaint/intel data is no longer public)
+// Endpoints to view registered complaints & ground intel
+app.get('/api/baba-register', (req, res) => {
+    const regFile = path.join(__dirname, 'baba_direct_register.json');
+    if (fs.existsSync(regFile)) {
+        try { return res.json(JSON.parse(fs.readFileSync(regFile, 'utf8'))); } catch(e) {}
+    }
+    res.json([]);
+});
+
+app.get('/api/ground-intel', (req, res) => {
+    const intelFile = path.join(__dirname, 'ground_intelligence_feed.json');
+    if (fs.existsSync(intelFile)) {
+        try { return res.json(JSON.parse(fs.readFileSync(intelFile, 'utf8'))); } catch(e) {}
+    }
+    res.json([]);
 });
 
 // Incoming message queue (volume: 200+ simultaneous chats)
@@ -3545,6 +3547,10 @@ app.get('/', (req, res) => {
                             <h4 style="margin: 0 0 8px 0;">2️⃣ Message</h4>
                             <textarea id="bulk-message" rows="6" style="width: 100%; box-sizing: border-box; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="{राम राम|नमस्ते} {name}! 🙏 ..."></textarea>
                             <div style="font-size: 11px; color: #64748b;">{name} = recipient name • {राम राम|नमस्ते} = random choice per person, so no two messages are identical.</div>
+                            <div style="margin-top: 8px; font-size: 12px;">
+                                <label style="font-weight: 700;">🗓️ Fill from today's agenda slot:</label>
+                                <select id="bulk-agenda-slot" style="font-size: 12px; padding: 3px;"><option value="">—</option><option value="morning">🌅 सुबह</option><option value="dopahar">☀️ दोपहर</option><option value="evening">🌇 शाम</option><option value="night">🌙 रात</option></select>
+                            </div>
                             <div style="margin-top: 8px;">
                                 <label style="font-size: 12px; font-weight: 700;">🖼️ Media (optional):</label>
                                 <select id="bulk-media" style="font-size: 12px; padding: 4px; max-width: 220px;"><option value="">— text only —</option></select>
@@ -5131,6 +5137,21 @@ app.get('/', (req, res) => {
                     el('bulk-message').addEventListener('input', schedulePreview);
                     el('bulk-phones').addEventListener('input', schedulePreview);
                     el('bulk-use-contacts').addEventListener('change', schedulePreview);
+                    el('bulk-agenda-slot').addEventListener('change', function () {
+                        var slot = this.value;
+                        if (!slot) return;
+                        fetch('/api/agenda/day').then(function (r) { return r.json(); }).then(function (d) {
+                            var item = d.merged && d.merged.dailySchedule && d.merged.dailySchedule[slot];
+                            if (!item) return;
+                            if (item.hook) el('bulk-message').value = item.hook;
+                            if (item.mediaFile) {
+                                var sel = el('bulk-media');
+                                if (!Array.prototype.some.call(sel.options, function (o) { return o.value === item.mediaFile; })) { var o = document.createElement('option'); o.value = item.mediaFile; o.textContent = item.mediaFile; sel.appendChild(o); }
+                                sel.value = item.mediaFile;
+                            }
+                            schedulePreview();
+                        });
+                    });
                     el('export-source').addEventListener('change', function () {
                         var b = this.value === 'broadcast';
                         el('export-broadcast-filters').style.display = b ? 'inline' : 'none';

@@ -5,7 +5,14 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ## Unreleased
 
-### Added
+### Added (Hark, 2026-11-04 — branch hark/production-ready, see HARK_CHANGES.md)
+
+- Security: hardcoded NVIDIA keys removed; keys load from env / `.env` / gitignored `api_config.json` (`api_keys.js`). Complaint register and ground-intel APIs now behind the PIN.
+- Bulk Send tab + `broadcast_engine.js`: safe multi-line broadcasts (onWhatsApp check, 20-60s random delay, hourly/daily caps, quiet hours, spintax, typing presence, auto-pause, crash-safe resume, STOP opt-out, sticky lines).
+- Contacts: manual paste, flexible CSV (phone/mobile/number, name, ward, village), dialer/IVR CSV export, per-line VCF, auto-save of every new number, WhatsApp address-book sync.
+- Reply brain (`reply_brain.js`): intent classification, verified-fact grounded replies, persuasion stage tracking, gender/age honorifics, validated LLM phrasing with a time budget.
+- Incoming `ChatQueue`: per-chat serialization, global concurrency limit, duplicate suppression, job timeout.
+- Media Bank one-click upload (image/video/PDF), per-day agenda with slot media, daily goal live progress (per line/ward, stage changes) and night summary.
 
 - Portable agent-takeover guide and environment template for clean repository transfers.
 - Seven-section dashboard smoke coverage, dashboard-only test mode, and CRM filtering by WhatsApp line.
