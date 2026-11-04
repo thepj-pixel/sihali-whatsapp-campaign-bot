@@ -11,6 +11,8 @@ const path = require('path');
 const fs = require('fs');
 process.env.SAMASYA_PATH = path.join(os.tmpdir(), `v3_samasya_${process.pid}.json`);
 process.env.MULAQAT_PATH = path.join(os.tmpdir(), `v3_mulaqat_${process.pid}.json`);
+process.env.OUTBOUND_SETTINGS_PATH = path.join(os.tmpdir(), `v3_outbound_${process.pid}.json`);
+delete process.env.PROACTIVE_OUTBOUND;
 const userMemory = require('./user_memory.js');
 userMemory.save = () => {};
 const brain = require('./reply_brain.js');
@@ -664,6 +666,53 @@ REG.push({ name: 'reg-devanagari-works', turns: [
     { m: 'तुम लोग चुनाव में ही याद करते हो', intent: 'grievance' },
     { m: 'ठीक है' }
 ] });
+// ---- v4: the owner's live test from 917976410227 (4 Nov 2026 night) ----
+const opener = t => replyQuality.normalize(String(t || '')).slice(0, 18);
+REG.push({ name: 'reg-owner-transcript', turns: [
+    { m: 'Kaam bata saara ka saara', intent: 'works', hasAll: ['Jal Jeevan', 'library', 'swasthya'], not: /(ghar-gaon me sab theek|samajh gayi)/i },
+    { m: 'Elon Musk kon h', intent: 'off_topic', has: ['Sihali Khurd', 'gaon'], not: /(Moti Aangli|pratyashi hain)/i },
+    { m: 'Aree aur batao..mark zuckerberg kie news batao', intent: 'off_topic', not: /(Moti Aangli)/i },
+    { m: 'Kutta abhay Singh', intent: 'abuse', has: ['naraaz', 'gusse', 'samman', 'bhavna'], not: /(kutta|kutte|parchi, booth ya gaon)/i },
+    { m: 'Kha gaya saare paise', intent: 'corruption', hasAll: ['40 saal'], has: ['zameen', 'saamne', 'khud dekh'], not: /(\d{3,}|aankde|samajh li\. Koi naya sawal)/i },
+    { m: 'Kis baat pe bhi nahi bekar h abhay singh', intent: 'taunt', not: /(bekar|chor)/i },
+    { m: 'Are chup bekar aadmi h vo', intent: 'taunt', not: /(Sawal poochna aapka haq|bekar)/i },
+    { m: 'Ward no 3 me sadak tuti padi h', intent: 'complaint' },
+    { m: '3 saal se49 baar bol diya sarpanch ko', has: ['darj'] }
+], after: (u, rs) => {
+    const neg = rs.slice(3, 7).map(x => opener(x.reply));
+    check('[owner] four negative replies all open differently', new Set(neg).size === neg.length);
+    check('[owner] road complaint logged with ward 3 + since', (() => { const r = recs(u, samasya)[0] || {}; return r.category && r.ward === 3 && /3 saal/.test(r.since || ''); })());
+} });
+REG.push({ name: 'reg-abuse-variants', turns: [
+    { m: 'kutte', intent: 'abuse' },
+    { m: 'harami log ho tum sab', intent: 'abuse' },
+    { m: 'bsdk', intent: 'abuse' },
+    { m: 'chor hai abhay singh', intent: 'taunt', not: /chor/i },
+    { m: 'ghotala kiya hai panchayat me', intent: 'corruption' },
+    { m: 'nalayak', intent: 'abuse' }
+], after: (u, rs) => {
+    const ops = rs.map(x => opener(x.reply));
+    check('[abuse-variants] no opener repeated back-to-back', ops.every((o, i) => i === 0 || o !== ops[i - 1]));
+    check('[abuse-variants] never counter-abuse', rs.every(x => !/(kutt|harami|bsdk|nalayak|chor hai|tum log hi)/i.test(x.reply)));
+} });
+REG.push({ name: 'reg-first-messages', turns: [
+    { m: 'hi', intent: 'greeting' },
+    { m: 'kaun ho tum', intent: 'who_are_you' },
+    { m: '❤️', intent: 'emoji_only' },
+    { m: 'asdf qwer zxcv', intent: 'unclear', not: /(denge na\?)/i },
+    { m: 'who is abhay singh', intent: 'about_baba', has: ['40 saal'] },
+    { m: 'what work has been done', intent: 'works', has: ['Jal Jeevan'] },
+    { m: 'how are you', intent: 'greeting' }
+] });
+REG.push({ name: 'reg-devanagari-negative', turns: [
+    { m: 'सारे काम बताओ', intent: 'works', hasAll: ['जल जीवन', 'लाइब्रेरी'] },
+    { m: 'कुत्ता है अभय सिंह', intent: 'abuse', not: /कुत्त/ },
+    { m: 'सारे पैसे खा गया', intent: 'corruption', has: ['40 साल'] },
+    { m: 'बेकार आदमी है वो', intent: 'taunt', not: /बेकार/ },
+    { m: 'चुप कर', intent: 'taunt' },
+    { m: 'ठीक है' }
+], after: (u, rs) => { const ops = rs.slice(1, 5).map(x => opener(x.reply)); check('[devanagari-negative] openers vary', new Set(ops).size === ops.length); } });
+
 for (const r of REG) {
     C.push({ ...r, name: r.name + '-nollm' });
     C.push({ ...r, name: r.name + '-stubllm', llm: stubLLM, after: async (u, rs) => { if (r.after) await r.after(u, rs); } });
@@ -710,11 +759,66 @@ function unitChecks() {
     check('[server] 401 message does not print the PIN', !/Enter PIN 2026/.test(src));
     check('[server] slip search is skipped while a samasya/mulaqat flow is open', /inBrainFlow/.test(src));
     check('[server] no election-symbol claim in templates', !/स्वस्तिक \(卐\) पर मुहर/.test(src));
+    // ---- v4: slip flow (owner transcript) ----
+    const sf = require('./slip_flow.js');
+    check('[slip] choiceIndex: 1, 1️⃣, pehla, "no 2", "2 number", dusra', sf.choiceIndex('1', 2) === 0 && sf.choiceIndex('1️⃣', 2) === 0 && sf.choiceIndex('pehla', 2) === 0 && sf.choiceIndex('no 2', 3) === 1 && sf.choiceIndex('2 number', 3) === 1 && sf.choiceIndex('dusra', 3) === 1 && sf.choiceIndex('7', 3) === -1);
+    check('[slip] nameQuery strips filler', sf.nameQuery('Haa Krishan Kumar naam h mera') === 'Krishan Kumar' && sf.nameQuery('Arre meri voter parchi bhejo naa') === '');
+    const ku = { history: [], ward: 3, memory: {} };
+    const step = (m, o = {}) => { ku.history.push({ role: 'user', text: m }); const r = sf.decide(m, ku, o); ku.history.push({ role: 'bot', text: r ? (r.text || 'पर्ची: ' + (r.voter && r.voter.name_hi)) : 'x' }); return r; };
+    const s1 = step('meri parchi chahiye');
+    check('[slip] parchi ask without a name asks for the name', s1 && s1.kind === 'ask_name');
+    const s2 = step('Haa Krishan Kumar naam h mera');
+    check('[slip] "Krishan Kumar" matches the full name कृष्ण कुमार (not bare कृष्ण), ward 3 from a complaint is no filter', s2 && s2.kind === 'choose' && s2.matches.every(v => /कृष्ण कुमार/.test(v.name_hi)) && !s2.matches.some(v => v.name_hi === 'कृष्ण'));
+    const s3 = step('1');
+    check('[slip] "1" selects option 1 and delivers that slip (never read as a ward)', s3 && s3.kind === 'deliver' && s3.voter.name_hi === s2.matches[0].name_hi && !ku.disambiguationMatches);
+    const s4 = step('Arre meri voter parchi bhejo naa');
+    check('[slip] later "meri parchi bhejo" reuses the found voter', s4 && s4.kind === 'deliver' && s4.voter.name_hi === s3.voter.name_hi);
+    const s5 = step('Arre Maine abhi bataya naa');
+    check('[slip] "maine abhi bataya" recalls the name instead of drifting', s5 && s5.kind === 'recall' && s5.text.includes(s3.voter.name_hi) && !/(sadak|सड़क)/.test(s5.text));
+    const k2 = { history: [], memory: {} };
+    const t1 = (k2.history.push({ role: 'user', text: 'Krishan Kumar parchi' }), sf.decide('Krishan Kumar parchi', k2, {}));
+    k2.history.push({ role: 'bot', text: t1.text });
+    const t2 = sf.decide('Arre Maine abhi bataya naa', k2, {});
+    check('[slip] "maine abhi bataya" with a list pending re-shows the list', t2 && t2.kind === 'choose');
+    const t3 = sf.decide('pehla', k2, {});
+    check('[slip] "pehla" picks option 1', t3 && t3.kind === 'deliver');
+    const k3 = { history: [], memory: { name: 'Krishan Kumar' } };
+    const r3 = sf.decide('meri voter slip bhej do', k3, {});
+    check('[slip] parchi ask reuses the name remembered from an earlier intro', r3 && r3.kind === 'choose');
+    const k4 = { history: [], memory: {} };
+    const single = sf.decide('Ramesh Yadav parchi', k4, {});
+    check('[slip] single match asks the father/husband confirmation first (privacy rule kept)', single && single.kind === 'confirm' && /हाँ/.test(single.text));
+    k4.history.push({ role: 'bot', text: single.text });
+    check('[slip] "haan" after the confirmation delivers', (sf.decide('haan', k4, {}) || {}).kind === 'deliver');
+    check('[slip] abuse/candidate/news never trigger a slip search', ['Kutta abhay Singh', 'Elon Musk kon h', 'Kha gaya saare paise', 'who is abhay singh'].every(m => sf.decide(m, { history: [], memory: {} }, { slipIntent: true }) === null));
+    // ---- v4: owner rule — no automatic outbound by default ----
+    const ob = require('./outbound_settings.js');
+    const saved = process.env.OUTBOUND_SETTINGS_PATH;
+    ob._reset();
+    check('[outbound] defaults: proactive OFF, quiet hours ON', ob.get().proactiveOutbound === false && ob.get().quietHours === true && !saved.includes('outbound_settings.json'));
+    check('[server] proactive runner gated by the outbound toggle', /if \(!require\('\.\/outbound_settings\.js'\)\.proactiveEnabled\(\)\) return \{ disabled: true \};/.test(src));
+    check('[server] admin boot report stays opt-in', /process\.env\.ADMIN_BOOT_REPORT !== 'on'/.test(src));
+    check('[server] outbound settings API + dashboard toggle', /\/api\/settings\/outbound/.test(src) && /id="ob-proactive"/.test(src) && /id="ob-quiet"/.test(src));
+    check('[broadcast] quiet hours obey the dashboard toggle', /this\.quietHoursEnabled\(\) && inQuietHours\(now, c\.caps\)/.test(fs.readFileSync(path.join(__dirname, 'broadcast_engine.js'), 'utf8')));
     check('[poster] no symbol claim on posters', !/चुनाव चिन्ह: 卐|卐 स्वस्तिक/.test(fs.readFileSync(path.join(__dirname, 'poster_engine.js'), 'utf8')));
 }
 
 (async () => {
     unitChecks();
+    // owner rule: with default settings, the 15-min proactive timer path sends nothing
+    {
+        const sent = [];
+        const pu = freshUser({ consented: true, consentStatus: 'ACCEPTED', autoPilot: true, persuasionStage: 'undecided', lastActive: new Date(Date.now() - 2 * 86400e3).toISOString() });
+        pu.memory = pu.memory || {}; pu.history = [{ role: 'user', text: 'paani ki dikkat hai', createdAt: Date.now() - 2 * 86400e3 }];
+        const noon = new Date('2026-11-06T06:30:00Z'); // 12:00 IST, before the silence period
+        const res = await planner.runCycle({ users: [pu], lineId: 'sim_636', now: noon, send: async (x, t) => sent.push(t) });
+        check('[outbound] default planner cycle sends nothing (proactive_off)', res.sent === 0 && res.reason === 'proactive_off' && sent.length === 0);
+        const { BroadcastEngine } = require('./broadcast_engine.js');
+        const be = new BroadcastEngine({ stateFile: path.join(os.tmpdir(), `v3_bc_${process.pid}.json`), getSessions: () => [{ id: 'sim_636', status: 'CONNECTED', sock: { sendMessage: async () => { sent.push('bulk'); return {}; } } }], logger: { log() {}, warn() {}, error() {} } });
+        await be.tick();
+        check('[outbound] broadcast timer with no operator campaign sends nothing', sent.length === 0);
+        try { fs.unlinkSync(path.join(os.tmpdir(), `v3_bc_${process.pid}.json`)); } catch (e) {}
+    }
     let i = 0;
     for (const spec of C) { i++; await runConversation(i, spec); }
     check(`[suite] at least 60 conversations (${C.length})`, C.length >= 60);

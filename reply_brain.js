@@ -94,7 +94,9 @@ const RX = {
     opposed: /(nahi denge|nhi denge|nahi dunga|nahi dungi|vote nahi|vote nhi|kisi aur ko|dusre ko|doosre ko|(dusre|doosre|unke|uske|virodhi|samne wale) ke (saath|sath|supporter)|dusre ka supporter|against|virodh me|नहीं देंगे|नहीं दूंगा|वोट नहीं|किसी और को|दूसरे को|(दूसरे|उनके|उसके|विरोधी|सामने वाले) के साथ|खिलाफ)/i,
     bribe: /(daru|daaru|sharab|botal|bottle|kitna doge|kitne doge|paise doge|paisa doge|paise milenge|paisa milega|paise do|paisa do|note do|kuch (to )?milega|kya milega vote|vote ka kya milega|kuch (to )?doge|पैसे दो|पैसा दो|पैसे दोगे|पैसा दोगे|पैसे मिलेंगे|पैसा मिलेगा|कितना दोगे|कुछ (तो )?मिलेगा|क्या मिलेगा|दारू|शराब|बोतल)/i,
     taunt: /((40 saal|चालीस साल|40 साल|aaj tak|आज तक|5 saal|पाँच साल)[^?]{0,20}(kya kiya|क्या किया)|kuch nahi kiya|kuch nhi kiya|kuchh nahi kiya|jhoot|jhooth|\bchor\b|farji|farzi|dhongi|bekar|bakwas|kaam hi nahi|koi kaam nahi|कुछ नहीं किया|झूठ|चोर|फर्जी|बेकार|बकवास|कोई काम नहीं)/i,
-    abuse: /(\bmc\b|\bbc\b|bhosd|madarc|behenc|bhenc|kutt?e\b|kamine|harami|saala|saale|chutiy|कुत्ते|कमीने|हरामी|साले|भोस|मादर|चुतिय)/i,
+    abuse: /(\bmc\b|\bbc\b|\bmkc\b|bsdk|bhosd|madarc|behenc|bhenc|\bkutt?[aeiy]\b|kutton|kutiya|kamine|kamina|harami|haraami|saala|saale|chutiy|gandu|\blavd|\blaud|\blod[ue]\b|\bsuar\b|suwar|\bgadh[ae]\b|ullu ka|nalayak|naalayak|tatti|कुत्त[ाेी]|कुतिया|कमीन[ेा]|हरामी|साले|साला|भोस|मादर|चुतिय|गांडू|सूअर|गधे|नालायक)/i,
+    corruption: /(kha (gaya|gye|gaye|gya|liya|liye|jayega|jaega)|kha (gaya|gye|gaye) (saare|sare|sab|saara|sara)?\s*(paise|paisa)|(paise|paisa|fund|funds|bajat|budget)\s*(kha|khaa|hadap|dakar|loot|lut)|kha (gaya|gye|gaye) (sab|saara|sare)|hadap (liya|liye|gaya)|ghotal|ghotaal|ghapla|ghaple|bhrasht|bhrashtachar|corrupt|commission khor|kamishan|\bloot (liya|liye|li|gaya|gaye|rahe)|lut (liya|liye)|lootera|lutera|chori (ki|kar|karke)|खा (गया|गए|गये|लिया|लिए)|पैसे खा|पैसा खा|हड़प|घोटाला|घपला|भ्रष्ट|लूट (लिया|लिए|ली|गया)|लुटेरा|कमीशन)/i,
+    insult: /(\bchup\b|chup (kar|kr|reh|raho)|\bbekar\b|bekaar|nikamm|faltu|faltoo|ghatiya|gatiya|wahiyat|\bdhongi\b|jhootha|jhutha|naatak|natak baaz|drama|chamcha|चुप|बेकार|निकम्म|फालतू|फ़ालतू|घटिया|वाहियात|ढोंगी|झूठा|नाटक)/i,
     wrongNumber: /(galat number|galat no|wrong number|wrong no|kaun hai ye|kon hai ye|kaun ho aap\b.*number|kisne (diya|di) (mera )?number|number kahan se|number kaha se|mera number kaise|main (is|us) gaon ka nahi|main yahan ka nahi|गलत नंबर|ये कौन है|नंबर कहाँ से|मेरा नंबर किसने|मैं इस गाँव का नहीं)/i,
     condolence: /(guzar gaye|guzar gayi|gujar gaye|gujar gayi|dehant|dehaant|nahi rahe|nhi rahe|swargwas|swargvas|maut ho|death ho|shant ho gaye|chal base|गुज़र गए|गुजर गए|गुज़र गईं|देहांत|नहीं रहे|स्वर्गवास|मृत्यु|मौत हो|चल बसे|शांत हो गए)/i,
     slip: /(parchi|parchee|voter slip|\bslip\b|\bepic\b|voter id|naam dekh|list me naam|पर्ची|मतदाता सूची|वोटर लिस्ट)/i,
@@ -104,17 +106,18 @@ const RX = {
     meeting: /(milna (hai|chahta|chahti|chahte)|milne (aana|aao|aaiye|aayenge)|mulakat|mulaqat|mulaakat|ghar (aao|aaiye|aana|par aaiye|bulana|bulaana|bula)|ghar pe aao|(abhay singh|baba|unse|un se) (ji )?(se )?(milna|milwa|baat karni|baat karna)|baba se (milna|baat)|मिलना (है|चाहता|चाहती)|मिलने आइए|मुलाकात|मुलाक़ात|घर (आओ|आइए|बुलाना|पर आइए)|(अभय सिंह|बाबा|उनसे)( जी)? ?(से )?(मिलना|मिलवा|बात करनी))/i,
     samasyaExplicit: /(ek (problem|samasya|shikayat|dikkat)|shikayat (darj|likh|karni|karna)|complaint|samasya (batani|bataani|hai)|problem (batani|hai)|meri (shikayat|samasya)|एक (समस्या|शिकायत|दिक्कत|परेशानी)|शिकायत (दर्ज|लिख|करनी)|समस्या (बतानी|है))/i,
     future: /(aage kya|aage ka|sankalp|vaada|vada|wada|kya karoge|kya karenge|plan kya|manifesto|आगे क्या|संकल्प|वादा|क्या करोगे|क्या करेंगे)/i,
+    worksAll: /((kaam|kam|kaary|works?|काम|कार्य)\s*(bata|batao|bataiye|btao|bta|gina|ginao|ginwao|dikhao|list|बता|बताओ|बताइए|गिनाओ|गिना)|(saare|sare|saara|sara|sab|sabhi|poore|pure|all|सारे|सारा|सब|सभी|पूरे)\s*(ke sab\s*)?(kaam|kam|kaary|works?|काम|कार्य)|(kaam|काम)[a-zऀ-ॿ ]{0,12}(saara ka saara|sara ka sara|saare ke saare|सारा का सारा|सारे के सारे)|what (work|works|development)|which works|works done|list of works)/i,
     works: /(kya kaam|kaam kya|kaam kaun|kaun kaun se kaam|काम क्या|ne kya kiya|ne kya karaya|ne kya karwaya|ne kya banwaya|ने क्या किया|ने क्या करवाया|kisne karwa|kisne kiya|kisne banwa|किसने करवा|किसने किया|किसने बनवा|vikas|vikaas|kaam kiya|kaam karwaya|kaam hua|कौन से काम|क्या काम|विकास|काम किया|काम करवाया|काम हुआ)/i,
-    aboutBaba: /(kaun (hai|h|hain)|kon (hai|h)|parichay|baare me batao|bare me batao|abhay singh kaun|candidate kaun|moti aangli|मोटी आंगली|कौन हैं|कौन है|परिचय|के बारे में)/i,
+    aboutBaba: /(who is abhay|about abhay|tell me about (him|abhay|the candidate)|kaun (hai|h|hain)|kon (hai|h)|parichay|baare me batao|bare me batao|abhay singh kaun|candidate kaun|moti aangli|मोटी आंगली|कौन हैं|कौन है|परिचय|के बारे में)/i,
     undecided: /(soch(enge| rahe| rhe|na padega| ke| kar)|sochke|sochkar|dekhenge|dekh lenge|dekhte hain|dekhte hai|tay nahi|tay nhi|abhi pata nahi|decide nahi|faisla nahi|सोचेंगे|सोच रहे|सोचकर|देखेंगे|देखते हैं|तय नहीं|फ़ैसला नहीं)/i,
     positive: /(achha kaam|accha kaam|achha hai|accha hai|acha hai|अच्छा है|badhiya|sahi (hai|h)|bahut achha|achhe aadmi|achhe insaan|imandar|अच्छा काम|बढ़िया|सही है|बहुत अच्छा|अच्छे आदमी|ईमानदार|आशीर्वाद)/i,
     family: /(parivar|ghar (ke|wale)|family|biwi|patni|bete|परिवार|घर के|घरवाले)/i,
     thanks: /^(ok+|okay|thik|theek|thik hai|theek hai|chalo theek hai|chalo thik hai|dhanyavad|dhanyawad|shukriya|thanks|thank you|👍|🙏|ठीक है|चलो ठीक है|धन्यवाद|शुक्रिया|जी)[\s,!.🙏👍]*(beta|bete|bhai|bhaiya|ji|sa|bitiya|bahan|behan|didi|dhanyavad|dhanyawad|shukriya|बेटा|भाई|भैया|जी|बिटिया|बहन|दीदी|धन्यवाद)?[\s!.🙏👍]*$/i,
     greet: /^(ram ram|raam raam|ram-ram|namaste|namaskar|hi+|hello|hlo|hey|jai shri ram|jai shree ram|pranam|radhe radhe|jai hind|good morning|gm\b|khamma ghani|khamma gani|ram ram sa|raam raam sa|padharo|खम्मा घणी|राम राम सा|पधारो|राम राम|राम-राम|नमस्ते|नमस्कार|प्रणाम|जय श्री राम|राधे राधे|जय हिंद)[\s\p{L}\p{M}!.,🙏]{0,24}$/iu,
-    howAreYou: /(kaise ho|kese ho|kaisa hai|kya haal|kya hal|sab badhiya|kya scene|kya scn|kya chal (raha|rha|rahi)|kya khabar|ke haal|kai haal|ke hal sai|kya haal chaal|kaisa chal|कैसे हो|क्या हाल|क्या चल रहा|के हाल|कैसा चल)/i,
-    whoAreYou: /(tum kaun|tum kon|aap kaun ho|ap kaun ho|aap kon ho|kaun bol (raha|rahi|rha|rhi)|kon bol (raha|rahi|rha|rhi)|\bkaun ho\b|\bkon ho\b|bot ho|robot|insaan ho|insan ho|real ho|machine ho|\bai ho|तुम कौन|आप कौन हो|कौन बोल रहा|कौन बोल रही|कौन हो|रोबोट|बॉट हो)/i,
+    howAreYou: /(how are you|how r u|how's it going|kaise ho|kese ho|kaisa hai|kya haal|kya hal|sab badhiya|kya scene|kya scn|kya chal (raha|rha|rahi)|kya khabar|ke haal|kai haal|ke hal sai|kya haal chaal|kaisa chal|कैसे हो|क्या हाल|क्या चल रहा|के हाल|कैसा चल)/i,
+    whoAreYou: /(who are you|who r u|are you (a )?(bot|human|robot)|tum kaun|tum kon|aap kaun ho|ap kaun ho|aap kon ho|kaun bol (raha|rahi|rha|rhi)|kon bol (raha|rahi|rha|rhi)|\bkaun ho\b|\bkon ho\b|bot ho|robot|insaan ho|insan ho|real ho|machine ho|\bai ho|तुम कौन|आप कौन हो|कौन बोल रहा|कौन बोल रही|कौन हो|रोबोट|बॉट हो)/i,
     joke: /(joke|haha|hehe|\blol\b|chutkula|chutkule|mazak|mazaak|majak|hasao|hansao|हँसाओ|हंसाओ|चुटकुला|मज़ाक|मजाक|😂|🤣)/i,
-    offTopic: /(cricket match|match (kaun|kon|kab)|\bipl\b|movie|film|picture (dekh|kab)|gaana|song|modi|rahul gandhi|\bbjp\b|congress|bhajpa|petrol|diesel ka|सिनेमा|आईपीएल|फिल्म|गाना|मोदी|राहुल गांधी|भाजपा|कांग्रेस)/i,
+    offTopic: /(elon|musk|zuckerberg|zukerberg|trump|putin|biden|bill gates|ambani|adani|share market|stock market|bitcoin|crypto|\bnews\b|\bkhabar(en)?\b(?! (hai|h)\b)|world cup|hollywood|bollywood|salman|shahrukh|virat|dhoni|cricket match|match (kaun|kon|kab)|\bipl\b|movie|film|picture (dekh|kab)|gaana|song|modi|rahul gandhi|\bbjp\b|congress|bhajpa|petrol|diesel ka|सिनेमा|आईपीएल|फिल्म|गाना|मोदी|राहुल गांधी|भाजपा|कांग्रेस)/i,
     opponentGeneric: /(virodhi|विरोधी|dusra candidate|doosra candidate|dusre candidate|dusra ummeedwar|dusre ummidwar|samne wala|saamne wala|सामने वाला|दूसरा उम्मीदवार|दूसरे उम्मीदवार|opposition|vipaksh|विपक्ष)/i,
     memoryCheck: /(yaad hai|yaad h\b|yad hai|yaad rakha|याद है|याद रखा|bhool gaye|bhul gaye|भूल गए|maine kya bataya|मैंने क्या बताया|pichli baar (kya|bataya)|पिछली बार)/i,
     wasSarpanch: /((pehle|pahle|पहले|purane|पुराने|already|kabhi)[^?]{0,25}(sarpanch|सरपंच)[^?]{0,15}(the|thi|rahe|reh chuke|रहे|थे|रह चुके|bane)|(sarpanch|सरपंच)\s*(the|thi|rahe|reh chuke|रहे थे|थे|रह चुके|ban chuke))/i,
@@ -199,6 +202,8 @@ function classify(text, user = {}) {
     if (ci) return out(ci.intent, ci);
     if (MEDIA_RX.test(t)) return out('media', { media: t.replace(/[\[\]]/g, '').toLowerCase() });
     if (RX.abuse.test(t)) return out('abuse', { alsoTopic: topic && CONCERN_RX.test(t) });
+    if (RX.corruption.test(t)) return out('corruption');
+    if (/^[\s\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f❤♥]+$/u.test(t) && !/^[\s🙏👍😂🤣]+$/u.test(t)) return out('emoji_only');
     if (RX.bribeOthers.test(t)) return out('bribe_others');
     if (RX.bribe.test(t)) return out('bribe');
     if (RX.wrongNumber.test(t)) return out('wrong_number');
@@ -212,9 +217,12 @@ function classify(text, user = {}) {
     if (mentionsOpponent(t)) return out('opponent', { taunt: RX.taunt.test(t) });
     if (stageOf(user) === 'opposed' && THIRD_PARTY_PRAISE.test(t) && !RX.taunt.test(t)) return out('opponent', { praise: true });
     if (RX.aboutSpecial.test(t)) return out('about_baba', { special: true });
+    if (RX.worksAll.test(t) && !(topic && CONCERN_RX.test(t))) return out('works', { all: !kb.detectTopics(t).length || /(saare|sare|saara|sara|sab|sabhi|all|सारे|सारा|सब|सभी)/i.test(t) });
+    if (RX.offTopic.test(t) && !/(abhay|baba|अभय|बाबा|sihali|सिहाली|panchayat|पंचायत)/i.test(t)) return out('off_topic', { party: /(modi|rahul|bjp|congress|bhajpa|मोदी|राहुल|भाजपा|कांग्रेस)/i.test(t), news: /(news|khabar|ख़बर|खबर)/i.test(t), person: /(elon|musk|zuckerberg|zukerberg|trump|putin|biden|bill gates|ambani|adani|salman|shahrukh|virat|dhoni|kon h|kaun h|kon hai|kaun hai)/i.test(t) });
+    if (/^[a-z ]{2,40}\s+(kon|kaun)\s*(h|hai|he|hain)?\s*\??$/i.test(t) && !/(abhay|baba|moti|aangli|angli|wale|wala|tum|aap|ap|tu|ye|yeh|wo|woh|candidate|pratyashi|sarpanch|neta|mukhiya|mai|main|hum|ham|mera|meri|tera|teri|sihali|hadahedi|haraheri)\b/i.test(t.replace(/\s+(kon|kaun)\b.*$/i, ''))) return out('off_topic', { person: true });
     if (RX.invite.test(t) || (/(aana|aaiye|aaiyega|आना|आइए|आइएगा)/i.test(t) && /(badhai|बधाई|shubhkamna|शुभकामना)/i.test(lastBotText(user)))) return out('invite');
     if (RX.painHealth.test(t) && (/(hospital|aspatal|doctor|daktar|ilaaj|ilaj|dawai|अस्पताल|डॉक्टर|डाक्टर|इलाज|दवाई)/i.test(t) || /(karta|karti|rehta|rehti|hota|hoti|ho raha|करता|करती|रहता|रहती|होता|होती)/i.test(t))) return out('health_concern', { doctor: /(hospital|aspatal|doctor|daktar|ilaaj|ilaj|अस्पताल|डॉक्टर|डाक्टर|इलाज)/i.test(t) });
-    if (RX.taunt.test(t)) return out('taunt');
+    if (RX.taunt.test(t) || (RX.insult.test(t) && !/\?/.test(t) && !topic)) return out('taunt', { insult: RX.insult.test(t) && !/(kya kiya|क्या किया|kuch nahi kiya|kuch nhi kiya)/i.test(t) });
     if (RX.whoAreYou.test(t)) return out('who_are_you');
     if (RX.memoryCheck.test(t)) return out('memory_check');
     if (RX.callReq.test(t)) return out('meeting', { call: true });
@@ -247,6 +255,8 @@ function classify(text, user = {}) {
     if (RX.greet.test(t) || RX.howAreYou.test(t)) return out('greeting', { howAreYou: RX.howAreYou.test(t) });
     const ward = t.match(/(?:ward|वार्ड|w)\s*[:#-]?\s*(\d{1,2})\b/i) || (/^\d{1,2}$/.test(t) ? [null, t] : null);
     if (ward) return out('gave_ward', { ward: Number(ward[1]) });
+    const toks = t.toLowerCase().split(/\s+/).filter(Boolean);
+    if (toks.length >= 2 && toks.every(w => /^[a-z]+$/.test(w)) && toks.filter(w => w.length >= 3 && (!/[aeiouy]/.test(w) || /(asdf|qwer|zxcv|sdfg|hjkl|wert|xcvb|uiop)/.test(w))).length >= Math.ceil(toks.length / 2)) return out('unclear', { gibberish: true });
     if (t.length <= 25 && !/\?/.test(t)) return out('short_reply');
     return out('unclear');
 }
@@ -266,7 +276,7 @@ function nextStage(current, intent) {
     if (intent === 'family_votes') return current === 'opposed' ? current : 'committed';
     if (intent === 'undecided') return current === 'committed' ? 'committed' : 'undecided';
     if (intent === 'positive') return ['committed'].includes(current) ? current : 'leaning';
-    if (current === 'unknown' && ['introduce', 'works', 'future', 'about_baba', 'complaint', 'polling', 'ballot', 'meeting', 'voter_slip', 'taunt', 'opponent', 'was_sarpanch', 'memory_check', 'samasya_explicit', 'topic_mention', 'grievance', 'money_ask', 'bribe_others', 'health_concern'].includes(intent)) return 'undecided';
+    if (current === 'unknown' && ['introduce', 'works', 'future', 'about_baba', 'complaint', 'polling', 'ballot', 'meeting', 'voter_slip', 'taunt', 'opponent', 'was_sarpanch', 'memory_check', 'samasya_explicit', 'topic_mention', 'grievance', 'money_ask', 'bribe_others', 'health_concern', 'corruption'].includes(intent)) return 'undecided';
     return current;
 }
 
@@ -344,6 +354,41 @@ function topicItems(topic, l, user, type = null) {
     return kb.byTopic(topic, { type, exclude: m.toldItems, villages: m.village ? [m.village] : [] });
 }
 
+// ---------------- negative sentiment: varied, calm, never the same opener twice ----------------
+const NEG_POOL = {
+    abuse: [
+        ['आपकी नाराज़गी समझ सकती हूँ{H}। कोई दिक्कत है तो खुलकर बताइए—मैं सीधे अभय सिंह जी तक पहुँचाऊँगी 🙏', 'Aapki naraazgi samajh sakti hoon{H}. Koi dikkat hai to khulkar bataiye—main seedhe Abhay Singh ji tak pahunchaungi 🙏'],
+        ['गुस्से में कही बात का बुरा नहीं मानती{H} 🙏 आराम से बताइए, किस बात से मन दुखा है?', 'Gusse me kahi baat ka bura nahi maanti{H} 🙏 Aaram se bataiye, kis baat se man dukha hai?'],
+        ['मैं आपकी बात का सम्मान करती हूँ{H}, भले आप नाराज़ हों 🙏 गाँव का कोई काम अटका हो तो बताइए, नोट कर लूँगी।', 'Main aapki baat ka samman karti hoon{H}, bhale aap naraaz hon 🙏 Gaon ka koi kaam atka ho to bataiye, note kar lungi.'],
+        ['ठीक है{H}, आपकी भावना टीम तक पहुँचा दूँगी 🙏 जब मन करे, अपनी असली परेशानी बताइएगा—सुनने के लिए यहीं हूँ।', 'Theek hai{H}, aapki bhavna team tak pahuncha dungi 🙏 Jab man kare, apni asli pareshani bataiyega—sunne ke liye yahin hoon.']
+    ],
+    insult: [
+        ['हर किसी की अपनी राय होती है{H}, आपकी राय का भी सम्मान है 🙏', 'Har kisi ki apni raay hoti hai{H}, aapki raay ka bhi samman hai 🙏'],
+        ['आपकी नाराज़गी सिर-आँखों पर{H}—शायद कहीं कोई काम अटका है जिसने मन दुखाया।', 'Aapki naraazgi sir-aankhon par{H}—shayad kahin koi kaam atka hai jisne man dukhaya.'],
+        ['आप जैसा महसूस कर रहे हैं, वो मैं टीम तक ज़रूर पहुँचाऊँगी{H} 🙏', 'Aap jaisa mehsoos kar rahe hain, wo main team tak zaroor pahunchaungi{H} 🙏'],
+        ['मैं बहस नहीं करूँगी{H}—आपकी बात सुनना मेरा काम है 🙏', 'Main behes nahi karungi{H}—aapki baat sunna mera kaam hai 🙏']
+    ],
+    taunt: [
+        ['सवाल पूछना आपका हक़ है{H}।', 'Sawal poochna aapka haq hai{H}.'],
+        ['आपकी नाराज़गी समझती हूँ{H}—जहाँ काम अटका हो वहाँ गुस्सा आना स्वाभाविक है।', 'Aapki naraazgi samajhti hoon{H}—jahan kaam atka ho wahan gussa aana swabhavik hai.'],
+        ['आपने खुलकर कहा, अच्छा लगा{H} 🙏', 'Aapne khulkar kaha, achha laga{H} 🙏'],
+        ['बात सीधी है{H}—काम ज़मीन पर दिखता है, आप खुद देख सकते हैं।', 'Baat seedhi hai{H}—kaam zameen par dikhta hai, aap khud dekh sakte hain.']
+    ],
+    corruption: [
+        ['आपकी चिंता समझती हूँ{H} 🙏 अभय सिंह जी 40 साल की निष्कलंक समाज सेवा के लिए जाने जाते हैं, और पंचायत में हुए काम ज़मीन पर दिखते हैं—', 'Aapki chinta samajhti hoon{H} 🙏 Abhay Singh ji 40 saal ki nishkalank samaj seva ke liye jaane jaate hain, aur panchayat me hue kaam zameen par dikhte hain—'],
+        ['ऐसी बात सुनकर मन दुखता है{H}, पर आपकी बात का सम्मान है 🙏 गाँव ने 40 साल से अभय सिंह जी की सेवा देखी है, और काम सामने हैं—', 'Aisi baat sunkar man dukhta hai{H}, par aapki baat ka samman hai 🙏 Gaon ne 40 saal se Abhay Singh ji ki seva dekhi hai, aur kaam saamne hain—'],
+        ['आपका सवाल जायज़ है{H}—भरोसा काम से बनता है 🙏 पंचायत में हुए काम आप खुद देख सकते हैं—', 'Aapka sawal jaayaz hai{H}—bharosa kaam se banta hai 🙏 Panchayat me hue kaam aap khud dekh sakte hain—']
+    ]
+};
+function negLine(user, l, H, kind) {
+    const recent = recentBotText(user, 8).toLowerCase();
+    const pool = NEG_POOL[kind] || NEG_POOL.insult;
+    const all = Object.values(NEG_POOL).flat();
+    const pick = pool.find(p => !recent.includes((l === 'hi' ? p[0] : p[1]).replace('{H}', H).slice(0, 18).toLowerCase())) ||
+        all.find(p => !recent.includes((l === 'hi' ? p[0] : p[1]).replace('{H}', H).slice(0, 18).toLowerCase())) || pool[0];
+    return (l === 'hi' ? pick[0] : pick[1]).replace('{H}', H);
+}
+
 // ---------------- compose (grounded template) ----------------
 function compose(cls, ctx) {
     const { l, hon, user, person, stage, message, items } = ctx;
@@ -374,10 +419,16 @@ function compose(cls, ctx) {
             return { text: body, ask: false, used };
         }
         case 'abuse':
-            return { text: vary(user, [
-                S(`आपकी नाराज़गी समझ सकती हूँ${H}। गुस्से की कोई असली वजह हो तो बताइए—मैं सीधे अभय सिंह जी तक पहुँचाऊँगी 🙏`, `Aapki narazgi samajh sakti hoon${H}. Gusse ki koi asli wajah ho to bataiye—main seedhe Abhay Singh ji tak pahunchaungi 🙏`),
-                S(`गुस्से में कही बात का बुरा नहीं मानती${H}। आराम से बताइए क्या परेशानी है, मैं नोट कर लूँगी 🙏`, `Gusse me kahi baat ka bura nahi maanti${H}. Aaram se bataiye kya pareshani hai, main note kar lungi 🙏`)
-            ]), ask: false };
+            return { text: negLine(user, l, H, 'abuse'), ask: false };
+        case 'corruption': {
+            const major = ['M2', 'D-H1', 'M1', 'M8', 'M4'].map(id => kb.getItem(id)).filter(i => i && !mem.toldItems.includes(i.id));
+            const it = major[0] || kb.getItem('M2');
+            if (it) used.push(it.id);
+            const work = it ? kb.render(it, l).replace(/[।.]\s*$/, '') : '';
+            return { text: negLine(user, l, H, 'corruption') + work + S('। किसी ख़ास काम को लेकर शिकायत हो तो बताइए, सीधे टीम तक पहुँचाऊँगी।', '. Kisi khaas kaam ko lekar shikayat ho to bataiye, seedhe team tak pahunchaungi.'), ask: false, used };
+        }
+        case 'emoji_only':
+            return { text: vary(user, [S(`🙏 राम राम${H}! बताइए, क्या सेवा करूँ—पर्ची, बूथ या गाँव का कोई काम?`, `🙏 Ram Ram${H}! Bataiye, kya seva karun—parchi, booth ya gaon ka koi kaam?`), S(`😊🙏 आपका संदेश मिला${H}। कुछ पूछना हो तो लिख दीजिए।`, `😊🙏 Aapka sandesh mila${H}. Kuch poochna ho to likh dijiye.`)]), ask: false };
         case 'bribe':
             return { text: vary(user, [
                 S(`नहीं${H}, यहाँ कोई पैसा या दारू नहीं मिलती—ये कानून के ख़िलाफ़ भी है 🙏 अभय सिंह जी की यही बात है: "${C.selfRespect_hi}"`, `Nahi${H}, yahan koi paisa ya daaru nahi milti—ye kanoon ke khilaf bhi hai 🙏 Abhay Singh ji ki yahi baat hai: "${C.selfRespect_en}"`),
@@ -473,7 +524,7 @@ function compose(cls, ctx) {
             const t = cls.topic || (anyConcern && anyConcern.topic) || (AUDIENCE_TOPICS[person.gender || 'none'] || [])[0];
             const done = items.filter(i => i.type === 'done');
             const sn = addFacts(done.length ? done : topicItems(t, l, user, 'done'), 1);
-            body = vary(user, [S(`सवाल पूछना आपका हक़ है${H}।`, `Sawal poochna aapka haq hai${H}.`), S(`आपकी नाराज़गी समझती हूँ${H}—जहाँ काम अटका हो वहाँ गुस्सा आना स्वाभाविक है।`, `Aapki narazgi samajhti hoon${H}—jahan kaam atka ho wahan gussa aana swabhavik hai.`)]) +
+            body = negLine(user, l, H, cls.insult ? 'insult' : 'taunt') +
                 (sn ? S(' पिछले कार्यकाल में पंचायत में ये काम ज़मीन पर हुआ है: ', ' Pichhle karyakal me panchayat me ye kaam zameen par hua hai: ') + sn : '') +
                 (!sn && !mem.told.honour ? S(` ${C.honour_hi}`, ` ${C.honour_en}`) : '') +
                 S(' जहाँ काम अधूरा लगे, वो गली/वार्ड बताइए—मैं नोट करके आगे पहुँचाऊँगी।', ' Jahan kaam adhoora lage, wo gali/ward bataiye—main note karke aage pahunchaungi.');
@@ -497,6 +548,14 @@ function compose(cls, ctx) {
         }
         case 'works':
         case 'topic_mention': {
+            if (cls.all) {
+                const ids = ['M2', 'D-H1', 'M1', 'M8', 'M4', 'M11', 'M5', 'M7', 'M9'];
+                used.push(...ids.filter(id => kb.getItem(id)));
+                body = S('पिछले कार्यकाल में पंचायत में हुए मुख्य काम:\n• जल जीवन मिशन—पानी की टंकियाँ और घर-घर नल\n• उप-स्वास्थ्य केंद्र भवन (अभय सिंह जी की दान की ज़मीन पर)\n• खेल मैदान—रनिंग ट्रैक, कोर्ट और ओपन जिम\n• सिहाली खुर्द में मॉड्यूलर लाइब्रेरी\n• जोहड़ों की गहरी खुदाई और नए बोरवेल\n• सीवरेज-नाली, डामर सड़कें और स्कूलों में नए कमरे\nकिसी एक काम के बारे में विस्तार से जानना हो तो बताइए 🙏',
+                    'Pichhle karyakal me panchayat me hue mukhya kaam:\n• Jal Jeevan Mission—paani ki tankiyan aur ghar-ghar nal\n• Up-swasthya kendra bhawan (Abhay Singh ji ki daan ki zameen par)\n• Khel maidan—running track, court aur open gym\n• Sihali Khurd me modular library\n• Johadon ki gehri khudai aur naye borewell\n• Sewerage-naali, damar sadkein aur schoolon me naye kamre\nKisi ek kaam ke baare me vistaar se jaanna ho to bataiye 🙏');
+                ask = false;
+                break;
+            }
             const kt = kb.primaryTopic(message, cls.topic) || (AUDIENCE_TOPICS[person.gender || 'none'] || [])[0];
             const msgTopics = kb.detectTopics(message);
             const lm = items.filter(i => i.landmark);
@@ -677,6 +736,15 @@ function compose(cls, ctx) {
             ask = false;
             break;
         case 'off_topic':
+            if (cls.person || cls.news) {
+                body = vary(user, [
+                    S(`माफ़ कीजिए${H}, इसकी जानकारी मैं नहीं देती 🙂 मैं सिर्फ़ ग्राम पंचायत सिहाली खुर्द और अभय सिंह जी के कामों व चुनाव से जुड़ी बातों में मदद करती हूँ। गाँव का कोई सवाल हो तो पूछिए।`, `Maaf kijiye${H}, iski jankari main nahi deti 🙂 Main sirf Gram Panchayat Sihali Khurd aur Abhay Singh ji ke kaamon va chunav se judi baaton me madad karti hoon. Gaon ka koi sawal ho to poochiye.`),
+                    S(`😊 ये तो दुनिया की बात हो गई${H}! मेरा काम गाँव की बात है—सिहाली खुर्द पंचायत, अभय सिंह जी के काम, पर्ची या बूथ। इनमें कुछ पूछना हो तो बताइए।`, `😊 Ye to duniya ki baat ho gayi${H}! Mera kaam gaon ki baat hai—Sihali Khurd panchayat, Abhay Singh ji ke kaam, parchi ya booth. Inme kuch poochna ho to bataiye.`),
+                    S(`इस बारे में मैं कुछ नहीं बता पाऊँगी${H} 🙏 गाँव की कोई ख़बर या काम जानना हो, तो ज़रूर पूछिए।`, `Is baare me main kuch nahi bata paungi${H} 🙏 Gaon ki koi khabar ya kaam jaanna ho, to zaroor poochiye.`)
+                ]);
+                ask = false;
+                break;
+            }
             body = cls.party
                 ? S(`${jiOnly ? 'जी' : hon}, ये पंचायत का चुनाव है—इसमें पार्टी की नहीं, गाँव के काम और भरोसे की बात है।`, `${jiOnly ? 'Ji' : hon}, ye panchayat ka chunav hai—isme party ki nahi, gaon ke kaam aur bharose ki baat hai.`)
                 : S(`इसकी पक्की जानकारी मेरे पास नहीं है${H} 🙏 मैं गाँव के काम, वोटर पर्ची और चुनाव की जानकारी में मदद करती हूँ।`, `Iski pakki jankari mere paas nahi hai${H} 🙏 Main gaon ke kaam, voter parchi aur chunav ki jankari me madad karti hoon.`);
@@ -876,6 +944,8 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
 function redirectVariants(user, l, message) {
     const hon = honorific(personOf(user, message), l);
     const H = isJi(hon) ? '' : ' ' + hon;
+    const ci = classify(message, user).intent;
+    if (['abuse', 'taunt', 'corruption', 'grievance', 'opposed'].includes(ci)) return Object.values(NEG_POOL).flat().map(p => (l === 'hi' ? p[0] : p[1]).replace('{H}', H).replace(/—$/, '।'));
     const c = voterMemory.concernToRecall(user, { allowSame: true });
     const label = c ? kb.topicLabel(c.topic, l) : null;
     return l === 'hi'
@@ -984,7 +1054,7 @@ async function respond(message, user = {}, opts = {}) {
     let { text } = t;
     let source = t.flowResult ? 'flow' : 'template';
     let rejected = null;
-    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
+    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));

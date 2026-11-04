@@ -175,7 +175,11 @@ function decide(body, user, opts = {}) {
     if (!wantSlip) return null;
     let query = q;
     if (!query || (recall && !asked && !q)) {
-        if (user && user.lastFoundVoter && (asked || recall)) return { kind: 'deliver', voter: user.lastFoundVoter, again: true };
+        if (user && user.lastFoundVoter && recall && !asked) {
+            const v = user.lastFoundVoter;
+            return { kind: 'recall', voter: v, text: `जी, याद है 🙏 आप *${v.name_hi}* (${v.rel_type === 'H' ? 'पति' : 'पिता'}: ${v.rel_name_hi}, वार्ड ${v.ward}) हैं—आपकी पर्ची ऊपर इसी चैट में है। दोबारा चाहिए तो "पर्ची" लिख दीजिए, या परिवार के किसी और का नाम भेजिए।` };
+        }
+        if (user && user.lastFoundVoter && asked) return { kind: 'deliver', voter: user.lastFoundVoter, again: true };
         query = rememberedName(user);
     }
     if (!query) { if (user) user.slipAskedAt = new Date().toISOString(); return { kind: 'ask_name', text: ASK_NAME }; }
