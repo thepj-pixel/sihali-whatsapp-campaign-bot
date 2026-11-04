@@ -851,7 +851,7 @@ const LLM_INTENTS = new Set(['grievance', 'invite', 'health_concern', 'works', '
 const STOPW = new Set('aur ke ki ka ko me mein se par hai hain gaye gayi gaya gayi. liye jaane wali wale abhay singh panchayat pichhle karyakal tahat jayegi jayega karwayi karwaya banwayi banwaya banwaye lagwayi kiya kiye sabhi unke unhone apni apne aapke aapki aapka और के की का को में से पर है हैं गए गई गया लिए वाली वाले अभय सिंह पंचायत पिछले कार्यकाल तहत जाएगी जाएगा करवाई करवाया बनवाई बनवाया बनवाए लगवाई किया किए उनके उन्होंने अपनी अपने आपके आपकी आपका'.split(/\s+/));
 const keyTokens = s => String(s || '').toLowerCase().replace(/[^a-z\u0900-\u097F\s]/g, ' ').split(/\s+/).filter(w => w.length >= 4 && !STOPW.has(w));
 /** Extra checks on the LLM against the grounded draft: facts kept, no new vote push, no guessed gender, dialect honoured. */
-function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {} } = {}) {
+function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}, intent = null } = {}) {
     const r = String(out || '');
     const low = r.toLowerCase();
     if (used.length) {
@@ -861,6 +861,7 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
             if (hit / factToks.length < 0.35) return 'dropped_facts';
         }
     }
+    if ((!intent || ['grievance', 'taunt', 'undecided'].includes(intent)) && /\?/.test(draft) && !/\?/.test(r)) return 'dropped_question'; // the draft's one question (e.g. "aapke yahan kya dikkat hai?") is the point of the turn
     if (!ASKED_VOTE.test(draft) && /(साथ देंगे ना|वोट देंगे ना|saath denge na|vote denge na|vote denge\b|वोट देंगे\b|(मतदान|वोट)[^।?]{0,40}(आएंगी|आएँगी|आएंगे|आएँगे|देंगे|डालेंगे|देंगी)\s*\?|(vote|matdan|matdaan)[^.?]{0,40}(aayenge|aayengi|aaoge|denge|dalenge|dengi)\s*\?)/i.test(r)) return 'unasked_vote_push';
     if (person.gender !== 'F' && /(chahti hain|chahti ho|sakti hain|rahi hain|karti hain|aayi hain|bolti hain|चाहती हैं|सकती हैं|रही हैं|करती हैं|आई हैं|बहन जी|behan ji|mata ji|माता जी)/i.test(r) && !/(behan ji|mata ji|बहन जी|माता जी|tai ji|ताई जी)/i.test(draft)) return 'gender_guess';
     if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
@@ -990,7 +991,7 @@ async function respond(message, user = {}, opts = {}) {
             // the model may not add its own question when the draft asks none (or when we re-ask a pending flow question)
             if (out && (!/\?/.test(text) || t.pendingQ)) { const cut = out.replace(/[^.?!।]*\?\s*(😊|🙏)?\s*$/, '').trim(); if (cut.length >= 20) out = cut; }
             const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' 2026 16 7:30 5:30 40 1';
-            let why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user });
+            let why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user, intent: cls.intent });
             if (!why && t.pendingQ && /\?/.test(String(out))) why = 'extra_question';
             if (!why) { text = String(out).trim(); source = 'llm'; }
             else { source = 'template(llm_rejected:' + why + ')'; rejected = { why, out: String(out || '').slice(0, 300) }; }

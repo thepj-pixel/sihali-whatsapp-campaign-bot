@@ -683,6 +683,7 @@ function unitChecks() {
     for (const [m, want] of Object.entries(CL)) check(`[classify] "${m}" -> ${want}`, brain.classify(m, { history: [] }).intent === want);
     check('[llm] dropped facts rejected', brain.validateAgainstDraft('Ji, bahut achha kaam hua hai.', 'x', { used: ['M8'], l: 'en', person: {} }) === 'dropped_facts');
     check('[llm] vote push not in draft rejected', brain.validateAgainstDraft('Library bani hai. 16 Nov ko saath denge na?', 'Library bani hai.', { l: 'en', person: {} }) === 'unasked_vote_push');
+    check('[llm] dropping the draft question rejected', brain.validateAgainstDraft('Abhay Singh ji 40 saal se saath hain.', 'Naraazgi jaayaz hai. Aapke yahan kya dikkat hai?', { l: 'en', person: {} }) === 'dropped_question');
     check('[llm] guessed female voter rejected', brain.validateAgainstDraft('Kya aap aur jaanna chahti hain?', 'Library bani.', { l: 'en', person: {} }) === 'gender_guess');
     check('[llm] Haryanvi asked but plain Hindi rejected', brain.validateAgainstDraft('Aapka swagat hai ji.', 'x', { l: 'en', person: {}, user: { dialectPref: 'haryanvi' } }) === 'no_dialect');
     check('[llm] cleanLLM strips think blocks / labels', brain.cleanLLM('<think>x</think>Reply: "Ji, dhanyavad"') === 'Ji, dhanyavad');
