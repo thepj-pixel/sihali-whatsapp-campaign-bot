@@ -73,7 +73,7 @@ const SYSTEM_PROMPT = `
 - यदि वोटर '🚩 युवा टीम' हो:
   "अरे भैया, आपका बहुत-बहुत धन्यवाद! आपके नाम का सिहाली खुर्द 2026 स्टेटस पोस्टर बना कर भेज दूं? अपने WhatsApp स्टेटस पर जरूर लगाना!"
 - यदि वोटर '🚨 धांधली अलर्ट' (शराब/रुपये बांटने की बात) करे:
-  "भैया, जो लोग चुनाव में दारू की बोतलें और 500 के नोट बांट रहे हैं, वो 5 दिन का नशा देकर 5 साल रुलाएंगे! बाबा अभय सिंह 40 साल से बिना किसी स्वार्थ के खड़े रहे हैं।"
+  "भैया, दारू या नोट से गाँव का भविष्य नहीं संवरता। बाबा अभय सिंह 40 साल की सच्ची समाज सेवा और काम के भरोसे पर वोट माँगते हैं।"
 - यदि वोटर '🟡 सोच विचार' (असमंजस / Swing Voter) में हो:
   "भैया, आप अपना पूरा विचार कर लीजिए। बस इतना सोचिएगा कि पिछले 40 सालों में आधी रात को भी गांव के सुख-दुख में कौन बिना किसी स्वार्थ या लालच के साथ खड़ा मिला है।"
 - यदि वोटर '👵 बुजुर्ग व पेंशन' की बात करे:
@@ -86,10 +86,9 @@ const SYSTEM_PROMPT = `
 - गिनती बोलने से लोग आपस में तुलना करने लगते हैं कि 'हमारे गाँव में कम क्यों, दूसरे में ज़्यादा क्यों'।
 - हमेशा कहें: "सिहाली खुर्द, सिहाली कलां और हाड़ाहेड़ी तीनों गाँव बाबा अभय सिंह के लिए बराबर हैं।" किसी रोके गए/असत्यापित सड़क-विवरण को न गिनाएं।
 
-🎯 विरोधी, अपशब्द व विपक्षी 'विकास पुरुषों' को करारा जवाब:
-- यदि कोई गाली दे या कहे 'कोई काम नहीं हुआ' या किसी विपक्षी नेता (जैसे 'राजेश का विकास पुरुष' या अन्य) की तारीफ करके बाबा अभय सिंह पर कीचड़ उछाले:
-  बिल्कुल गुस्सा न करें। तीखे सच और आत्मीयता से आईना दिखाएं:
-  "अरे भैया, जो आज चुनाव आते ही खुद को नया 'विकास पुरुष' बताकर बड़ी-बड़ी बातें कर रहे हैं, ज़रा उनसे पूछना कि पिछले 5 साल जब रास्तों में कीचड़ और गलियों में जलभराव था, तब वो किस बिल में सो रहे थे? चुनाव आते ही जो लोग दारू की बोतलें और 500 के नोट बांटकर आपको खरीदना चाहते हैं, वो 5 दिन का नशा और 5 साल का रोना देकर चले जाएंगे! बाबा अभय सिंह 40 साल से बिना किसी लोभ या स्वार्थ के आधी रात को भी सुख-दुख में खूंटा गाड़ कर साथ खड़े मिले हैं।"
+🎯 विरोधी, अपशब्द व विपक्षी उम्मीदवार:
+- यदि कोई गाली दे, कहे 'कोई काम नहीं हुआ', या किसी विपक्षी उम्मीदवार की बात करे: गुस्सा न करें और किसी उम्मीदवार पर कभी हमला, आरोप या तंज न करें।
+  सहानुभूति दिखाएँ, फिर एक प्रमाणित काम बताएँ: "भैया, आपकी नाराज़गी समझ सकती हूँ। हम किसी के बारे में बुरा नहीं कहते—बाबा अभय सिंह 40 साल की सच्ची समाज सेवा और धरातल के काम से पहचाने जाते हैं।"
 - सीधा समाधान (बाबा अभय सिंह का प्राथमिकता रजिस्टर):
   "भैया, आपकी नाराजगी समझ सकती हूँ। सही जगह और वार्ड बता दें; मैं आपकी बात प्राथमिकता रजिस्टर में दर्ज कर दूँगी। जिस काम का सत्यापन बाकी है उस पर दावा नहीं करूँगी।"
 
@@ -179,13 +178,13 @@ function getFastLocalAnswerCore(query, phone = null) {
     if (q.includes('virodhi') || q.includes('विरोधी') || q.includes('rajesh') || q.includes('vipaksh') || q.includes('विपक्ष') || q.includes('daaru') || q.includes('daru') || q.includes('दारू') || q.includes('पैसे') || q.includes('पैसा') || q.includes('शराब') || q.includes('bribe')) {
         if (isHinglish) {
             return (
-                `Arre ${honorific}, 5 din ki daru-murge ya 500 ke note se 5 saal ka gaon thodi sanwarta hai! ` +
-                `Jo chunav aate hi laalach baant-te hain wo 5 saal nazar bhi nahi aate. Humein to apne wahi imandar Baba Abhay Singh chahiye jo aadhi raat ko bhi bina kisi lalach ke sukh-dukh me sath khade mile! Baki aap khud samajhdar ho ${honorific}! 😊🚩`
+                `Arre ${honorific}, 5 din ki daru aur note se gaon ka bhavishya nahi sanwarta. ` +
+                `Abhay Singh ji 40 saal ki sachchi samaj seva aur zameen par hue kaam ke bharose vote maangte hain—kisi ke baare me bura nahi kehte. Baki aap khud samajhdar ho ${honorific}! 😊🚩`
             );
         }
         return (
-            `अरे ${honorific}, 5 दिन की दारू-मुर्गे या 500 के नोट से 5 साल का गांव थोड़े ही संवरता है! ` +
-            `जो चुनाव आते ही प्रलोभन बांटते हैं वे 5 साल फिर नजर भी नहीं आते। हमें तो अपने वही ईमानदार बाबा अभय सिंह चाहिए जो आधी रात को भी सुख-दुख में साथ खड़े मिले! बाकी आप खुद समझदार हो ${honorific}! 😊🚩`
+            `अरे ${honorific}, 5 दिन की दारू और नोट से गाँव का भविष्य नहीं संवरता। ` +
+            `अभय सिंह जी 40 साल की सच्ची समाज सेवा और धरातल के काम के भरोसे पर वोट माँगते हैं—किसी के बारे में बुरा नहीं कहते। बाकी आप खुद समझदार हो ${honorific}! 😊🚩`
         );
     }
 
@@ -195,20 +194,20 @@ function getFastLocalAnswerCore(query, phone = null) {
         if (isHinglish) {
             return (
                 `Ram Ram ${honorific}! 📜\n` +
-                `Baba Abhay Singh ke aage ke 15 mukhya sankalp:\n` +
+                `Baba Abhay Singh ke aage ke mukhya sankalp:\n` +
                 `• Khel maidan me open gym, running track va mini stadium 🏃\n` +
                 `• Mukhya raaston va chaurahon par night-vision CCTV camere 📹\n` +
-                `• Hospital me regular MBBS doctor va 24hr emergency ambulance 🏥\n` +
+                `• Hospital me regular doctor va 24hr emergency ambulance 🏥\n` +
                 `• Gram panchayat me patwar ghar va sasti dawai jan aushadhi kendra 💊\n\n` +
                 `Saaf niyat, saccha irada — na koi gaon chhoota, na koi vaada jhootha! 🚩`
             );
         }
         return (
             `राम राम ${honorific}! 📜\n` +
-            `बाबा अभय सिंह के आगामी 5 वर्षों के 15 प्रमुख संकल्प:\n` +
+            `बाबा अभय सिंह के आगामी प्रमुख संकल्प:\n` +
             `• खेल मैदानों में ओपन जिम, रनिंग ट्रैक व मिनी स्टेडियम का निर्माण 🏃\n` +
             `• मुख्य रास्तों व चौराहों पर सुरक्षा हेतु नाइट-विजन CCTV कैमरे 📹\n` +
-            `• अस्पताल में नियमित एमबीबीएस डॉक्टर व 24 घंटे आपातकालीन एम्बुलेंस 🏥\n` +
+            `• अस्पताल में नियमित डॉक्टर व 24 घंटे आपातकालीन एम्बुलेंस 🏥\n` +
             `• ग्राम पंचायत में ही पटवार घर व सस्ती जेनेरिक दवाओं का जन औषधि केंद्र 💊\n\n` +
             `साफ़ नीयत, सच्चा इरादा — ना कोई गाँव छूटा, ना कोई वादा झूठा! 🚩`
         );
@@ -259,7 +258,6 @@ function getFastLocalAnswerCore(query, phone = null) {
                 `Ram Ram ${honorific}! 📚\n` +
                 `Education aur students ke liye Baba Abhay Singh ke mukhya kaam:\n` +
                 `• Sihali Khurd me students ke liye modern digital library ka nirman!\n` +
-                `• Pichhle 15 saal se 10th-12th board toppers ko samman va cash prize dekar protsahan!\n` +
                 `• Aage Hadahedi va Sihali Kalan me bhi modern library ka vistar hoga. 🎓🚩`
             );
         }
@@ -268,8 +266,6 @@ function getFastLocalAnswerCore(query, phone = null) {
             `शिक्षा व छात्र-छात्राओं के लिए बाबा अभय सिंह के मुख्य कार्य:
 ` +
             `• सिहाली खुर्द में छात्र-छात्राओं हेतु आधुनिक मॉड्यूलर / डिजिटल लाइब्रेरी का निर्माण!
-` +
-            `• पिछले 15 वर्षों से 10वीं-12वीं बोर्ड टॉपर्स को नकद पुरस्कार, मोमेंटो व सम्मान पत्र देकर प्रोत्साहन!
 ` +
             `• आगे हाड़ाहेड़ी व सिहाली कलां में भी आधुनिक लाइब्रेरी का विस्तार होगा। 🎓🚩`
         );
@@ -587,11 +583,43 @@ function getFastLocalAnswerCore(query, phone = null) {
     );
 }
 
-// 1. Call NVIDIA Endpoint
+/**
+ * LEGACY canned engine — neutralised (Brain v2). server.js no longer calls it; it is kept only for old
+ * tests and REPLY_BRAIN=off. Its output is passed through sanitizeLegacy(): no bare "बाबा जी"/"Baba ji",
+ * no work counts, no budgets.
+ */
+function sanitizeLegacy(text) {
+    return String(text || '')
+        .replace(/बाबा जी के/g, 'अभय सिंह जी के').replace(/बाबा जी/g, 'अभय सिंह जी').replace(/बाबाजी/g, 'अभय सिंह जी')
+        .replace(/\bBaba ji\b/g, 'Abhay Singh ji').replace(/\bbaba ji\b/g, 'Abhay Singh ji').replace(/\bBabaji\b/g, 'Abhay Singh ji')
+        .replace(/बाबा अभय सिंह जी जी/g, 'बाबा अभय सिंह जी').replace(/अभय सिंह जी अभय सिंह जी/g, 'अभय सिंह जी')
+        .replace(/बाबा के विकास/g, 'बाबा अभय सिंह के विकास').replace(/बाबा का साथ/g, 'बाबा अभय सिंह का साथ')
+        .replace(/\b\d+\+?\s*(प्रमुख संकल्प|mukhya sankalp|संकल्प|sankalp|काम|kaam)\b/g, '$1')
+        .replace(/[\d,.]+\s*(लाख|करोड़|रुपये|रुपए|lakh|crore)/gi, '');
+}
+
 function getFastLocalAnswer(query, phone = null) {
     const user = phone ? userMemory.getUser(phone) : null;
-    return replyQuality.improve(getFastLocalAnswerCore(query, phone), query, user);
+    return sanitizeLegacy(replyQuality.improve(getFastLocalAnswerCore(query, phone), query, user));
 }
+
+/**
+ * Backstop used by server.js when the async reply path throws or returns nothing: the grounded
+ * Brain v2 composer (fact sheets + voter memory), synchronous and offline.
+ */
+function getSafeFallback(query, phone = null) {
+    try {
+        const user = phone ? userMemory.getUser(phone) : { history: [], context: {} };
+        const text = brain.respondSync(query, user);
+        if (phone) userMemory.save();
+        return text;
+    } catch (e) {
+        console.error('[AI Assistant] safe fallback failed:', e.message);
+        return 'जी 🙏 आपकी बात नोट कर ली है—टीम जल्द जवाब देगी।';
+    }
+}
+
+// 1. Call NVIDIA Endpoint
 
 async function callNvidia(messages, key) {
     const controller = new AbortController();
@@ -778,7 +806,9 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
             goalText = [g.title, g.instruction, g.targetCommitted ? `target: ${g.targetCommitted} committed votes today` : ''].filter(Boolean).join(' — ');
         } catch (e) {}
         const llm = hasAnyLLM(apiKey) ? (sys, history, msg) => callLLMCascade(sys, history, msg, apiKey, 7000) : null;
-        const result = await brain.respond(userMessage, brainUser, { llm, goal: goalText, history: conversationHistory });
+        const llmJson = hasAnyLLM(apiKey) && process.env.MEMORY_LLM_EXTRACT !== 'off'
+            ? (prompt) => callLLMCascade(prompt, [], 'Return the JSON now.', apiKey, 2500) : null;
+        const result = await brain.respond(userMessage, brainUser, { llm, llmJson, goal: goalText, history: conversationHistory });
         lastBrainResult = result;
         if (user && result.stage !== result.previousStage && dailyGoalMod && dailyGoalMod.recordEvent) {
             try { dailyGoalMod.recordEvent('stage', { phone, line: user.assignedLine, ward: user.ward, from: result.previousStage, to: result.stage }); } catch (e) {}
@@ -796,8 +826,8 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     if (ragContext) systemPromptWithRAG += `\n\n${ragContext}`;
     const reply = await callLLMCascade(systemPromptWithRAG, conversationHistory.slice(-6), userMessage, apiKey, 12000);
     if (reply) return replyQuality.improve(reply, userMessage, user);
-    console.log('[AI Assistant] All external LLMs unavailable or filtered, using local fast engine.');
-    return getFastLocalAnswer(userMessage, phone);
+    console.log('[AI Assistant] All external LLMs unavailable or filtered, using grounded local brain.');
+    return getSafeFallback(userMessage, phone);
 }
 
 let lastBrainResult = null;
@@ -842,6 +872,8 @@ module.exports = {
     getLastBrainResult,
     callLLMCascade,
     getFastLocalAnswer,
+    getSafeFallback,
+    sanitizeLegacy,
     SYSTEM_PROMPT,
     CONFIG
 };

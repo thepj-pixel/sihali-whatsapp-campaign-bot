@@ -68,7 +68,9 @@ async function testConversationLadder() {
     const sankalpReply = aiService.getFastLocalAnswer('sankalp batao aage kya karoge', malePhone);
     console.log('  Major Kaam snippet:', kaamReply.split('\n')[1]);
     console.log('  Sankalp snippet:', sankalpReply.split('\n')[1]);
-    const pass8 = /(मुख्य कार्य|mukhya kaam)/i.test(kaamReply) && /(15 प्रमुख संकल्प|15 mukhya sankalp)/i.test(sankalpReply);
+    // Brain v2: the legacy engine must list sankalps WITHOUT quoting a count (sheet rule: no work counts) and never say a bare "Baba ji".
+    const pass8 = /(मुख्य कार्य|mukhya kaam)/i.test(kaamReply) && /(प्रमुख संकल्प|mukhya sankalp)/i.test(sankalpReply)
+        && !/\d+\s*(प्रमुख संकल्प|mukhya sankalp)/i.test(sankalpReply) && !/(बाबा जी|\bbaba ji\b)/i.test(kaamReply + sankalpReply + visitReply + probReply);
     console.log(`  ${pass8 ? '✓ [PASS]' : '❌ [FAIL]'} Instant facts delivered in <1ms!`);
 
     // Clean up mock users

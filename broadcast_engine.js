@@ -131,6 +131,8 @@ class BroadcastEngine {
         this.onSent = opts.onSent || (() => {});
         // External policy hook (engagement_policy via user memory): returns a skip reason or null
         this.externalBlock = opts.isBlocked || (() => null);
+        // Campaign silence period (e.g. 48h before the poll): no bulk campaigning at all while true
+        this.isSilenced = opts.isSilenced || (() => false);
         // Sticky lines: a person always continues on the line they already talk to
         this.getAssignedLine = opts.getAssignedLine || (() => null);
         this.log = opts.logger || console;
@@ -379,6 +381,7 @@ class BroadcastEngine {
                 this.log.log(`[Broadcast] Campaign ${c.id} completed`);
                 return [];
             }
+            if (this.isSilenced(now)) { c.waitingReason = 'silence_period'; return []; }
             if (inQuietHours(now, c.caps)) { c.waitingReason = 'quiet_hours'; return []; }
 
             // Update line connection state

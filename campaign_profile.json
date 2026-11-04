@@ -44,5 +44,19 @@
   ],
   "talkingStyle": "Natural, respectful Ahirwal Hindi/Hinglish. Answer the voter’s latest message first in one or two short WhatsApp bubbles. Use the saved conversation topic and concern; do not restart the introduction, dump a generic menu, or repeat wording from recent replies. Ask at most one useful follow-up question. Clearly distinguish completed work from future commitments. Use only the verified facts above. Never invent a number, achievement, date, promise, voter detail, or road-work item; if absent or held for verification, say the team is checking it.",
   "updatedAt": "2026-11-04T00:00:00.000Z",
-  "updatedBy": "operator-fact-sheet-import"
+  "updatedBy": "operator-fact-sheet-import",
+  "campaign": {
+    "pollDate": "2026-11-16",
+    "pollStartIST": "2026-11-16T07:30:00+05:30",
+    "silenceStartIST": "2026-11-14T18:00:00+05:30",
+    "silenceNote": "No proactive campaigning (follow-ups, consent reminders, bulk sends) from this moment until after the poll. Replies to voters who write in continue.",
+    "quietStartHour": 21,
+    "quietEndHour": 8,
+    "maxProactivePerVoterPerDay": 1,
+    "maxUnansweredProactive": 2,
+    "proactivePerLinePerDay": 120,
+    "proactivePerCycle": 3,
+    "minIdleHours": 3
+  },
+  "opponentNames": []
 }

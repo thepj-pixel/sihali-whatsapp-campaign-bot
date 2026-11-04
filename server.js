@@ -1,58 +1,50 @@
 
-// Proactive Daytime Nudge Engine (Sends sweet, respectful follow-ups 2-4 hours after inactivity)
-function runProactiveNudges(sock, lineId = 'sim_636') {
+// Proactive follow-ups (Brain v2): personalised by voter memory, via followup_planner.js.
+// Rules: consented only, never opted-out, quiet hours 21:00-08:00 IST, pre-poll silence period (campaign_profile.json
+// campaign.silenceStartIST), max 1 per voter per day, stop after 2 unanswered, per-line daily cap, never our own lines.
+let proactiveBusy = {};
+async function runProactiveNudges(sock, lineId = 'sim_636') {
+    if (proactiveBusy[lineId]) return;
+    proactiveBusy[lineId] = true;
     try {
+        const planner = require('./followup_planner.js');
         const now = new Date();
-        const istHours = (now.getUTCHours() + 5 + Math.floor((now.getUTCMinutes() + 30) / 60)) % 24;
-        // Only run between 10:00 AM and 7:45 PM IST
-        if (istHours < 10 || istHours >= 20) return;
-
-        const allUsers = userMemory.getAllUsers();
-        for (const u of allUsers) {
-            if (!u.phone || u.phone.includes('Self Device') || u.phone.length < 10) continue;
-            // Sticky lines: each person is only nudged from the line they talk to (unassigned -> primary)
-            if ((u.assignedLine || 'sim_636') !== lineId) continue;
-            if (u.broadcastOptOut) continue;
-            if (engagementPolicy.canSendConsentReminder(u)) {
-                const reminder = engagementPolicy.buildConsentReminder(u.name);
-                const reminderJid = `${u.phone}@s.whatsapp.net`;
-                sendSafeMessage(sock, reminderJid, { text: reminder }).then(() => {
-                    u.consentReminderCount = (u.consentReminderCount || 0) + 1;
-                    u.consentReminderAt = new Date().toISOString();
-                    userMemory.recordMessage(u.phone, 'bot', reminder, 'consentReminder');
-                    userMemory.save();
+        const allUsers = userMemory.getAllUsers().filter(u => u.phone && !String(u.phone).includes('Self Device') && !(liveSelfTest && liveSelfTest.ownLineOf([u.phone])));
+        // One consent reminder per cycle (also obeys quiet hours + silence period)
+        if (!planner.inQuietHours(now) && !planner.inSilencePeriod(now)) {
+            const r = allUsers.find(u => (u.assignedLine || 'sim_636') === lineId && !u.broadcastOptOut && engagementPolicy.canSendConsentReminder(u));
+            if (r) {
+                const reminder = engagementPolicy.buildConsentReminder(r.name);
+                try {
+                    await sendSafeMessage(sock, `${r.phone}@s.whatsapp.net`, { text: reminder });
+                    r.consentReminderCount = (r.consentReminderCount || 0) + 1;
+                    r.consentReminderAt = new Date().toISOString();
+                    userMemory.recordMessage(r.phone, 'bot', reminder, 'consentReminder');
                     operationsTracker.record('consent_reminder', 'sent', { lineId });
-                }).catch(e => operationsTracker.record('consent_reminder', 'failed', { lineId: 'sim_636', reason: e.message }));
-                break;
-            }
-            if (!engagementPolicy.canSendProactive(u)) continue;
-            if (u.proactivePingCount >= 2) continue;
-
-            const lastSeenDate = new Date(u.lastSeen);
-            const hoursSinceLastChat = (Date.now() - lastSeenDate.getTime()) / (1000 * 60 * 60);
-
-            const lastPingDate = u.lastPingTime ? new Date(u.lastPingTime) : null;
-            const hoursSinceLastPing = lastPingDate ? (Date.now() - lastPingDate.getTime()) / (1000 * 60 * 60) : 999;
-
-            if (hoursSinceLastChat >= 2.5 && hoursSinceLastChat <= 8 && hoursSinceLastPing >= 20) {
-                let pickedNudge = null;
-                try { pickedNudge = replyBrain.buildPersuasionNudge(u, dailyGoal.get()); } catch (e) {}
-                if (!pickedNudge) pickedNudge = conversationContext.buildProactiveMessage(u);
-                if (!pickedNudge) continue;
-                const replyJid = `${u.phone}@s.whatsapp.net`;
-
-                sendSafeMessage(sock, replyJid, { text: pickedNudge }).then(() => {
-                    u.proactivePingCount = (u.proactivePingCount || 0) + 1;
-                    u.lastPingTime = new Date().toISOString();
-                    userMemory.recordMessage(u.phone, 'bot', pickedNudge, 'proactiveNudge');
-                    userMemory.save();
-                    console.log(`[ProactiveNudge] Sent sweet follow-up to ${u.phone}`);
-                }).catch(e => console.error('[ProactiveNudge Error]:', e.message));
-                break; // 1 ping per cycle to prevent batch flood
+                } catch (e) { operationsTracker.record('consent_reminder', 'failed', { lineId, reason: e.message }); }
             }
         }
+        const result = await planner.runCycle({
+            users: allUsers,
+            lineId,
+            goal: dailyGoal.get(),
+            now,
+            gapMs: () => 20000 + Math.floor(Math.random() * 25000),
+            send: async (u, text) => {
+                await sendSafeMessage(sock, `${u.phone}@s.whatsapp.net`, { text });
+            },
+            onSent: (u, plan) => {
+                userMemory.recordMessage(u.phone, 'bot', plan.text, 'proactiveNudge');
+                userMemory.save();
+                operationsTracker.record('proactive_followup', 'sent', { lineId, kind: plan.kind });
+                logMessage({ session: lineId, phone: u.phone, incoming: '[Proactive follow-up: ' + plan.kind + ']', reply: plan.text, status: 'PROACTIVE_SENT' });
+            }
+        });
+        if (result.sent) console.log(`[Proactive] ${lineId}: sent ${result.sent}`, result.skipped);
     } catch (err) {
-        console.error('[ProactiveNudge Runner Error]:', err.message);
+        console.error('[Proactive Runner Error]:', err.message);
+    } finally {
+        proactiveBusy[lineId] = false;
     }
 }
 
@@ -85,6 +77,8 @@ const operationsTracker = require('./operations_tracker.js');
 const dailyGoal = require('./daily_goal.js');
 const conversationContext = require('./conversation_context.js');
 const campaignProfile = require('./campaign_profile.js');
+const { LiveSelfTest } = require('./self_test.js');
+const followupPlanner = require('./followup_planner.js');
 
 const MEDIA_UPLOAD_TARGETS = new Set(['poster.jpg', 'campaign_reel.mp4']);
 const DEPLOY_BRANCH = process.env.DEPLOY_BRANCH || 'main';
@@ -295,6 +289,17 @@ const SESSIONS = [
     { id: 'canada', name: 'Canada Line (+1 Rented)', status: 'DISCONNECTED', qr: null, sock: null }
 ];
 
+// Live Self-Test harness (one bot line plays a scripted voter to another). See self_test.js.
+// Outside a test run, messages between our own lines are ignored (no bot-to-bot loops).
+const liveSelfTest = new LiveSelfTest({
+    getSessions: () => SESSIONS,
+    lineContacts: engagementPolicy.LINE_CONTACTS,
+    userMemory,
+    // direct send: never create CRM records / goal events for our own line numbers
+    sendText: (sock, jid, text) => sock.sendMessage(jid, { text }),
+    resultsDir: process.env.SELF_TEST_DIR || path.join(__dirname, 'self_test_runs')
+});
+
 const sessionsDir = path.join(__dirname, 'sessions_auth');
 if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
@@ -406,7 +411,7 @@ async function sendSafeMessage(sock, jid, content, options = {}) {
         if (jid && jid.includes('@s.whatsapp.net')) {
             const phone = jid.split('@')[0].replace(/[^0-9]/g, '');
             const trackedUser = userMemory.getUser(phone);
-            if (trackedUser?.consentStatus === 'ACCEPTED') dailyGoal.markContact(phone);
+            if (trackedUser?.consentStatus === 'ACCEPTED' && !trackedUser.selfTest) dailyGoal.markContact(phone);
         }
         return sent;
     } catch (err) {
@@ -619,6 +624,22 @@ async function startSession(sessionObj) {
                     continue;
                 }
 
+                // Own-line routing: self-test capture / self-test voter / ignore (prevents bot-to-bot loops)
+                const senderIds = [senderPhone, rawJid, msg.key?.senderPn, msg.key?.remoteJidAlt, msg.key?.participant].filter(Boolean);
+                const ownRoute = liveSelfTest.route(sessionObj.id, senderIds);
+                if (ownRoute === 'capture') {
+                    const capturedText = extractMessageText(msg.message) || (msg.message?.contactMessage || msg.message?.contactsArrayMessage ? '[contact card]' : '[media]');
+                    liveSelfTest.capture(sessionObj.id, capturedText);
+                    logDiagnostic({ session: sessionObj.name, phone: 'Self-Test (' + senderPhone + ')', incoming: capturedText, reply: 'Captured by Live Self-Test (tester line does not reply).', status: 'SELF_TEST_CAPTURE' });
+                    continue;
+                }
+                if (ownRoute === 'ignore_own') {
+                    logDiagnostic({ session: sessionObj.name, phone: 'Own line (' + senderPhone + ')', incoming: extractMessageText(msg.message) || '[non-text]', reply: 'Ignored: message from one of our own bot lines (loop guard).', status: 'OWN_LINE_IGNORED' });
+                    continue;
+                }
+                const isSelfTestVoter = ownRoute === 'voter';
+                if (isSelfTestVoter) liveSelfTest.prepareRecord(senderPhone);
+
                 // Extract message body from all possible structures
                 let body = extractMessageText(msg.message).trim();
 
@@ -699,8 +720,10 @@ async function startSession(sessionObj) {
                 console.log(`[${sessionObj.id}] Received from ${senderPhone} (${replyJid}): "${body}"`);
 
                 // First contact: save to Contacts (voter match / pushName) and pin this line (sticky)
-                autoSaveContact({ phone: senderPhone, pushName: msg.pushName, lineId: sessionObj.id, sock, jid: replyJid, source: 'inbound' });
-                try { dailyGoal.recordEvent && dailyGoal.recordEvent('reply', { phone: senderPhone, line: sessionObj.id, ward: (userMemory.users[senderPhone] || {}).ward }); } catch (e) {}
+                if (!isSelfTestVoter) {
+                    autoSaveContact({ phone: senderPhone, pushName: msg.pushName, lineId: sessionObj.id, sock, jid: replyJid, source: 'inbound' });
+                    try { dailyGoal.recordEvent && dailyGoal.recordEvent('reply', { phone: senderPhone, line: sessionObj.id, ward: (userMemory.users[senderPhone] || {}).ward }); } catch (e) {}
+                }
 
                 // Record user message in memory
                 userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name);
@@ -717,7 +740,7 @@ async function startSession(sessionObj) {
                     broadcastEngine.markOptOut(senderPhone, body);
                     operationsTracker.record('opt_out', 'recorded', { lineId: sessionObj.id });
                     if (firstTime) {
-                        const ack = 'जी, आपका निर्णय दर्ज कर लिया है। अब आपको कोई चुनावी संदेश नहीं भेजा जाएगा। 🙏 (दोबारा जुड़ने के लिए START लिखें)';
+                        const ack = engagementPolicy.buildOptOutAck(engagementPolicy.messageLanguage(body));
                         try {
                             await sendSafeMessage(sock, replyJid, { text: ack });
                             userMemory.recordMessage(senderPhone, 'bot', ack, 'opt_out_ack', sessionObj.name);
@@ -743,7 +766,7 @@ async function startSession(sessionObj) {
                 if (user.consentStatus === 'PENDING') {
                     engagementPolicy.markConsentPrompted(user);
                     userMemory.save();
-                    const consentPrompt = engagementPolicy.buildConsentPrompt(user.name);
+                    const consentPrompt = engagementPolicy.buildConsentPrompt(user.name, engagementPolicy.messageLanguage(body));
                     await sendSafeMessage(sock, replyJid, { text: consentPrompt });
                     userMemory.recordMessage(senderPhone, 'bot', consentPrompt, 'consent_prompt', sessionObj.name);
                     operationsTracker.record('consent_prompt', 'sent', { lineId: sessionObj.id });
@@ -751,7 +774,14 @@ async function startSession(sessionObj) {
                     continue;
                 }
 
-                if (user.consentStatus === 'PROMPTED' && consentDecision) {
+                const substantiveFirstReply = consentDecision === 'accepted' &&
+                    !/^(1|1\.|ha+n?|haa|हाँ|हां|ji|जी|ok+|okay|yes|theek( hai)?|thik( hai)?|ठीक है|bilkul|बिल्कुल|zaroor|ज़रूर|जरूर)[\s!.🙏👍]*$/i.test(body.trim());
+                if (user.consentStatus === 'PROMPTED' && consentDecision === 'accepted' && substantiveFirstReply) {
+                    // A real question/statement in reply to the intro: accept consent and answer it (no canned menu)
+                    engagementPolicy.applyConsentDecision(user, 'accepted');
+                    userMemory.save();
+                    operationsTracker.record('consent', 'accepted', { lineId: sessionObj.id, via: 'substantive_reply' });
+                } else if (user.consentStatus === 'PROMPTED' && consentDecision) {
                     engagementPolicy.applyConsentDecision(user, consentDecision);
                     userMemory.save();
                     const consentReply = consentDecision === 'accepted'
@@ -764,7 +794,7 @@ async function startSession(sessionObj) {
                 }
 
                 if (user.consentStatus === 'PROMPTED' && !consentDecision) {
-                    const retryPrompt = engagementPolicy.buildConsentPrompt(user.name);
+                    const retryPrompt = engagementPolicy.buildConsentPrompt(user.name, engagementPolicy.messageLanguage(body));
                     await sendSafeMessage(sock, replyJid, { text: retryPrompt });
                     userMemory.recordMessage(senderPhone, 'bot', retryPrompt, 'consent_retry', sessionObj.name);
                     continue;
@@ -1063,7 +1093,7 @@ async function startSession(sessionObj) {
                         // If multiple distinct people share the same name and user hasn't specified father's name or ward:
                         if (!targetVoter && matches && matches.length > 1) {
                             const sameNameList = matches.filter(m => (m.name_hi === matches[0].name_hi || (m.name_en && m.name_en.toLowerCase() === matches[0].name_en.toLowerCase())));
-                            if (sameNameList.length > 1 && !user.ward) {
+                            if (sameNameList.length > 1) {
                                 user.disambiguationMatches = sameNameList;
                                 userMemory.save();
                                 replyText = voterEngine.formatDisambiguationPrompt(sameNameList, matches[0].name_hi);
@@ -1083,7 +1113,7 @@ async function startSession(sessionObj) {
                         }
 
                         // If single candidate found: ask father confirmation first (and pre-generate card in background)
-                        if (!targetVoter && matches && matches.length === 1) {
+                        if (!targetVoter && matches && matches.length >= 1) {
                             targetVoter = matches[0];
                             const relNameLow = (targetVoter.rel_name_hi || '').toLowerCase();
                             const alreadySpecifiedFather = lower.includes(relNameLow) || (targetVoter.rel_name_en && lower.includes(targetVoter.rel_name_en.toLowerCase()));
@@ -1187,7 +1217,7 @@ async function startSession(sessionObj) {
 
                                 replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone);
                                 if (!replyText || replyText.trim() === "") {
-                                    replyText = aiService.getFastLocalAnswer(body, senderPhone);
+                                    replyText = aiService.getSafeFallback(body, senderPhone);
                                 }
                                 await sendSafeMessage(sock, replyJid, { text: replyText });
                             }
@@ -1205,14 +1235,14 @@ async function startSession(sessionObj) {
 
                         replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone);
                         if (!replyText || replyText.trim() === '') {
-                            replyText = aiService.getFastLocalAnswer(body, senderPhone);
+                            replyText = aiService.getSafeFallback(body, senderPhone);
                         }
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Replied via AI/local to ${senderPhone}`);
                     }
                 } catch (err) {
                     console.error(`[${sessionObj.id}] Error resolving reply:`, err);
-                    replyText = aiService.getFastLocalAnswer(body, senderPhone);
+                    replyText = aiService.getSafeFallback(body, senderPhone);
                     await sendSafeMessage(sock, replyJid, { text: replyText }).catch(e => console.error('Fallback send failed:', e));
                 }
 
@@ -1389,7 +1419,8 @@ const broadcastEngine = new BroadcastEngine({
     stateFile: process.env.BROADCAST_STATE_PATH || path.join(__dirname, 'broadcast_state.json'),
     mediaDir: path.join(__dirname, 'media'),
     getSessions: () => SESSIONS,
-    isBlocked: (phone) => engagementPolicy.broadcastBlockReason(userMemory.users[phone]),
+    isBlocked: (phone) => (liveSelfTest.ownLineOf([phone]) ? 'own_line' : engagementPolicy.broadcastBlockReason(userMemory.users[phone])),
+    isSilenced: (ms) => followupPlanner.inSilencePeriod(new Date(ms)),
     getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
     onSent: ({ phone, name, text, line, lineName, media, sent }) => {
         const sess = SESSIONS.find(x => x.id === line);
@@ -2299,6 +2330,49 @@ app.post('/api/voter/stage', (req, res) => {
     dailyGoal.recordEvent('stage', { phone: u.phone, line: u.assignedLine, ward: u.ward, from, to: stage });
     res.json({ success: true });
 });
+// ==================== LIVE SELF-TEST (PIN-protected via the global gate) ====================
+// POST /api/self-test/start {testerLine, targetLine, script?}  -> tester line plays a scripted voter to the target line
+// GET  /api/self-test/status | /api/self-test/runs | /api/self-test/result/:id.json | /api/self-test/result/:id.md
+// POST /api/self-test/stop
+function selfTestPinOk(req) {
+    // Defence in depth: the global gate already requires the PIN; require it explicitly here too.
+    const cookiePin = (String(req.headers.cookie || '').match(/(?:^|;\s*)campaign_pin=([^;]+)/) || [])[1];
+    const pin = req.headers['x-campaign-pin'] || req.query.pin || (req.body && req.body.pin) || (cookiePin && decodeURIComponent(cookiePin));
+    return pin === CAMPAIGN_PIN;
+}
+app.get('/api/self-test/status', (req, res) => {
+    if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
+    res.json({ ...liveSelfTest.status(), lines: SESSIONS.map(s => ({ id: s.id, name: s.name, status: s.status })), defaultScript: require('./self_test.js').DEFAULT_SCRIPT });
+});
+app.post('/api/self-test/start', (req, res) => {
+    if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
+    try {
+        const st = liveSelfTest.start({ testerLine: req.body.testerLine, targetLine: req.body.targetLine, script: req.body.script && String(req.body.script).trim() ? req.body.script : null });
+        operationsTracker.record('self_test', 'started', { lineId: req.body.targetLine });
+        res.json({ success: true, ...st });
+    } catch (e) {
+        res.status(400).json({ success: false, error: e.message });
+    }
+});
+app.post('/api/self-test/stop', (req, res) => {
+    if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
+    res.json({ success: true, ...liveSelfTest.stop() });
+});
+app.get('/api/self-test/runs', (req, res) => {
+    if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
+    res.json({ runs: liveSelfTest.listRuns() });
+});
+app.get('/api/self-test/result/:file', (req, res) => {
+    if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
+    const m = String(req.params.file || '').match(/^(st_[\w]+)\.(json|md)$/);
+    if (!m) return res.status(400).json({ error: 'Use <runId>.json or <runId>.md' });
+    const run = liveSelfTest.readRun(m[1]);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    res.setHeader('Content-Disposition', `attachment; filename="${m[1]}.${m[2]}"`);
+    if (m[2] === 'json') return res.json(run);
+    res.type('text/markdown').send(liveSelfTest.toMarkdown(run));
+});
+
 // Night summary at ~21:45 IST, once per day
 setInterval(() => {
     try {
@@ -2812,6 +2886,7 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-media" class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
                     <button id="tab-btn-bulk" class="tab-btn" type="button" data-tab="bulk">📣 Bulk Send</button>
                     <button id="tab-btn-goal" class="tab-btn" type="button" data-tab="goal">🎯 Goal & Agenda</button>
+                    <button id="tab-btn-selftest" class="tab-btn" type="button" data-tab="selftest">🧪 Live Self-Test</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -3698,6 +3773,25 @@ app.get('/', (req, res) => {
                         <button type="button" data-goal-action="save-day" style="margin-top:8px; padding:7px 14px; border:none; border-radius:6px; background:#2563eb; color:white; font-weight:800; cursor:pointer;">💾 Save day agenda</button>
                         <span id="ha-status" style="font-size:12px; margin-left:8px;"></span>
                     </div>
+                </div>
+
+                <!-- ===== Live Self-Test Tab ===== -->
+                <div id="tab-selftest" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🧪 Live Self-Test — one bot line plays a voter to another</h3>
+                    <p style="font-size:12px; color:#64748b; margin-top:0;">The tester line sends each scripted message to the target line and waits up to 60s for the real reply. Only during a run does the target treat the tester as a voter; the tester never replies. Outside a run our own lines ignore each other (no bot-to-bot loops). The tester's temporary voter record is deleted after the run.</p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:13px;">
+                        <label>Tester line <select id="st-tester"></select></label>
+                        <label>Target line (bot under test) <select id="st-target"></select></label>
+                        <button type="button" id="st-start" style="padding:7px 14px; border:none; border-radius:6px; background:#16a34a; color:white; font-weight:800; cursor:pointer;">▶ Start test</button>
+                        <button type="button" id="st-stop" style="padding:7px 14px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer;">■ Stop</button>
+                        <span id="st-status" style="font-weight:700;"></span>
+                    </div>
+                    <label style="display:block; font-size:12px; margin-top:10px;">Script — one voter message per line; optional <code>|| word1, word2</code> = the reply must mention one of these (context check). Empty = default 8-turn script.</label>
+                    <textarea id="st-script" rows="8" style="width:100%; box-sizing:border-box; padding:7px; border:1px solid #cbd5e1; border-radius:6px; font-family:monospace; font-size:12px;"></textarea>
+                    <div id="st-summary" style="font-size:13px; margin-top:10px;"></div>
+                    <div id="st-transcript" style="font-size:13px; margin-top:8px; max-height:520px; overflow-y:auto;"></div>
+                    <h4 style="margin:14px 0 6px 0;">Past runs</h4>
+                    <div id="st-runs" style="font-size:12px;"></div>
                 </div>
             </div>
 
@@ -5394,6 +5488,68 @@ app.get('/', (req, res) => {
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
             </script>
+            <script>
+            (function () {
+                function el(id) { return document.getElementById(id); }
+                function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                var defaultScript = [];
+                function fillLines(lines) {
+                    ['st-tester', 'st-target'].forEach(function (id, idx) {
+                        var sel = el(id); if (!sel) return;
+                        var keep = sel.value;
+                        sel.innerHTML = (lines || []).map(function (l) { return '<option value="' + esc(l.id) + '">' + esc(l.name) + ' — ' + esc(l.status) + '</option>'; }).join('');
+                        if (keep) sel.value = keep; else if (lines && lines[idx]) sel.value = lines[idx === 0 ? (lines.length > 2 ? 2 : 1) : 0].id;
+                    });
+                }
+                function render(d) {
+                    if (!d) return;
+                    var st = el('st-status');
+                    if (st) st.textContent = d.status === 'idle' ? 'Idle' : (String(d.status || '').toUpperCase() + (d.total ? ' — turn ' + d.turn + '/' + d.total : '') + (d.error ? ' — ' + d.error : ''));
+                    var sum = el('st-summary');
+                    if (sum) sum.innerHTML = d.id ? ('Run <b>' + esc(d.id) + '</b>: ' + esc(d.testerLine) + ' → ' + esc(d.targetLine) + ' · ✅ ' + (d.passed || 0) + ' · ❌ ' + (d.failed || 0) + ' · <a href="/api/self-test/result/' + esc(d.id) + '.json">JSON</a> · <a href="/api/self-test/result/' + esc(d.id) + '.md">Markdown</a>') : '';
+                    var tr = el('st-transcript');
+                    if (tr) tr.innerHTML = (d.turns || []).map(function (t) {
+                        var checks = Object.keys(t.checks || {}).map(function (k) { return (t.checks[k] ? '✅ ' : '❌ ') + esc(k); }).join(' · ');
+                        return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; margin-bottom:6px; background:' + (t.pass ? '#f0fdf4' : '#fef2f2') + ';">' +
+                            '<div><b>' + t.n + '. Voter:</b> ' + esc(t.voter) + '</div>' +
+                            (t.replies && t.replies.length ? t.replies.map(function (r) { return '<div style="margin-top:4px;"><b>Bot:</b> ' + esc(r) + '</div>'; }).join('') : '<div style="margin-top:4px; color:#dc2626;"><b>Bot:</b> (no reply)</div>') +
+                            '<div style="font-size:11px; color:#475569; margin-top:4px;">' + (t.latencyMs === null || t.latencyMs === undefined ? 'no reply' : (t.latencyMs / 1000).toFixed(1) + 's') + ' · ' + checks + '</div></div>';
+                    }).join('');
+                }
+                function loadRuns() {
+                    return fetch('/api/self-test/runs').then(function (r) { return r.json(); }).then(function (d) {
+                        var box = el('st-runs'); if (!box) return;
+                        var runs = (d && d.runs) || [];
+                        box.innerHTML = runs.length ? runs.map(function (r) { return '<div>' + esc(r.startedAt) + ' · ' + esc(r.testerLine) + ' → ' + esc(r.targetLine) + ' · <b>' + esc(r.status) + '</b> (' + (r.passed || 0) + '/' + ((r.passed || 0) + (r.failed || 0)) + ') · <a href="/api/self-test/result/' + esc(r.id) + '.json">JSON</a> · <a href="/api/self-test/result/' + esc(r.id) + '.md">MD</a></div>'; }).join('') : 'No runs yet.';
+                    }).catch(function () {});
+                }
+                function loadStatus() {
+                    return fetch('/api/self-test/status').then(function (r) { return r.json(); }).then(function (d) {
+                        if (!d) return;
+                        fillLines(d.lines);
+                        if (d.defaultScript) defaultScript = d.defaultScript;
+                        var ta = el('st-script');
+                        if (ta && !ta.value && defaultScript && defaultScript.length) ta.placeholder = defaultScript.map(function (x) { return x.text + (x.expectRef ? ' || ' + x.expectRef.join(', ') : ''); }).join(String.fromCharCode(10));
+                        render(d);
+                    }).catch(function () {});
+                }
+                function start() {
+                    var body = { testerLine: el('st-tester') ? el('st-tester').value : '', targetLine: el('st-target') ? el('st-target').value : '', script: el('st-script') ? el('st-script').value : '' };
+                    if (body.testerLine === body.targetLine) { if (el('st-status')) el('st-status').textContent = 'Pick two different lines'; return; }
+                    fetch('/api/self-test/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                        .then(function (r) { return r.json(); }).then(function (d) { if (d && d.error && el('st-status')) el('st-status').textContent = '❌ ' + d.error; else render(d); });
+                }
+                function init() {
+                    var tb = el('tab-btn-selftest');
+                    if (tb) tb.addEventListener('click', function () { if (typeof switchTab === 'function') switchTab(this.dataset.tab, this); loadStatus(); loadRuns(); });
+                    var sb = el('st-start'); if (sb) sb.addEventListener('click', start);
+                    var xb = el('st-stop'); if (xb) xb.addEventListener('click', function () { fetch('/api/self-test/stop', { method: 'POST' }).then(function (r) { return r.json(); }).then(render); });
+                    var tab = el('tab-selftest');
+                    if (tab) setInterval(function () { if (tab.style.display !== 'none') { loadStatus(); } }, 3000);
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+            })();
+            </script>
         </body>
         </html>
     `);
@@ -5406,6 +5562,9 @@ app.get('/health', (req, res) => {
         mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live',
         publicDashboardUrl: PUBLIC_DASHBOARD_URL || null,
         uptime: process.uptime(),
+        brain: 'v2',
+        selfTest: liveSelfTest.isActive() ? 'running' : 'idle',
+        silencePeriod: followupPlanner.inSilencePeriod(new Date()),
         incomingQueue: incomingQueue.status(),
         sessions: SESSIONS.map(s => ({
             id: s.id,

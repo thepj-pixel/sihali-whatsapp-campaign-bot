@@ -7,7 +7,7 @@ const MEMORY_FILE = path.join(__dirname, 'user_memory.json');
 // Authentic campaign slogans pool for rotation
 const SLOGANS = [
     { id: 's1', text: 'सिहाली खुर्द का सच्चा सम्मान, बाबा अभय सिंह का काम महान! 🚩' },
-    { id: 's2', text: '5 साल का सच्चा विकास, हर घर में अटूट विश्वास! 🙏' },
+    { id: 's2', text: '40 साल की सच्ची सेवा, हर घर में अटूट विश्वास! 🙏' },
     { id: 's3', text: 'हर सुख-दुख में जो साथ खड़ा मिले, वही अपना सच्चा साथी है! 🚩' },
     { id: 's4', text: 'घर-घर शुद्ध पेयजल और पक्की सड़कें — बाबा अभय सिंह का संकल्प! 🚰' },
     { id: 's5', text: 'ईमानदारी और सेवा की मिसाल — बाबा अभय सिंह सिहाली खुर्द! 🚩' },
@@ -144,6 +144,11 @@ class UserMemory {
 
         const user = this.getUser(phone);
         conversationContext.updateFromMessage(user, role, text);
+        // Brain v2: any voter message answers our proactive follow-ups (resets the "2 unanswered" stop rule)
+        if (role === 'user' && user.memory && user.memory.proactive) {
+            user.memory.proactive.unanswered = 0;
+            user.memory.proactive.lastUserAt = new Date().toISOString();
+        }
         const timestamp = new Date().toLocaleTimeString('en-IN', {
             timeZone: 'Asia/Kolkata',
             hour12: true,
@@ -184,7 +189,7 @@ class UserMemory {
                     'kya', 'hai', 'है', 'हूँ', 'hoon', 'hu', 'bhai', 'baba', 'ji', 'जी', 'भाई', 'sir', 'yaha', 'यहाँ',
                     'kaise', 'kaam', 'काम', 'vote', 'वोट', 'nahi', 'नहीं', 'nhi', 'dekh', 'dekho', 'dekhna',
                     'bol', 'raha', 'rha', 'batana', 'batao', 'aaya', 'gaya', 'kar', 'karo', 'dunga', 'denge',
-                    'to', 'bhi', 'भी', 'kuch', 'कुछ', 'mat', 'kyu', 'kyun', 'parchi', 'slip', 'list', 'ward', 'gaon'
+                    'to', 'bhi', 'भी', 'kuch', 'कुछ', 'mat', 'kyu', 'kyun', 'parchi', 'slip', 'list', 'ward', 'gaon', 'se', 'से', 'sihali', 'सिहाली', 'हाड़ाहेड़ी', 'hadahedi', 'haraheri', 'khurd', 'kalan', 'खुर्द', 'कलां'
                 ];
                 for (const pat of namePatterns) {
                     const match = text.match(pat);

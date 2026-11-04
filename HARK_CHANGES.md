@@ -1,4 +1,32 @@
-# HARK_CHANGES — 4 Nov 2026
+# HARK_CHANGES — Brain v2 (4 Nov 2026, evening)
+
+Pushed to `hark/production-ready`, `codex/production-readiness` (live) and `main`. Full design and 20 before/after dialogues: **`BRAIN_V2.md`**.
+
+| Item | What changed | Files |
+|---|---|---|
+| 1. Knowledge retrieval | The 3 fact sheets load into 134 structured items (title, category, villages, done/future, location). Top 3-5 items are picked by Hindi/Hinglish/dialect synonyms and village names, and feed both the LLM prompt and the local fallback. Budgets are stripped and work counts are never rendered. **Held:** all CC/interlocking lane items and the "45+ CC roads" headline (CONTENT HOLD in `campaign_profile.json`), plus the Gayasi Ram → Sube Singh Panwar road, which the category sheet calls *done* and the operator profile calls *future*. | `knowledge_base.js` (new) |
+| 2. Long-term voter memory | `user.memory` holds: name, gender (from verb endings), age group, village/ward, family + household votes, concerns, objections, questions, works already told, commitment, language/dialect, last topic, open follow-up, a rolling summary of older turns and proactive counters. A rule extractor always runs, plus an LLM JSON extractor when keys exist; its output is whitelisted per field. `MEMORY_LLM_EXTRACT=off` disables the LLM extractor. | `voter_memory.js` (new), `user_memory.js` |
+| 3. Context | The LLM prompt carries the memory card, rolling summary, last 10 turns, retrieved facts (DONE/FUTURE/already told), stage and goal. Each reply answers the question first, refers back to the voter's own earlier words, never re-tells a work, and closes with one step tied to their concern. The honorific follows gender and age; the reply follows the voter's script. | `reply_brain.js` (rewritten), `ai_assistant_service.js` |
+| 4. Proactive follow-ups | The planner checks: consented, not opted out, quiet hours 21-08 IST, max 1 per voter per day, stop after 2 unanswered, sticky line, max 120 per line per day, 3 per 15-minute cycle with 20-45s gaps. It sends a concern follow-up, a household-votes ask, a poll reminder with booth and slip offer, or a matching untold work. **Silence period** from `campaign.silenceStartIST` (default 2026-11-14 18:00 IST) stops follow-ups, consent reminders **and bulk sends**. | `followup_planner.js` (new), `server.js`, `broadcast_engine.js` (`isSilenced`), `campaign_profile.json` (`campaign` block, `opponentNames`) |
+| 5. Less dumb | `getFastLocalAnswer` is no longer called by the server; every backstop is `getSafeFallback()`, the grounded v2 composer. Its legacy output is sanitised (no "बाबा जी", counts or budgets), and the invented "toppers" lines and the opponent-attack copy are removed. Canned lines rotate and never repeat back-to-back. New intents: `introduce`, `who_are_you` (honest "automated"), `joke`, `off_topic` (party politics answered neutrally), `opponent` (never attack; move to his work), `memory_check`, `was_sarpanch`, `family_votes`, and jobs (honest: no sankalp). A substantive first reply to the consent prompt is answered instead of getting a canned menu. The consent prompt and STOP ack follow the voter's script. | `reply_brain.js`, `ai_assistant_service.js`, `engagement_policy.js`, `server.js` |
+| 6. Hard rules | Validator + tests cover: no "बाबा जी"; no "sarpanch before" claim (asked → "नहीं… सरपंच प्रतिनिधि… 40 साल की सच्ची समाज सेवा"); no money, work counts, caste/religion, threats/bribes, opponent attacks, or fake "slip sent". STOP is permanent. The slogan "5 साल का सच्चा विकास" became "40 साल की सच्ची सेवा". | `reply_brain.js`, `user_memory.js` |
+| 7. Live Self-Test | Dashboard tab **🧪 Live Self-Test** plus PIN-checked APIs `/api/self-test/{start,stop,status,runs,result/<id>.json|.md}`. The tester line plays a script to the target line and waits ≤60s per reply. Checks: replied, no banned claims, no repeat, earlier context (`|| words`), on topic. **Own lines now ignore each other outside a run** (loop guard). During a run, only the target treats only the tester as a voter, and the tester never runs its brain. The temporary tester record is deleted afterwards. Results go to `self_test_runs/` (gitignored). | `self_test.js` (new), `server.js` |
+| 8. Offline tests | `npm run test:brainv2`: 28 conversations (≥6 turns each) through a fake socket and the real pipeline, or with a stub LLM/extractor. Also knowledge-base, planner and self-test (two fake lines) checks: 2112 assertions. Added to `test:all`. The legacy `test_5step_ladder.cjs` assertion that *required* "15 प्रमुख संकल्प" now requires that **no** count is quoted. | `test_brain_v2_conversations.cjs` (new), `test_5step_ladder.cjs`, `package.json` |
+| 9. Docs | This section, plus `BRAIN_V2.md` (generated dialogues via `brain_v2_before_after.cjs`). | |
+
+Also fixed: a **privacy hole** in the voter-slip flow. When the ward was known and several voters matched a bare name, the first match's slip was sent without asking for the father's or husband's name. Now any name match asks for confirmation first, or shows the existing disambiguation list.
+
+### How to run the Live Self-Test (owner)
+1. Open the dashboard with your PIN → **🧪 Live Self-Test**.
+2. Pick two **connected** lines, for example tester **Canada Line**, target **Primary Line** (the bot under test).
+3. Leave the script empty for the default 8 turns, or paste your own (one message per line, optional `|| word1, word2`). Press **▶ Start test**.
+4. Watch the transcript fill in. Download **JSON** or **Markdown** from the run line or *Past runs*.
+
+API: `curl -X POST -H "x-campaign-pin: <PIN>" -H "Content-Type: application/json" -d '{"testerLine":"canada","targetLine":"sim_636"}' http://136.80.218.29/api/self-test/start`, then `GET /api/self-test/status`.
+
+---
+
+# HARK_CHANGES — 4 Nov 2026 (earlier: Bulk Send, reply brain v1)
 
 Branch `hark/production-ready`, built on `origin/codex/production-readiness` (7a11870). Local commits only, nothing pushed.
 

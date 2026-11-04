@@ -17,3 +17,4 @@ broadcast_state.json
 broadcast_state.json.tmp
 broadcast_state.json.corrupt-*
 campaign_agenda.json
+self_test_runs/

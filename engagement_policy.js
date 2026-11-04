@@ -45,9 +45,25 @@ function buildSaveContactPrompt(lineId = 'sim_636', language = 'hi') {
     return `यह इसी WhatsApp लाइन ${contact.display} का संपर्क कार्ड है। “Add to Contacts / संपर्क में जोड़ें” दबाकर सेव कर लें, ताकि आपके माँगे हुए अपडेट सही नंबर से मिलें। 🙏`;
 }
 
-function buildConsentPrompt(name = '') {
+function buildConsentPrompt(name = '', language = 'hi') {
+    if (language === 'hinglish' || language === 'en') {
+        const g = name && !/[\u0900-\u097F]/.test(name) ? `${name} ji` : 'ji';
+        return `Ram Ram ${g}! 🙏 Hum Baba Abhay Singh jansampark team se hain. Aapki voter parchi, ward ki jankari ya gaon ki kisi samasya me kya madad chahiye?`;
+    }
     const greeting = name ? `${name} जी` : 'भाई जी';
     return `राम राम ${greeting}! 🙏 हम बाबा अभय सिंह जनसंपर्क टीम से हैं। आपकी मतदाता पर्ची, वार्ड की जानकारी या गाँव की किसी समस्या में क्या सहायता चाहिए?`;
+}
+
+/** Script of a message: 'hinglish' for Roman-only text, else 'hi'. */
+function messageLanguage(text) {
+    const t = String(text || '');
+    return /[\u0900-\u097F]/.test(t) ? 'hi' : (/[a-z]/i.test(t) ? 'hinglish' : 'hi');
+}
+
+function buildOptOutAck(language = 'hi') {
+    return language === 'hinglish'
+        ? 'Ji, aapka faisla darj kar liya hai. Ab aapko koi chunavi message nahi bheja jayega. 🙏 (Dobara judne ke liye START likhein)'
+        : 'जी, आपका निर्णय दर्ज कर लिया है। अब आपको कोई चुनावी संदेश नहीं भेजा जाएगा। 🙏 (दोबारा जुड़ने के लिए START लिखें)';
 }
 
 // Explicit opt-out messages. Matched against the WHOLE message (after trimming punctuation),
@@ -173,6 +189,8 @@ module.exports = {
     buildCampaignVCard,
     buildSaveContactPrompt,
     buildConsentPrompt,
+    messageLanguage,
+    buildOptOutAck,
     parseConsentResponse,
     OPT_OUT_TERMS,
     OPT_IN_TERMS,
