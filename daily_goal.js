@@ -115,9 +115,21 @@ function recordEvent(type, { phone, line, ward, from, to } = {}) {
     persistSoon();
 }
 
+function registerCounts(date) {
+    const out = { samasyaToday: 0, samasyaOpen: 0, mulaqatToday: 0, mulaqatOpen: 0 };
+    try {
+        const ss = require('./samasya_store.js'), ms = require('./mulaqat_store.js');
+        const a = ss.counts(date), b = ms.counts(date);
+        out.samasyaToday = a.today; out.samasyaOpen = (a.byStatus.new || 0) + (a.byStatus['in-progress'] || 0);
+        out.mulaqatToday = b.today; out.mulaqatOpen = (b.byStatus.requested || 0) + (b.byStatus.confirmed || 0);
+    } catch (e) {}
+    return out;
+}
+
 function progress(date = currentIstDate()) {
     const d = dayStats(date);
     return {
+        ...registerCounts(date),
         date,
         goal: get(),
         reached: d.reached.length,
@@ -141,6 +153,7 @@ function buildSummary(date = currentIstDate(), totals = null) {
     const wards = Object.entries(p.byWard).filter(([k]) => k !== 'unknown' && k !== 'null').sort((a, b) => b[1].committed - a[1].committed).slice(0, 5)
         .map(([k, v]) => `वार्ड ${k}: ${v.committed} पक्के/${v.reached}`).join(', ');
     const text = `📊 ${date} — ${p.reached}/${p.targetContacts} लोगों तक पहुँचे, ${p.repliedPeople} ने जवाब दिया, आज ${p.committedToday}/${p.targetCommitted} पक्के वोट, ${p.opposedToday} विरोध में।` +
+        ` आज ${p.samasyaToday} समस्याएँ दर्ज (${p.samasyaOpen} खुली), ${p.mulaqatToday} मुलाक़ात/घर-बुलावे (${p.mulaqatOpen} बाकी)।` +
         (totals ? ` कुल अब तक: ${totals.committed} पक्के, ${totals.leaning} झुकाव, ${totals.undecided} असमंजस, ${totals.opposed} विरोध।` : '') +
         (lines ? ` लाइन: ${lines}.` : '') + (wards ? ` टॉप वार्ड: ${wards}.` : '') +
         (goal.instruction ? ` आज का काम: ${goal.instruction}` : '');

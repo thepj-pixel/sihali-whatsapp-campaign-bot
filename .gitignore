@@ -18,3 +18,7 @@ broadcast_state.json.tmp
 broadcast_state.json.corrupt-*
 campaign_agenda.json
 self_test_runs/
+samasya_log.json
+samasya_log.json.tmp
+mulaqat_requests.json
+mulaqat_requests.json.tmp

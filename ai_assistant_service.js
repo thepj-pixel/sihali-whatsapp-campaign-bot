@@ -330,7 +330,7 @@ function getFastLocalAnswerCore(query, phone = null) {
                 `Ram Ram ${honorific}! 🕊️\n` +
                 `Mokshdham va paryavaran sanrakshan ke kaam:\n` +
                 `• Mokshdham ka mitti bharat, samtlikaran, 2 naye borewell aur paani ki tanki!\n` +
-                `• Paramparik johadon ki gehari khudai va ped-paudhe lagane ka kaam. 🌳🚩`
+                `• Paramparik johadon ki gehari khudai aur jeernoddhar. 🚩`
             );
         }
         return (
@@ -339,7 +339,7 @@ function getFastLocalAnswerCore(query, phone = null) {
 ` +
             `• मोक्षधाम का मिट्टी भरत, समतलीकरण, 2 नए बोरवेल और पानी की टंकी की व्यवस्था!
 ` +
-            `• पारंपरिक जोहड़ों की गहरी खुदाई व सघन छायादार वृक्षारोपण कार्य। 🌳🚩`
+            `• पारंपरिक जोहड़ों की गहरी खुदाई व जीर्णोद्धार। 🚩`
         );
     }
 
@@ -731,7 +731,7 @@ function isCannedRejection(reply) {
 }
 
 // AI Assistant query with multi-tier failover (NVIDIA Key 1 -> Key 2 -> Groq -> Gemini -> Local Fast Engine)
-async function getAIResponse(userMessage, apiKey = null, conversationHistory = [], phone = null) {
+async function getAIResponse(userMessage, apiKey = null, conversationHistory = [], phone = null, meta = {}) {
     const lowerMsg = userMessage.toLowerCase().trim();
     const isParchiReq = lowerMsg.includes('parchi') || lowerMsg.includes('voter') || lowerMsg.includes('slip') || lowerMsg.includes('nikal') || lowerMsg.includes('bhej') || lowerMsg.includes('yadav');
 
@@ -764,7 +764,9 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     }
 
     // Direct voter search interception ONLY if message is likely a name or voter query
-    if (voterEngine && voterEngine.isLikelyNameOrVoterQuery(userMessage)) {
+    // (never while the voter is answering an open samasya/mulaqat question, unless they explicitly ask for a parchi)
+    const explicitParchi = /(parchi|पर्ची|voter slip|voter id|epic|slip)/i.test(lowerMsg);
+    if (voterEngine && voterEngine.isLikelyNameOrVoterQuery(userMessage) && !(user && brain.inFlow(user) && !explicitParchi)) {
         const candidateTerms = ['baba abhay singh', 'abhay singh', 'baba ji', 'babaji', 'baba'];
         const isCandidateQuery = candidateTerms.some(t => lowerMsg.includes(t));
         if (!isCandidateQuery) {
@@ -808,7 +810,8 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
         const llm = hasAnyLLM(apiKey) ? (sys, history, msg) => callLLMCascade(sys, history, msg, apiKey, 7000) : null;
         const llmJson = hasAnyLLM(apiKey) && process.env.MEMORY_LLM_EXTRACT !== 'off'
             ? (prompt) => callLLMCascade(prompt, [], 'Return the JSON now.', apiKey, 2500) : null;
-        const result = await brain.respond(userMessage, brainUser, { llm, llmJson, goal: goalText, history: conversationHistory });
+        const result = await brain.respond(userMessage, brainUser, { llm, llmJson, goal: goalText, history: conversationHistory, meta: { phone, line: meta.line || null, test: !!meta.test } });
+        AI_STATUS.lastReply = { at: new Date().toISOString(), source: result.source, intent: result.intent, llmConfigured: !!llm };
         lastBrainResult = result;
         if (user && result.stage !== result.previousStage && dailyGoalMod && dailyGoalMod.recordEvent) {
             try { dailyGoalMod.recordEvent('stage', { phone, line: user.assignedLine, ward: user.ward, from: result.previousStage, to: result.stage }); } catch (e) {}
@@ -831,6 +834,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
 }
 
 let lastBrainResult = null;
+const AI_STATUS = { lastReply: null, lastProviderOk: null, lastProviderError: null, calls: 0, failures: 0 };
 
 function hasAnyLLM(apiKey) {
     return Boolean(apiKey || CONFIG.nvidia_keys[0] || CONFIG.nvidia_keys[1] || CONFIG.groq_api_key || CONFIG.gemini_api_key);
@@ -856,9 +860,13 @@ async function callLLMCascade(systemPrompt, history = [], userMessage = '', apiK
         const left = deadline - Date.now();
         if (left < 800) break;
         try {
+            AI_STATUS.calls++;
             const reply = await Promise.race([fn(), new Promise((_, rej) => setTimeout(() => rej(new Error('budget timeout')), left))]);
-            if (reply && !isCannedRejection(reply)) return reply;
+            if (reply && !isCannedRejection(reply)) { AI_STATUS.lastProviderOk = { provider: name, at: new Date().toISOString() }; return reply; }
+            AI_STATUS.lastProviderError = { provider: name, error: 'empty_or_refusal', at: new Date().toISOString() };
         } catch (e) {
+            AI_STATUS.failures++;
+            AI_STATUS.lastProviderError = { provider: name, error: String(e.message || e).slice(0, 160), at: new Date().toISOString() };
             console.warn(`[AI Assistant] ${name} failed:`, e.message);
         }
     }
@@ -867,9 +875,39 @@ async function callLLMCascade(systemPrompt, history = [], userMessage = '', apiK
 
 function getLastBrainResult() { return lastBrainResult; }
 
+/** Which LLM providers are configured (booleans only — never key values) + recent outcomes. */
+function aiStatus() {
+    return {
+        replyBrain: process.env.REPLY_BRAIN === 'off' ? 'off' : 'v3',
+        providers: { nvidia: CONFIG.nvidia_keys.length, groq: !!(CONFIG.groq_api_key || process.env.GROQ_API_KEY), gemini: !!(CONFIG.gemini_api_key || process.env.GEMINI_API_KEY) },
+        anyLLM: hasAnyLLM(null),
+        nvidiaModel: 'nvidia/nemotron-3.5-bolt-e4b',
+        mode: hasAnyLLM(null) ? 'llm_with_template_fallback' : 'templates_only (no LLM key configured)',
+        ...AI_STATUS
+    };
+}
+
+/** Probe each configured provider once with a tiny prompt (dashboard/API only). */
+async function probeProviders() {
+    const out = {};
+    const messages = [{ role: 'system', content: 'Reply with the single word: ok' }, { role: 'user', content: 'ping' }];
+    const k1 = CONFIG.nvidia_keys[0];
+    if (k1) { try { out.nvidia1 = { ok: !!(await callNvidia(messages, k1)) }; } catch (e) { out.nvidia1 = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    const k2 = CONFIG.nvidia_keys[1];
+    if (k2) { try { out.nvidia2 = { ok: !!(await callNvidia(messages, k2)) }; } catch (e) { out.nvidia2 = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    const gq = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
+    if (gq) { try { out.groq = { ok: !!(await callGroq(messages, gq)) }; } catch (e) { out.groq = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    const gm = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
+    if (gm) { try { out.gemini = { ok: !!(await callGemini('Reply with the single word: ok', [], 'ping', gm)) }; } catch (e) { out.gemini = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    if (!Object.keys(out).length) out.none = 'No LLM API key configured on this machine (NVIDIA_API_KEY(S) / GROQ_API_KEY / GEMINI_API_KEY env or api_config.json).';
+    return out;
+}
+
 module.exports = {
     getAIResponse,
     getLastBrainResult,
+    aiStatus,
+    probeProviders,
     callLLMCascade,
     getFastLocalAnswer,
     getSafeFallback,

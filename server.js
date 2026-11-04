@@ -219,7 +219,7 @@ app.use((req, res, next) => {
     }
 
     if (req.path.startsWith('/api')) {
-        return res.status(401).json({ error: 'Unauthorized. Enter PIN 2026 on dashboard.' });
+        return res.status(401).json({ error: 'Unauthorized. Enter the dashboard PIN.' });
     }
 
     // Render Lock Screen
@@ -322,6 +322,27 @@ function extractMessageText(message) {
     if (message.buttonsResponseMessage?.selectedDisplayText) return message.buttonsResponseMessage.selectedDisplayText;
     if (message.templateButtonReplyMessage?.selectedId) return message.templateButtonReplyMessage.selectedId;
     if (message.listResponseMessage?.title) return message.listResponseMessage.title;
+    return '';
+}
+
+/**
+ * Non-text WhatsApp messages become a short token the brain understands ("[voice note]", "[sticker]" ...),
+ * or 'IGNORE' for protocol noise (reactions, edits, deletes, key distribution) that must never get a reply.
+ * Returns '' when nothing is recognisable (true decryption failure -> Bad MAC healing path).
+ */
+function mediaPlaceholder(message) {
+    if (!message) return '';
+    const m = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message.viewOnceMessageV2?.message || message;
+    if (m.reactionMessage || m.protocolMessage || m.pollUpdateMessage || m.editedMessage || m.keepInChatMessage || m.pinInChatMessage) return 'IGNORE';
+    if (m.audioMessage) return '[voice note]';
+    if (m.stickerMessage) return '[sticker]';
+    if (m.imageMessage) return '[photo]';
+    if (m.videoMessage) return m.videoMessage.gifPlayback ? '[gif]' : '[video]';
+    if (m.documentMessage || m.documentWithCaptionMessage) return '[document]';
+    if (m.locationMessage || m.liveLocationMessage) return '[location]';
+    if (m.contactMessage || m.contactsArrayMessage) return '[contact card]';
+    const keys = Object.keys(m).filter(k => !['messageContextInfo', 'senderKeyDistributionMessage'].includes(k));
+    if (!keys.length && (m.senderKeyDistributionMessage || m.messageContextInfo)) return 'IGNORE';
     return '';
 }
 
@@ -673,7 +694,15 @@ async function startSession(sessionObj) {
                 if (!body && hasImage) {
                     body = (imageAnalysis && imageAnalysis.summaryHindi)
                         ? `[फोटो: ${imageAnalysis.summaryHindi}]`
-                        : '[फोटो प्राप्त हुई]';
+                        : '[photo]';
+                }
+                if (!body && msg.message) {
+                    const token = mediaPlaceholder(msg.message);
+                    if (token === 'IGNORE') {
+                        logDiagnostic({ session: sessionObj.name, phone: senderPhone, incoming: '[protocol/reaction]', reply: 'Ignored (no reply needed).', status: 'IGNORED_NON_TEXT' });
+                        continue;
+                    }
+                    if (token) body = token;
                 }
 
                 // If body is empty (e.g. Meta Cloud encryption Bad MAC or initial handshake)
@@ -886,16 +915,17 @@ async function startSession(sessionObj) {
                         continue;
                     }
 
-                    // Extract Ward if mentioned
-                    const user = userMemory.getUser(senderPhone);
+                    // Extract Ward if mentioned (reuse the outer `user`; re-declaring it here caused a TDZ ReferenceError
+                    // on EVERY consented message, which silently routed all replies to the fallback template)
                     const wardMatch = lower.match(/(?:ward|वार्ड|w)[\s:]*([0-9]{1,2})/i);
                     if (wardMatch) {
                         user.ward = parseInt(wardMatch[1]);
                         userMemory.save();
                     }
 
-                    const isPhotoQuery = lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
-                    const isVideoQuery = lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
+                    const isMediaToken = replyBrain.MEDIA_RX.test(body.trim());
+                    const isPhotoQuery = !isMediaToken && lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
+                    const isVideoQuery = !isMediaToken && lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
                     const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
                     // Check if user is confirming previous query ("ye hie details h", "yahi h", "itna hi pata h", etc.)
@@ -914,7 +944,10 @@ async function startSession(sessionObj) {
                     const isConversational = voterEngine.isConversationalInquiry(body);
                     const isGreetingMsg = voterEngine.isGreeting(body);
 
-                    const isVoterSlipIntent = !isConversational && !isGreetingMsg && !isPhotoQuery && !isVideoQuery && !isPosterGenQuery && (
+                    // While the voter is answering our samasya/mulaqat questions ("shiv mandir ke paas", "Ramesh ke ghar ke saamne"),
+                    // a name-like answer must not be hijacked by the voter-slip search — only an explicit parchi ask is.
+                    const inBrainFlow = replyBrain.inFlow(user) && !hasExplicitParchiKeyword && !hasEpicPattern;
+                    const isVoterSlipIntent = !inBrainFlow && !isConversational && !isGreetingMsg && !isPhotoQuery && !isVideoQuery && !isPosterGenQuery && (
                         hasEpicPattern ||
                         hasExplicitParchiKeyword ||
                         (hasParchiPhrase && !lower.includes('photo') && !lower.includes('video') && !lower.includes('poster')) ||
@@ -1215,7 +1248,7 @@ async function startSession(sessionObj) {
                                     content: h.text
                                 }));
 
-                                replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone);
+                                replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter });
                                 if (!replyText || replyText.trim() === "") {
                                     replyText = aiService.getSafeFallback(body, senderPhone);
                                 }
@@ -1233,7 +1266,7 @@ async function startSession(sessionObj) {
                             content: h.text
                         }));
 
-                        replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone);
+                        replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter });
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getSafeFallback(body, senderPhone);
                         }
@@ -1499,7 +1532,7 @@ app.post('/api/send-message', async (req, res) => {
         } else if (template === 'ground_feedback') {
             messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह जनसंपर्क में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
         } else if (template === 'direct_appeal') {
-            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को अभय सिंह (मोटी आंगली वाले) के पक्ष में स्वस्तिक (卐) पर मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nकाम बोला है, काम बोलेगा! ✨`;
+            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को मतपत्र में क्रम संख्या 1 पर अभय सिंह (मोटी आंगली वाले) के नाम के आगे मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nथारी उंगली से... मोटी आंगली वाले के नाम के आगे मुहर लगाइए! 🙏`;
         } else if (template === 'welcome') {
             messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले) जनसंपर्क टीम में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
         } else if (template === 'slogan') {
@@ -2373,6 +2406,107 @@ app.get('/api/self-test/result/:file', (req, res) => {
     res.type('text/markdown').send(liveSelfTest.toMarkdown(run));
 });
 
+// ==================== BRAIN v3: SAMASYA / MULAQAT / VOTER PLAN / AI STATUS (PIN-protected via the global gate) ====================
+const samasyaStore = require('./samasya_store.js');
+const mulaqatStore = require('./mulaqat_store.js');
+const kbV3 = require('./knowledge_base.js');
+function storeFilter(q) {
+    return { status: q.status || '', village: q.village || '', ward: q.ward || '', category: q.category || '', q: q.q || '', phone: q.phone || '', includeTest: q.includeTest === '1' || q.includeTest === 'true', onlyTest: q.onlyTest === '1' || q.onlyTest === 'true' };
+}
+app.get('/api/samasya', (req, res) => {
+    const f = storeFilter(req.query);
+    res.json({ records: samasyaStore.list(f), counts: samasyaStore.counts(dailyGoal.currentIstDate()), categories: kbV3.CATEGORY_LABEL, statuses: samasyaStore.statuses });
+});
+app.get('/api/samasya.csv', (req, res) => {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="samasya_' + dailyGoal.currentIstDate() + '.csv"');
+    res.send(samasyaStore.toCSV(storeFilter(req.query)));
+});
+app.post('/api/samasya/update', (req, res) => {
+    const b = req.body || {};
+    const patch = {};
+    for (const k of ['status', 'notes', 'assignedTo', 'category', 'ward', 'location']) if (b[k] !== undefined) patch[k] = typeof b[k] === 'string' ? b[k].slice(0, 500) : b[k];
+    const r = samasyaStore.update(String(b.id || ''), patch, 'dashboard');
+    if (!r) return res.status(404).json({ success: false, error: 'Not found' });
+    operationsTracker.record('samasya', 'updated', { id: r.id, status: r.status });
+    res.json({ success: true, record: r });
+});
+app.post('/api/samasya/delete', (req, res) => {
+    const ok = samasyaStore.remove(String((req.body || {}).id || ''));
+    res.json({ success: ok });
+});
+app.get('/api/mulaqat', (req, res) => {
+    const f = storeFilter(req.query);
+    res.json({ records: mulaqatStore.list(f), counts: mulaqatStore.counts(dailyGoal.currentIstDate()), statuses: mulaqatStore.statuses });
+});
+app.get('/api/mulaqat.csv', (req, res) => {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="mulaqat_' + dailyGoal.currentIstDate() + '.csv"');
+    res.send(mulaqatStore.toCSV(storeFilter(req.query)));
+});
+app.post('/api/mulaqat/update', (req, res) => {
+    const b = req.body || {};
+    const patch = {};
+    for (const k of ['status', 'notes', 'confirmedWhen', 'assignedTo', 'place', 'preferredWhen']) if (b[k] !== undefined) patch[k] = typeof b[k] === 'string' ? b[k].slice(0, 500) : b[k];
+    const r = mulaqatStore.update(String(b.id || ''), patch, 'dashboard');
+    if (!r) return res.status(404).json({ success: false, error: 'Not found' });
+    operationsTracker.record('mulaqat', 'updated', { id: r.id, status: r.status });
+    res.json({ success: true, record: r });
+});
+app.post('/api/mulaqat/delete', (req, res) => {
+    const ok = mulaqatStore.remove(String((req.body || {}).id || ''));
+    res.json({ success: ok });
+});
+/** Removes every samasya/mulaqat record created by a Live Self-Test (flag test=true). */
+app.post('/api/test-records/cleanup', (req, res) => {
+    const s1 = samasyaStore.removeWhere(r => !!r.test);
+    const s2 = mulaqatStore.removeWhere(r => !!r.test);
+    res.json({ success: true, removed: { samasya: s1, mulaqat: s2 } });
+});
+function voterPlanRow(u) {
+    const vm = require('./voter_memory.js');
+    const m = vm.ensure(u);
+    const openS = samasyaStore.list({ phone: u.phone, includeTest: true }).filter(r => r.status !== 'resolved');
+    const meet = mulaqatStore.list({ phone: u.phone, includeTest: true })[0] || null;
+    let next = null;
+    try { next = followupPlanner.nextAction(u); } catch (e) { next = { whenLabel: 'error: ' + e.message }; }
+    return {
+        phone: u.phone, name: m.name || u.name || '', line: u.assignedLine || u.lastSessionId || '', stage: u.persuasionStage || 'unknown',
+        consent: u.consentStatus || '', optedOut: !!u.broadcastOptOut, lastSeen: u.lastSeen || null, test: !!u.selfTest,
+        card: vm.cardObject(u),
+        samasya: openS.map(r => ({ id: r.id, category: r.category, status: r.status, ward: r.ward, createdAtIST: r.createdAtIST })),
+        mulaqat: meet ? { id: meet.id, status: meet.status, preferredWhen: meet.preferredWhen, place: meet.place } : null,
+        flow: m.flow ? m.flow.type + ':' + (m.flow.step || '') : null,
+        next
+    };
+}
+app.get('/api/voter-plan', (req, res) => {
+    const includeTest = req.query.includeTest === '1';
+    const stage = req.query.stage || '';
+    const q = String(req.query.q || '').toLowerCase();
+    const limit = Math.min(Number(req.query.limit) || 300, 1000);
+    const users = Object.values(userMemory.users || {}).filter(u => u && u.phone && String(u.phone).length >= 10 && (includeTest || !u.selfTest));
+    users.sort((a, b) => (Date.parse(b.lastSeen || 0) || 0) - (Date.parse(a.lastSeen || 0) || 0));
+    const rows = [];
+    for (const u of users) {
+        if (stage && (u.persuasionStage || 'unknown') !== stage) continue;
+        if (q && !JSON.stringify([u.phone, u.name, u.memory && u.memory.name]).toLowerCase().includes(q)) continue;
+        rows.push(voterPlanRow(u));
+        if (rows.length >= limit) break;
+    }
+    res.json({ total: users.length, rows });
+});
+app.get('/api/voter-plan/:phone', (req, res) => {
+    const u = userMemory.users[userMemory.cleanPhone ? userMemory.cleanPhone(req.params.phone) : req.params.phone];
+    if (!u) return res.status(404).json({ error: 'Voter not found' });
+    res.json({ ...voterPlanRow(u), history: (u.history || []).slice(-20).map(h => ({ role: h.role, text: h.text })) });
+});
+app.get('/api/ai-status', async (req, res) => {
+    const st = aiService.aiStatus();
+    if (req.query.probe === '1') st.probe = await aiService.probeProviders();
+    res.json(st);
+});
+
 // Night summary at ~21:45 IST, once per day
 setInterval(() => {
     try {
@@ -2839,7 +2973,7 @@ app.get('/', (req, res) => {
                                     <option value="permission_casual">🤝 1. सहमति व हाल-चाल (Soft Permission - Non-spam)</option>
                                     <option value="offer_parchi">🎫 2. वोटर पर्ची की पेशकश (Voter Slip Offer)</option>
                                     <option value="ground_feedback">📢 3. वार्ड समस्या व चर्चा (Ward Feedback)</option>
-                                    <option value="direct_appeal">🗳️ 4. स्वस्तिक मुहर सीधा संदेश (Direct 16 Nov Appeal)</option>
+                                    <option value="direct_appeal">🗳️ 4. क्रम संख्या 1 — सीधा संदेश (Direct 16 Nov Appeal)</option>
                                     <option value="welcome">👋 5. त्वरित स्वागत ("Aapko jod liya h...")</option>
                                     <option value="custom">✍️ 6. कस्टम संदेश (Custom message...)</option>
                                 </select>
@@ -2887,6 +3021,9 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-bulk" class="tab-btn" type="button" data-tab="bulk">📣 Bulk Send</button>
                     <button id="tab-btn-goal" class="tab-btn" type="button" data-tab="goal">🎯 Goal & Agenda</button>
                     <button id="tab-btn-selftest" class="tab-btn" type="button" data-tab="selftest">🧪 Live Self-Test</button>
+                    <button id="tab-btn-samasya" class="tab-btn" type="button" data-tab="samasya">📋 Samasya</button>
+                    <button id="tab-btn-mulaqat" class="tab-btn" type="button" data-tab="mulaqat">🤝 Mulaqat</button>
+                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -3792,6 +3929,50 @@ app.get('/', (req, res) => {
                     <div id="st-transcript" style="font-size:13px; margin-top:8px; max-height:520px; overflow-y:auto;"></div>
                     <h4 style="margin:14px 0 6px 0;">Past runs</h4>
                     <div id="st-runs" style="font-size:12px;"></div>
+                </div>
+
+                <!-- ===== Brain v3: Samasya / Mulaqat / Voter Plan tabs ===== -->
+                <div id="tab-samasya" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">📋 Samasya register — problems voters reported on WhatsApp</h3>
+                    <p style="font-size:12px; color:#64748b; margin-top:0;">The bot asks what / where (ward, gali, landmark) / since when, logs it here and tells the voter it reached Abhay Singh ji. It never promises a date. Update the status as the team works on it.</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px;">
+                        <select id="sm-village"><option value="">All villages</option><option value="sihali_khurd">Sihali Khurd</option><option value="sihali_kalan">Sihali Kalan</option><option value="hadahedi">Hadahedi</option></select>
+                        <input id="sm-ward" placeholder="Ward" style="width:56px;">
+                        <select id="sm-status"><option value="">All status</option><option value="new">new</option><option value="in-progress">in-progress</option><option value="resolved">resolved</option></select>
+                        <select id="sm-category"><option value="">All categories</option></select>
+                        <input id="sm-q" placeholder="Search" style="width:140px;">
+                        <label><input type="checkbox" id="sm-test"> include test</label>
+                        <button type="button" id="sm-refresh" style="padding:5px 10px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer;">↻ Refresh</button>
+                        <a id="sm-csv" href="/api/samasya.csv" style="padding:5px 10px; border-radius:6px; background:#16a34a; color:white; text-decoration:none; font-weight:700;">⬇ CSV</a>
+                        <span id="sm-counts" style="color:#475569;"></span>
+                    </div>
+                    <div id="sm-list" style="font-size:12px; margin-top:10px; max-height:620px; overflow:auto;"></div>
+                </div>
+                <div id="tab-mulaqat" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🤝 Mulaqat — requests to meet / invite Abhay Singh ji home</h3>
+                    <p style="font-size:12px; color:#64748b; margin-top:0;">The bot only collects the request (preferred day+time, place/landmark, family members, purpose) and tells the voter the team will confirm. Mark confirmed once you have called them.</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px;">
+                        <select id="mq-village"><option value="">All villages</option><option value="sihali_khurd">Sihali Khurd</option><option value="sihali_kalan">Sihali Kalan</option><option value="hadahedi">Hadahedi</option></select>
+                        <input id="mq-ward" placeholder="Ward" style="width:56px;">
+                        <select id="mq-status"><option value="">All status</option><option value="requested">requested</option><option value="confirmed">confirmed</option><option value="done">done</option><option value="cancelled">cancelled</option></select>
+                        <input id="mq-q" placeholder="Search" style="width:140px;">
+                        <label><input type="checkbox" id="mq-test"> include test</label>
+                        <button type="button" id="mq-refresh" style="padding:5px 10px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer;">↻ Refresh</button>
+                        <a id="mq-csv" href="/api/mulaqat.csv" style="padding:5px 10px; border-radius:6px; background:#16a34a; color:white; text-decoration:none; font-weight:700;">⬇ CSV</a>
+                        <span id="mq-counts" style="color:#475569;"></span>
+                    </div>
+                    <div id="mq-list" style="font-size:12px; margin-top:10px; max-height:620px; overflow:auto;"></div>
+                </div>
+                <div id="tab-plan" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">🗺️ Voter Plan — what the bot knows and will do next</h3>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px;">
+                        <select id="vp-stage"><option value="">All stages</option><option value="unknown">unknown</option><option value="undecided">undecided</option><option value="leaning">leaning</option><option value="committed">committed</option><option value="opposed">opposed</option></select>
+                        <input id="vp-q" placeholder="Search name / phone" style="width:160px;">
+                        <label><input type="checkbox" id="vp-test"> include test</label>
+                        <button type="button" id="vp-refresh" style="padding:5px 10px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer;">↻ Refresh</button>
+                        <span id="vp-total" style="color:#475569;"></span>
+                    </div>
+                    <div id="vp-list" style="font-size:12px; margin-top:10px; max-height:640px; overflow:auto;"></div>
                 </div>
             </div>
 
@@ -5401,7 +5582,8 @@ app.get('/', (req, res) => {
                         }
                         el('hg-progress').innerHTML = '👥 पहुँचे: <b>' + p.reached + '</b> / ' + p.targetContacts + bar(p.reached, p.targetContacts) +
                             '<div style="margin-top:6px;">✅ आज पक्के वोट: <b>' + p.committedToday + '</b> / ' + p.targetCommitted + '</div>' + bar(p.committedToday, p.targetCommitted) +
-                            '<div style="margin-top:6px; font-size:12px;">💬 ' + p.replies + ' replies from ' + p.repliedPeople + ' people • 🔴 ' + p.opposedToday + ' opposed today</div>';
+                            '<div style="margin-top:6px; font-size:12px;">💬 ' + p.replies + ' replies from ' + p.repliedPeople + ' people • 🔴 ' + p.opposedToday + ' opposed today</div>' +
+                            '<div style="margin-top:6px; font-size:12px;">📋 आज समस्याएँ दर्ज: <b>' + (p.samasyaToday || 0) + '</b> (खुली ' + (p.samasyaOpen || 0) + ') • 🤝 मुलाक़ात/घर-बुलावे: <b>' + (p.mulaqatToday || 0) + '</b> (बाकी ' + (p.mulaqatOpen || 0) + ')</div>';
                         var sc = Object.keys(p.stageChanges || {}).map(function (k) { return esc(k) + ': ' + p.stageChanges[k]; }).join(' • ');
                         el('hg-funnel').innerHTML = '<b>All contacts:</b> ⚪ unknown ' + (t.unknown || 0) + ' • 🟡 undecided ' + (t.undecided || 0) + ' • 🟢 leaning ' + (t.leaning || 0) + ' • ✅ committed ' + (t.committed || 0) + ' • 🔴 opposed ' + (t.opposed || 0) + ' • 🚩 needs admin ' + (t.needsAdmin || 0) +
                             (sc ? '<div style="margin-top:4px;"><b>Stage changes today:</b> ' + sc + '</div>' : '');
@@ -5546,6 +5728,99 @@ app.get('/', (req, res) => {
                     var xb = el('st-stop'); if (xb) xb.addEventListener('click', function () { fetch('/api/self-test/stop', { method: 'POST' }).then(function (r) { return r.json(); }).then(render); });
                     var tab = el('tab-selftest');
                     if (tab) setInterval(function () { if (tab.style.display !== 'none') { loadStatus(); } }, 3000);
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+            })();
+            </script>
+            <script>
+            (function () {
+                function el(id) { return document.getElementById(id); }
+                function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                function val(id) { var e = el(id); return e ? (e.type === 'checkbox' ? (e.checked ? '1' : '') : e.value) : ''; }
+                function qs(pairs) { return pairs.filter(function (p) { return p[1]; }).map(function (p) { return encodeURIComponent(p[0]) + '=' + encodeURIComponent(p[1]); }).join('&'); }
+                function postJson(url, body) { return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); }
+                var VILL = { sihali_khurd: 'Sihali Khurd', sihali_kalan: 'Sihali Kalan', hadahedi: 'Hadahedi' };
+                var CATS = {};
+                function statusSelect(kind, id, cur, list) {
+                    return '<select data-kind="' + kind + '" data-id="' + esc(id) + '" class="v3-status">' + list.map(function (s) { return '<option value="' + s + '"' + (s === cur ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>';
+                }
+                function th(cols) { return '<tr style="background:#f1f5f9; text-align:left;">' + cols.map(function (c) { return '<th style="padding:5px; border-bottom:1px solid #e2e8f0;">' + c + '</th>'; }).join('') + '</tr>'; }
+                function td(v) { return '<td style="padding:5px; border-bottom:1px solid #f1f5f9; vertical-align:top;">' + v + '</td>'; }
+                function loadSamasya() {
+                    var q = qs([['village', val('sm-village')], ['ward', val('sm-ward')], ['status', val('sm-status')], ['category', val('sm-category')], ['q', val('sm-q')], ['includeTest', val('sm-test')]]);
+                    var a = el('sm-csv'); if (a) a.href = '/api/samasya.csv' + (q ? '?' + q : '');
+                    return fetch('/api/samasya' + (q ? '?' + q : '')).then(function (r) { return r.json(); }).then(function (d) {
+                        if (!d) return;
+                        CATS = d.categories || {};
+                        var cs = el('sm-category');
+                        if (cs && cs.options && cs.options.length <= 1) { cs.innerHTML = '<option value="">All categories</option>' + Object.keys(CATS).map(function (k) { return '<option value="' + k + '">' + esc(CATS[k]) + '</option>'; }).join(''); }
+                        var c = d.counts || {}; var bs = c.byStatus || {};
+                        if (el('sm-counts')) el('sm-counts').textContent = 'Total ' + (c.total || 0) + ' • today ' + (c.today || 0) + ' • new ' + (bs['new'] || 0) + ' • in-progress ' + (bs['in-progress'] || 0) + ' • resolved ' + (bs.resolved || 0);
+                        var rows = (d.records || []).map(function (r) {
+                            return '<tr' + (r.test ? ' style="background:#fef9c3;"' : '') + '>' + td('<b>' + esc(r.id) + '</b><br>' + esc(r.createdAtIST)) + td(esc(r.name || '') + '<br>' + esc(r.phone || '')) +
+                                td(esc(VILL[r.village] || r.village || '') + (r.ward ? '<br>Ward ' + esc(r.ward) : '')) + td(esc(CATS[r.category] || r.category)) +
+                                td(esc(r.description)) + td(esc(r.location || '')) + td(esc(r.since || '')) + td(esc(r.sankalp || '')) +
+                                td(statusSelect('samasya', r.id, r.status, ['new', 'in-progress', 'resolved'])) +
+                                td('<input class="v3-notes" data-kind="samasya" data-id="' + esc(r.id) + '" value="' + esc(r.notes || '') + '" placeholder="notes" style="width:120px;">') + '</tr>';
+                        }).join('');
+                        el('sm-list').innerHTML = '<table style="width:100%; border-collapse:collapse;">' + th(['ID / date', 'Voter', 'Village / ward', 'Category', 'Problem (voter words)', 'Where', 'Since', 'Linked sankalp', 'Status', 'Notes']) + (rows || '<tr><td colspan="10" style="padding:10px;">No records.</td></tr>') + '</table>';
+                    }).catch(function () {});
+                }
+                function loadMulaqat() {
+                    var q = qs([['village', val('mq-village')], ['ward', val('mq-ward')], ['status', val('mq-status')], ['q', val('mq-q')], ['includeTest', val('mq-test')]]);
+                    var a = el('mq-csv'); if (a) a.href = '/api/mulaqat.csv' + (q ? '?' + q : '');
+                    return fetch('/api/mulaqat' + (q ? '?' + q : '')).then(function (r) { return r.json(); }).then(function (d) {
+                        if (!d) return;
+                        var c = d.counts || {}; var bs = c.byStatus || {};
+                        if (el('mq-counts')) el('mq-counts').textContent = 'Total ' + (c.total || 0) + ' • today ' + (c.today || 0) + ' • requested ' + (bs.requested || 0) + ' • confirmed ' + (bs.confirmed || 0) + ' • done ' + (bs.done || 0);
+                        var rows = (d.records || []).map(function (r) {
+                            return '<tr' + (r.test ? ' style="background:#fef9c3;"' : '') + '>' + td('<b>' + esc(r.id) + '</b><br>' + esc(r.createdAtIST)) + td(esc(r.type || 'visit')) + td(esc(r.name || '') + '<br>' + esc(r.phone || '')) +
+                                td(esc(VILL[r.village] || r.village || '') + (r.ward ? '<br>Ward ' + esc(r.ward) : '')) + td(esc(r.preferredWhen || '') + (r.preferredDate ? '<br>(' + esc(r.preferredDate) + ')' : '')) +
+                                td(esc(r.place || '')) + td(esc(r.familyMembers || '')) + td(esc(r.purpose || '')) +
+                                td(statusSelect('mulaqat', r.id, r.status, ['requested', 'confirmed', 'done', 'cancelled'])) +
+                                td('<input class="v3-notes" data-kind="mulaqat" data-id="' + esc(r.id) + '" value="' + esc(r.notes || '') + '" placeholder="notes / confirmed time" style="width:140px;">') + '</tr>';
+                        }).join('');
+                        el('mq-list').innerHTML = '<table style="width:100%; border-collapse:collapse;">' + th(['ID / date', 'Type', 'Voter', 'Village / ward', 'Preferred day+time', 'Place / landmark', 'Family', 'Purpose', 'Status', 'Notes']) + (rows || '<tr><td colspan="10" style="padding:10px;">No requests.</td></tr>') + '</table>';
+                    }).catch(function () {});
+                }
+                function loadPlan() {
+                    var q = qs([['stage', val('vp-stage')], ['q', val('vp-q')], ['includeTest', val('vp-test')]]);
+                    return fetch('/api/voter-plan' + (q ? '?' + q : '')).then(function (r) { return r.json(); }).then(function (d) {
+                        if (!d) return;
+                        if (el('vp-total')) el('vp-total').textContent = (d.rows || []).length + ' shown of ' + (d.total || 0);
+                        var rows = (d.rows || []).map(function (r) {
+                            var c = r.card || {};
+                            var card = [c.village ? esc(c.village) : '', c.ward ? 'ward ' + esc(c.ward) : '', c.age ? 'age ' + esc(c.age) : '', c.gender ? esc(c.gender) : '', c.familyVotes ? esc(c.familyVotes) + ' family votes' : ''].filter(Boolean).join(' • ') +
+                                (c.concerns ? '<br>concerns: ' + esc([].concat(c.concerns).join('; ')) : '') + (c.objections ? '<br>objections: ' + esc([].concat(c.objections).join('; ')) : '');
+                            var sm = (r.samasya || []).map(function (s) { return esc(s.id) + ' ' + esc(CATS[s.category] || s.category) + ' (' + esc(s.status) + ')'; }).join('<br>');
+                            var mq = r.mulaqat ? esc(r.mulaqat.id) + ' ' + esc(r.mulaqat.status) + (r.mulaqat.preferredWhen ? '<br>' + esc(r.mulaqat.preferredWhen) : '') : '';
+                            var nx = r.next || {};
+                            var next = (nx.kind ? '<b>' + esc(nx.kind) + '</b> — ' : '') + esc(nx.whenLabel || '') + (nx.text ? '<div style="color:#475569; margin-top:3px;">' + esc(nx.text) + '</div>' : '');
+                            return '<tr' + (r.test ? ' style="background:#fef9c3;"' : '') + '>' + td('<b>' + esc(r.name || '—') + '</b><br>' + esc(r.phone) + '<br>' + esc(r.line)) + td(esc(r.stage) + (r.optedOut ? '<br>🚫 STOP' : '') + (r.flow ? '<br>flow: ' + esc(r.flow) : '')) + td(card) + td(sm) + td(mq) + td(next) + '</tr>';
+                        }).join('');
+                        el('vp-list').innerHTML = '<table style="width:100%; border-collapse:collapse;">' + th(['Voter', 'Stage', 'Memory card', 'Open samasya', 'Mulaqat', 'Next planned action']) + (rows || '<tr><td colspan="6" style="padding:10px;">No voters.</td></tr>') + '</table>';
+                    }).catch(function () {});
+                }
+                function onChange(e) {
+                    var t = e.target;
+                    if (!t || !t.dataset || !t.dataset.kind) return;
+                    var url = '/api/' + t.dataset.kind + '/update';
+                    var body = { id: t.dataset.id };
+                    if (t.className === 'v3-status') body.status = t.value; else body.notes = t.value;
+                    postJson(url, body).then(function () { if (t.dataset.kind === 'samasya') loadSamasya(); else loadMulaqat(); });
+                }
+                function bindTab(btnId, tabId, loader, refreshId, filterIds) {
+                    var b = el(btnId);
+                    if (b) b.addEventListener('click', function () { if (typeof switchTab === 'function') switchTab(this.dataset.tab, this); loader(); });
+                    var r = el(refreshId); if (r) r.addEventListener('click', loader);
+                    (filterIds || []).forEach(function (id) { var f = el(id); if (f) f.addEventListener('change', loader); });
+                    var tab = el(tabId);
+                    if (tab) tab.addEventListener('change', onChange);
+                }
+                function init() {
+                    bindTab('tab-btn-samasya', 'tab-samasya', loadSamasya, 'sm-refresh', ['sm-village', 'sm-ward', 'sm-status', 'sm-category', 'sm-q', 'sm-test']);
+                    bindTab('tab-btn-mulaqat', 'tab-mulaqat', loadMulaqat, 'mq-refresh', ['mq-village', 'mq-ward', 'mq-status', 'mq-q', 'mq-test']);
+                    bindTab('tab-btn-plan', 'tab-plan', loadPlan, 'vp-refresh', ['vp-stage', 'vp-q', 'vp-test']);
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();

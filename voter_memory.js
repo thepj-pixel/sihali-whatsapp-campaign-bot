@@ -74,8 +74,8 @@ function extractName(text, lastBotText) {
     return /[a-z]/.test(cand) ? titleCase(cand.toLowerCase()) : cand;
 }
 
-const MALE_SELF = /(\b(raha|rha|karta|jaata|jata|aata|baitha|gaya|aaunga|aaunga|aunga|dunga|dhunga|dalunga|dalunga|lunga|bataunga|sochunga|rehta)\b\s*(hu|hoon|hun|h|हूँ)?\b|\b(dunga|dalunga|aaunga|aunga)\b|रहा हूँ|रहा हूं|करता हूँ|करता हूं|दूँगा|दूंगा|डालूँगा|डालूंगा|आऊँगा|आऊंगा|रहता हूँ)/i;
-const FEMALE_SELF = /(\b(rahi|rhi|karti|jaati|jati|aati|baithi|gayi|gai|aaungi|aungi|dungi|dalungi|lungi|bataungi|sochungi|rehti)\b|रही हूँ|रही हूं|करती हूँ|करती हूं|दूँगी|दूंगी|डालूँगी|डालूंगी|आऊँगी|आऊंगी|रहती हूँ|main (ek )?(mahila|aurat|ladki|bahu|beti)|मैं (एक )?(महिला|औरत|लड़की|बहू|बेटी))/i;
+const MALE_SELF = /(\b(raha|rha|karta|jaata|jata|aata|baitha|rehta|sochta|chahta|janta|jaanta|bolta)\s+(hu|hoon|hun|hu\.)\b|\b(dunga|dalunga|daalunga|aaunga|aunga|karunga|lunga|bataunga|sochunga|jaunga|dekhunga)\b|रहा हूँ|रहा हूं|करता हूँ|करता हूं|चाहता हूँ|चाहता हूं|रहता हूँ|रहता हूं|जानता हूँ|दूँगा|दूंगा|डालूँगा|डालूंगा|आऊँगा|आऊंगा|करूँगा|करूंगा|बताऊँगा|सोचूँगा)/i;
+const FEMALE_SELF = /(\b(rahi|rhi|karti|jaati|jati|aati|baithi|rehti|sochti|chahti|janti|jaanti|bolti)\s+(hu|hoon|hun|hu\.)\b|\b(dungi|dalungi|daalungi|aaungi|aungi|karungi|lungi|bataungi|sochungi|jaungi|dekhungi)\b|रही हूँ|रही हूं|करती हूँ|करती हूं|चाहती हूँ|चाहती हूं|रहती हूँ|रहती हूं|जानती हूँ|दूँगी|दूंगी|डालूँगी|डालूंगी|आऊँगी|आऊंगी|करूँगी|करूंगी|बताऊँगी|सोचूँगी|main (ek )?(mahila|aurat|ladki|bahu|beti)|मैं (एक )?(महिला|औरत|लड़की|बहू|बेटी))/i;
 
 function extractGender(text) {
     const t = String(text || '');
@@ -344,11 +344,11 @@ function recallPhrase(user, l = 'hi', opts = {}) {
     const where = c.ward ? (l === 'hi' ? `वार्ड ${c.ward} की ` : `ward ${c.ward} ki `) : (c.place ? c.place + (l === 'hi' ? ' की ' : ' ki ') : '');
     const label = kb.topicLabel(c.topic, l);
     const variants = l === 'hi'
-        ? [`आपने ${where}${label} वाली बात बताई थी—वो अभय सिंह जी की प्राथमिकता सूची में दर्ज है।`,
-            `${where}${label} वाली आपकी बात मैं भूली नहीं हूँ—वो रजिस्टर में दर्ज है, बताई थी आपने।`,
+        ? [`आपने ${where}${label} वाली बात बताई थी—वो अभय सिंह जी के रजिस्टर में दर्ज है।`,
+            `${where}${label} वाली आपकी बात मैं भूली नहीं हूँ—वो रजिस्टर में दर्ज है।`,
             `और हाँ, ${where}${label} वाली जो बात आपने बताई थी, उस पर टीम की नज़र है।`]
-        : [`Aapne ${where}${label} wali baat batayi thi—wo Abhay Singh ji ki priority list me darj hai.`,
-            `${where}${label} wali aapki baat main bhooli nahi hoon—register me darj hai, batayi thi aapne.`,
+        : [`Aapne ${where}${label} wali baat batayi thi—wo Abhay Singh ji ke register me darj hai.`,
+            `${where}${label} wali aapki baat main bhooli nahi hoon—wo register me darj hai.`,
             `Aur haan, ${where}${label} wali jo baat aapne batayi thi, us par team ki nazar hai.`];
     const v = variants[(m.recallCount - 1) % variants.length];
     return v.charAt(0).toUpperCase() + v.slice(1);

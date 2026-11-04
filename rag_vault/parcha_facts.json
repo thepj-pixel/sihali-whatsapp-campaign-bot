@@ -1,0 +1,1281 @@
+{
+ "source": [
+  "rag_vault/PARCHA_1_2PAGE.md",
+  "rag_vault/PARCHA_2_CATEGORY_WISE.md"
+ ],
+ "note": "The ONLY source of claims about the candidate, works, sankalp and polling. Structured by hand from the two parchas (owner, 4 Nov 2026). 'hi'/'roman' are the public renderings (no private individuals' names); 'hiFull'/'romanFull' keep the parcha's landmark wording and are used only when the voter asks about that lane/place. Done works are framed as 'पिछले कार्यकाल में 5 वर्षों में पंचायत में करवाए गए कार्य' — never as 'he was sarpanch'.",
+ "candidate": {
+  "name_hi": "अभय सिंह (मोटी आंगली वाले)",
+  "name_en": "Abhay Singh (Moti Aangli wale)",
+  "post_hi": "सरपंच पद प्रत्याशी",
+  "service_hi": "40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा",
+  "service_en": "40 saal ki nishkalank samaj seva aur atoot bhaichara",
+  "quote_hi": "40 साल से समाज सेवा की है, पूरी ईमानदारी और बेदाग छवि के साथ। हार-जीत अपनी जगह है, पर प्रयास में कभी कमी नहीं छोड़ी। अपनी पूरी पंचायत और समाज का स्वाभिमान मेरी पहली प्राथमिकता है।",
+  "quote_en": "40 saal se samaj seva ki hai, poori imaandari aur bedaag chhavi ke saath. Haar-jeet apni jagah hai, par prayas me kabhi kami nahi chhodi. Poori panchayat aur samaj ka swabhimaan meri pehli prathmikta hai.",
+  "slogan_hi": "थारी उंगली से... मोटी आंगली वाले के नाम के आगे मुहर लगाइए!",
+  "slogan_en": "Thari ungli se... Moti Aangli wale ke naam ke aage mohar lagaiye!",
+  "honour_hi": "सबसे अधिक विकास कार्य करने पर ग्राम पंचायत सिहाली खुर्द को पंचायत समिति स्तर पर सम्मानित किया गया है।",
+  "honour_en": "Sabse zyada vikas kaam karne par Gram Panchayat Sihali Khurd ko panchayat samiti star par sammanit kiya gaya hai.",
+  "selfRespect_hi": "शराब की बोतल और चंद रुपयों के लोभ में अपने गाँव की तरक्की, बच्चों की अच्छी शिक्षा और अपना स्वाभिमान मत बेचो!",
+  "selfRespect_en": "Sharab ki botal aur chand rupayon ke lobh me apne gaon ki tarakki, bachchon ki achhi shiksha aur apna swabhimaan mat becho!",
+  "notBuy_hi": "न बिकेगा, न झुकेगा — ग्राम पंचायत सिहाली खुर्द का मान-सम्मान बढ़ाएगा!",
+  "notBuy_en": "Na bikega, na jhukega — Gram Panchayat Sihali Khurd ka maan-samman badhayega!"
+ },
+ "panchayat": {
+  "villages_hi": [
+   "सिहाली खुर्द",
+   "सिहाली कलां (बड़ी सिहाली)",
+   "हाड़ाहेड़ी"
+  ],
+  "samiti_hi": "मुण्डावर",
+  "district_hi": "खैरथल-तिजारा (301401)",
+  "wards": 11,
+  "voters": "3,636",
+  "male": "1,902",
+  "female": "1,734",
+  "youth_18_25": "695"
+ },
+ "poll": {
+  "date_hi": "सोमवार, 16 नवंबर 2026",
+  "date_en": "Somvar, 16 November 2026",
+  "time_hi": "सुबह 7:30 से शाम 5:30 बजे तक",
+  "time_en": "subah 7:30 se shaam 5:30 tak",
+  "place_hi": "राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द",
+  "place_en": "Govt. Sr. Sec. School, Sihali Khurd",
+  "ballotSerial": 1,
+  "ballot_hi": "मतपत्र में क्रम संख्या 1 पर अभय सिंह जी का नाम है।",
+  "ballot_en": "Matpatra me kram sankhya 1 par Abhay Singh ji ka naam hai.",
+  "fold_hi": "मुहर लगाने के बाद मतपत्र को सिर्फ़ ऊपर से नीचे (लंबाई में) मोड़ें, आड़ा कभी नहीं—ताकि मुहर दूसरे खाने में न छपे।",
+  "fold_en": "Mohar lagane ke baad matpatra ko sirf upar se neeche (lambai me) modiye, aada kabhi nahi—taaki mohar doosre khaane me na chhape.",
+  "id_hi": "आधार या वोटर आईडी साथ लाएँ।",
+  "id_en": "Aadhaar ya voter ID saath laaiye.",
+  "symbolNote": "The parcha leaves the election symbol blank. NEVER state a symbol."
+ },
+ "booths": [
+  {
+   "booth": 95,
+   "room": 1,
+   "wards": [
+    1,
+    2,
+    3
+   ],
+   "label_hi": "वार्ड 1, 2, 3 (सिहाली खुर्द)"
+  },
+  {
+   "booth": 96,
+   "room": 2,
+   "wards": [
+    4,
+    5,
+    6
+   ],
+   "label_hi": "वार्ड 4, 5 (सिहाली खुर्द) + वार्ड 6 (सिहाली कलां)"
+  },
+  {
+   "booth": 97,
+   "room": 3,
+   "wards": [
+    7,
+    8
+   ],
+   "label_hi": "वार्ड 7, 8 (सिहाली कलां / बड़ी सिहाली)"
+  },
+  {
+   "booth": 98,
+   "room": 4,
+   "wards": [
+    9,
+    10,
+    11
+   ],
+   "label_hi": "वार्ड 9, 10, 11 (हाड़ाहेड़ी)"
+  }
+ ],
+ "contact": {
+  "website": "abhaysinghsihali.in",
+  "whatsapp": [
+   "6367810227",
+   "9509352067"
+  ]
+ },
+ "major": [
+  {
+   "id": "M1",
+   "title_hi": "खेल मैदान व विकास कार्य",
+   "topics": [
+    "youth"
+   ],
+   "villages": [],
+   "hi": "बच्चों और युवाओं के लिए खेल मैदान की चारदीवारी, रनिंग ट्रैक, खेल कोर्ट और ओपन जिम बनवाए गए।",
+   "roman": "Bachchon aur yuvaon ke liye khel maidan ki chaardiwari, running track, khel court aur open gym banwaye gaye."
+  },
+  {
+   "id": "M2",
+   "title_hi": "पेयजल व्यवस्था (JJM योजना)",
+   "topics": [
+    "water"
+   ],
+   "villages": [
+    "sihali_khurd",
+    "sihali_kalan"
+   ],
+   "hi": "जल जीवन मिशन के तहत पानी की टंकियाँ (ऊँची व नीची) बनवाई गईं और घर-घर पीने के पानी की सप्लाई शुरू हुई।",
+   "roman": "Jal Jeevan Mission ke tahat paani ki tankiyan (oonchi aur neechi) banwayi gayi aur ghar-ghar peene ke paani ki supply shuru hui."
+  },
+  {
+   "id": "M3",
+   "title_hi": "स्वास्थ्य व पशु चिकित्सा भवन",
+   "topics": [
+    "health",
+    "animal"
+   ],
+   "villages": [
+    "sihali_khurd",
+    "sihali_kalan"
+   ],
+   "hi": "ग्रामीणों के इलाज के लिए उप-स्वास्थ्य केंद्र और पशुओं की देखरेख के लिए पशु उप-स्वास्थ्य केंद्र का भवन बनवाया गया।",
+   "roman": "Gaon walon ke ilaaj ke liye up-swasthya kendra aur pashuon ki dekhrekh ke liye pashu up-swasthya kendra ka bhawan banwaya gaya."
+  },
+  {
+   "id": "M4",
+   "title_hi": "पुराने जोहड़ व जलाशयों का पुनरुद्धार",
+   "topics": [
+    "pond",
+    "farming"
+   ],
+   "villages": [
+    "hadahedi",
+    "sihali_kalan"
+   ],
+   "hi": "पंचायत के पुराने जोहड़ों और जलाशयों की गहरी खुदाई, मरम्मत और पुनर्निर्माण करवाया गया।",
+   "roman": "Panchayat ke purane johadon aur jalashayon ki gehri khudai, marammat aur punarnirmaan karwaya gaya."
+  },
+  {
+   "id": "M5",
+   "title_hi": "गंदे पानी की निकासी (सीवरेज लाइन)",
+   "topics": [
+    "drainage"
+   ],
+   "villages": [],
+   "hi": "रास्तों पर जलभराव रोकने के लिए ज़रूरत के हिसाब से सीवरेज लाइन और गंदे पानी की निकासी के नाले बनवाए गए।",
+   "roman": "Raston par jalbharav rokne ke liye zaroorat ke hisaab se sewerage line aur gande paani ki nikasi ke naale banwaye gaye."
+  },
+  {
+   "id": "M6",
+   "title_hi": "सी.सी. सड़कें व इंटरलॉकिंग",
+   "topics": [
+    "cc_lanes",
+    "road"
+   ],
+   "villages": [],
+   "hi": "पंचायत में ज़रूरत के हिसाब से अलग-अलग मोहल्लों और मुख्य रास्तों पर सी.सी. व इंटरलॉकिंग सड़कें बनवाई गईं।",
+   "roman": "Panchayat me zaroorat ke hisaab se alag-alag mohallon aur mukhya raston par CC aur interlocking sadkein banwayi gayi."
+  },
+  {
+   "id": "M7",
+   "title_hi": "डामर सड़कों का निर्माण",
+   "topics": [
+    "road"
+   ],
+   "villages": [
+    "sihali_kalan",
+    "hadahedi"
+   ],
+   "hi": "सिहाली कलां को हाड़ाहेड़ी से जोड़ने वाली सड़क का पुनर्निर्माण करवाया गया।",
+   "roman": "Sihali Kalan ko Hadahedi se jodne wali sadak ka punarnirmaan karwaya gaya."
+  },
+  {
+   "id": "M8",
+   "title_hi": "मॉड्यूलर लाइब्रेरी",
+   "topics": [
+    "education",
+    "youth"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "hi": "सिहाली खुर्द में युवाओं और बच्चों की पढ़ाई के लिए सर्वसुविधायुक्त मॉड्यूलर लाइब्रेरी बनवाई गई।",
+   "roman": "Sihali Khurd me yuvaon aur bachchon ki padhai ke liye sab suvidhaon wali modular library banwayi gayi."
+  },
+  {
+   "id": "M9",
+   "title_hi": "सरकारी स्कूलों में विकास कार्य",
+   "topics": [
+    "education"
+   ],
+   "villages": [],
+   "hi": "पंचायत के सरकारी स्कूलों में कमरों की मरम्मत, नए कमरे, प्रार्थना स्थल पर इंटरलॉकिंग टाइल्स और चारदीवारी का काम करवाया गया।",
+   "roman": "Panchayat ke sarkari schoolon me kamron ki marammat, naye kamre, prarthna sthal par interlocking tiles aur chaardiwari ka kaam karwaya gaya."
+  },
+  {
+   "id": "M10",
+   "title_hi": "श्मशान घाट (मोक्षधाम) विकास",
+   "topics": [
+    "cremation"
+   ],
+   "villages": [],
+   "hi": "पंचायत के श्मशान घाटों (मोक्षधाम) का विकास करवाया गया और इंटरलॉकिंग टाइल्स लगवाई गईं।",
+   "roman": "Panchayat ke shmashan ghaaton (mokshdham) ka vikas karwaya gaya aur interlocking tiles lagwayi gayi."
+  },
+  {
+   "id": "M11",
+   "title_hi": "नए बोरवेल व मोटर",
+   "topics": [
+    "water"
+   ],
+   "villages": [],
+   "hi": "पीने के पानी की किल्लत दूर करने के लिए नए बोरवेल और मोटर लगवाई गईं।",
+   "roman": "Peene ke paani ki killat door karne ke liye naye borewell aur motor lagwayi gayi."
+  },
+  {
+   "id": "M12",
+   "title_hi": "बाबा कुन्दनदास आश्रम के विकास कार्य",
+   "topics": [
+    "ashram"
+   ],
+   "villages": [],
+   "hi": "बाबा कुन्दनदास आश्रम की चारदीवारी, शौचालय और मुख्य सड़क से आश्रम तक डामर सड़क बनवाई गई; आश्रम में अमृत सरोवर का काम अभी चालू है।",
+   "roman": "Baba Kundandas Ashram ki chaardiwari, shauchalay aur main road se ashram tak damar sadak banwayi gayi; ashram me Amrit Sarovar ka kaam abhi chalu hai."
+  }
+ ],
+ "sankalp": [
+  {
+   "id": "F1",
+   "title_hi": "खेल मैदान व मिनी स्टेडियम",
+   "topics": [
+    "youth"
+   ],
+   "villages": [
+    "hadahedi",
+    "sihali_kalan",
+    "sihali_khurd"
+   ],
+   "hi": "हाड़ाहेड़ी और सिहाली कलां के खेल मैदानों का विकास होगा, और सिहाली खुर्द के खेल मैदान में मिनी स्टेडियम बनाने का प्रयास किया जाएगा।",
+   "roman": "Hadahedi aur Sihali Kalan ke khel maidanon ka vikas hoga, aur Sihali Khurd ke khel maidan me mini stadium banane ka prayas kiya jayega."
+  },
+  {
+   "id": "F2",
+   "title_hi": "JJM शेष जल आपूर्ति पूर्णता",
+   "topics": [
+    "water"
+   ],
+   "villages": [],
+   "hi": "जल जीवन मिशन में जो जल आपूर्ति बाकी रह गई है, उसे पूरा करवाया जाएगा।",
+   "roman": "Jal Jeevan Mission me jo paani ki supply baaki reh gayi hai, use poora karwaya jayega."
+  },
+  {
+   "id": "F3",
+   "title_hi": "सुरक्षा हेतु CCTV कैमरे",
+   "topics": [
+    "safety"
+   ],
+   "villages": [],
+   "hi": "पंचायत के मुख्य रास्तों, प्रवेश द्वारों और चौराहों पर सुरक्षा व निगरानी के लिए CCTV कैमरे लगवाए जाएँगे।",
+   "roman": "Panchayat ke mukhya raston, pravesh dwaron aur chauraahon par suraksha ke liye CCTV camere lagwaye jayenge."
+  },
+  {
+   "id": "F4",
+   "title_hi": "रोड लाइट व्यवस्था",
+   "topics": [
+    "streetlight",
+    "safety"
+   ],
+   "villages": [],
+   "hi": "पंचायत के मुख्य रास्तों, गलियों और मोहल्लों में रोड लाइट लगवाने का काम किया जाएगा।",
+   "roman": "Panchayat ke mukhya raston, galiyon aur mohallon me road light lagwane ka kaam kiya jayega."
+  },
+  {
+   "id": "F5",
+   "title_hi": "सफाई की स्थायी व्यवस्था",
+   "topics": [
+    "cleanliness",
+    "drainage"
+   ],
+   "villages": [],
+   "hi": "नालियों और रास्तों की लगातार साफ़-सफ़ाई के लिए पंचायत में स्थायी सफ़ाई व्यवस्था की जाएगी।",
+   "roman": "Naaliyon aur raston ki lagatar saaf-safai ke liye panchayat me sthayi safai vyavastha ki jayegi."
+  },
+  {
+   "id": "F6",
+   "title_hi": "टूटी सड़कों का पुनर्निर्माण",
+   "topics": [
+    "road",
+    "cc_lanes"
+   ],
+   "villages": [],
+   "hi": "पुरानी उखड़ी इंटरलॉकिंग टाइल्स हटाकर नई सड़क बनवाई जाएगी।",
+   "roman": "Purani ukhdi interlocking tiles hatakar nayi sadak banwayi jayegi."
+  },
+  {
+   "id": "F7",
+   "title_hi": "अस्पताल व उपस्वास्थ्य केंद्र में डॉक्टर",
+   "topics": [
+    "health"
+   ],
+   "villages": [],
+   "hi": "पंचायत के चिकित्सालय और उप-स्वास्थ्य केंद्र में नियमित डॉक्टर की उचित व्यवस्था करवाई जाएगी।",
+   "roman": "Panchayat ke aspatal aur up-swasthya kendra me niyamit doctor ki uchit vyavastha karwayi jayegi."
+  },
+  {
+   "id": "F8",
+   "title_hi": "उपस्वास्थ्य केंद्र व आयुर्वेदिक/होम्योपैथिक अस्पताल",
+   "topics": [
+    "health"
+   ],
+   "villages": [
+    "hadahedi",
+    "sihali_khurd",
+    "sihali_kalan"
+   ],
+   "hi": "हाड़ाहेड़ी में उप-स्वास्थ्य केंद्र, और सिहाली खुर्द व सिहाली कलां में आयुर्वेदिक/होम्योपैथिक अस्पताल खुलवाने के प्रयास किए जाएँगे।",
+   "roman": "Hadahedi me up-swasthya kendra, aur Sihali Khurd va Sihali Kalan me Ayurvedic/Homeopathic aspatal khulwane ke prayas kiye jayenge."
+  },
+  {
+   "id": "F9",
+   "title_hi": "सिहाली खुर्द से हाड़ाहेड़ी मुख्य डामर सड़क",
+   "topics": [
+    "road"
+   ],
+   "villages": [
+    "sihali_khurd",
+    "hadahedi"
+   ],
+   "hi": "सिहाली खुर्द से हाड़ाहेड़ी को जोड़ने वाली मुख्य सड़क को डामर सड़क बनवाया जाएगा।",
+   "roman": "Sihali Khurd se Hadahedi ko jodne wali mukhya sadak ko damar sadak banwaya jayega."
+  },
+  {
+   "id": "F10",
+   "title_hi": "पंचायत में पटवार घर",
+   "topics": [
+    "patwar"
+   ],
+   "villages": [],
+   "hi": "पंचायत में पटवार घर बनवाया जाएगा, ताकि ज़मीन के कामों के लिए मुण्डावर न जाना पड़े।",
+   "roman": "Panchayat me patwar ghar banwaya jayega, taaki zameen ke kaamon ke liye Mundawar na jaana pade."
+  },
+  {
+   "id": "F11",
+   "title_hi": "किसान सेवा केंद्र भवन",
+   "topics": [
+    "farming"
+   ],
+   "villages": [],
+   "hi": "पंचायत में किसान सेवा केंद्र भवन बनवाया जाएगा, ताकि खाद, बीज और कृषि दवाएँ पंचायत में ही उचित दाम पर मिल सकें।",
+   "roman": "Panchayat me kisan seva kendra bhawan banwaya jayega, taaki khaad, beej aur krishi dawaiyan panchayat me hi uchit daam par mil sakein."
+  },
+  {
+   "id": "F12",
+   "title_hi": "जन औषधि केंद्र",
+   "topics": [
+    "medicine",
+    "health"
+   ],
+   "villages": [],
+   "hi": "सस्ती जेनेरिक दवाइयों के लिए पंचायत में जन औषधि केंद्र खुलवाने का प्रयास किया जाएगा, ताकि दवा के लिए मुण्डावर न जाना पड़े।",
+   "roman": "Sasti generic dawaiyon ke liye panchayat me Jan Aushadhi Kendra khulwane ka prayas kiya jayega, taaki dawai ke liye Mundawar na jaana pade."
+  },
+  {
+   "id": "F13",
+   "title_hi": "वरिष्ठ नागरिकों हेतु चौपाल",
+   "topics": [
+    "seniors"
+   ],
+   "villages": [],
+   "hi": "बुज़ुर्गों के बैठने के लिए सामुदायिक चौपाल बनवाई जाएगी, जिसमें पंखे और पीने के पानी की व्यवस्था होगी।",
+   "roman": "Buzurgon ke baithne ke liye samudayik chaupal banwayi jayegi, jisme pankhe aur peene ke paani ki vyavastha hogi."
+  },
+  {
+   "id": "F14",
+   "title_hi": "हाड़ाहेड़ी व सिहाली कलां में लाइब्रेरी",
+   "topics": [
+    "education",
+    "youth"
+   ],
+   "villages": [
+    "hadahedi",
+    "sihali_kalan"
+   ],
+   "hi": "हाड़ाहेड़ी और सिहाली कलां में भी युवाओं और बच्चों की पढ़ाई के लिए मॉड्यूलर लाइब्रेरी बनवाई जाएगी।",
+   "roman": "Hadahedi aur Sihali Kalan me bhi yuvaon aur bachchon ki padhai ke liye modular library banwayi jayegi."
+  },
+  {
+   "id": "F15",
+   "title_hi": "24 घंटे एम्बुलेंस सुविधा",
+   "topics": [
+    "ambulance",
+    "health"
+   ],
+   "villages": [],
+   "hi": "गंभीर मरीज़ों के लिए स्वास्थ्य केंद्र पर 24 घंटे एम्बुलेंस की स्थायी व्यवस्था का प्रयास किया जाएगा।",
+   "roman": "Gambhir mareezon ke liye swasthya kendra par 24 ghante ambulance ki sthayi vyavastha ka prayas kiya jayega."
+  }
+ ],
+ "details": [
+  {
+   "id": "D-H1",
+   "parent": "M3",
+   "category": "health",
+   "topics": [
+    "health"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "hi": "अभय सिंह जी ने अपनी निजी पुश्तैनी ज़मीन दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र का नया भवन बनवाया।",
+   "roman": "Abhay Singh ji ne apni niji pushtaini zameen daan dekar Sihali Khurd me up-swasthya kendra ka naya bhawan banwaya."
+  },
+  {
+   "id": "D-H2",
+   "parent": "M3",
+   "category": "health",
+   "topics": [
+    "animal"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "hi": "सिहाली कलां में भूमिदान करवाकर पशुओं के इलाज के लिए पशु उप-स्वास्थ्य केंद्र का भवन बनवाया गया।",
+   "roman": "Sihali Kalan me bhoomi-daan karwakar pashuon ke ilaaj ke liye pashu up-swasthya kendra ka bhawan banwaya gaya.",
+   "hiFull": "सुरजन सिंह के परिवार को प्रेरित कर भूमिदान करवाकर सिहाली कलां में पशु उप-स्वास्थ्य केंद्र भवन बनवाया गया।",
+   "landmarks": [
+    "सुरजन",
+    "surjan"
+   ]
+  },
+  {
+   "id": "D-R1",
+   "parent": "M7",
+   "category": "damar_road",
+   "topics": [
+    "road"
+   ],
+   "villages": [
+    "sihali_kalan",
+    "hadahedi"
+   ],
+   "hi": "सिहाली कलां से हाड़ाहेड़ी की ओर जाने वाली मुख्य सड़क का पुनर्निर्माण करवाया गया।",
+   "roman": "Sihali Kalan se Hadahedi ki or jaane wali mukhya sadak ka punarnirmaan karwaya gaya."
+  },
+  {
+   "id": "D-R2",
+   "parent": "M7",
+   "category": "damar_road",
+   "topics": [
+    "road",
+    "ashram"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "hi": "बाबा कुन्दनदास आश्रम से सिहाली कलां की तरफ़ जाने वाली सड़क का डामरीकरण करके पुनर्निर्माण करवाया गया।",
+   "roman": "Baba Kundandas Ashram se Sihali Kalan ki taraf jaane wali sadak ka damarikaran karke punarnirmaan karwaya gaya.",
+   "landmarks": [
+    "आश्रम मार्ग",
+    "ashram marg",
+    "ashram wali sadak",
+    "ashram road"
+   ]
+  },
+  {
+   "id": "D-R3",
+   "parent": "M7",
+   "category": "damar_road",
+   "topics": [
+    "road"
+   ],
+   "villages": [],
+   "hi": "बनिया वाला कूड़ी से बाबा मथुरादास मंदिर तक नई डामर सड़क बनवाई गई।",
+   "roman": "Baniya wala Kudi se Baba Mathuradas mandir tak nayi damar sadak banwayi gayi.",
+   "landmarks": [
+    "बनिया वाला",
+    "कूड़ी",
+    "मथुरादास",
+    "baniya wala",
+    "baniya wali",
+    "kudi",
+    "kundi",
+    "mathuradas",
+    "mathura das"
+   ]
+  },
+  {
+   "id": "D-R4",
+   "parent": "M7",
+   "category": "damar_road",
+   "topics": [
+    "road"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "hi": "सिहाली खुर्द से रडवा तक जाने वाली सड़क का चौड़ीकरण और डामरीकरण करवाया गया।",
+   "roman": "Sihali Khurd se Radwa tak jaane wali sadak ka chaudikaran aur damarikaran karwaya gaya.",
+   "hiFull": "होशियार सिंह (सिहाली खुर्द) की दुकान से रडवा तक जाने वाली सड़क का डामरीकरण व चौड़ीकरण करवाया गया।",
+   "romanFull": "Hoshiyar Singh (Sihali Khurd) ki dukaan se Radwa tak jaane wali sadak ka damarikaran aur chaudikaran karwaya gaya.",
+   "landmarks": [
+    "रडवा",
+    "radwa",
+    "होशियार",
+    "hoshiyar",
+    "hoshiar"
+   ]
+  },
+  {
+   "id": "D-S1",
+   "parent": "M8",
+   "category": "school",
+   "topics": [
+    "education",
+    "youth"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "hi": "सिहाली खुर्द में युवाओं और छात्र-छात्राओं की पढ़ाई के लिए मॉड्यूलर लाइब्रेरी बनवाई गई।",
+   "roman": "Sihali Khurd me yuvaon aur chhatra-chhatraon ki padhai ke liye modular library banwayi gayi."
+  },
+  {
+   "id": "D-S2",
+   "parent": "M9",
+   "category": "school",
+   "topics": [
+    "education"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "hi": "राजकीय उच्च माध्यमिक विद्यालय, सिहाली कलां में मीटिंग हॉल बनवाया गया।",
+   "roman": "Rajkiya Uchch Madhyamik Vidyalaya, Sihali Kalan me meeting hall banwaya gaya."
+  },
+  {
+   "id": "D-S3",
+   "parent": "M9",
+   "category": "school",
+   "topics": [
+    "education"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "hi": "राजकीय उच्च प्राथमिक विद्यालय, हाड़ाहेड़ी में एक कमरे की छत और फ़र्श का पूरा जीर्णोद्धार करवाया गया।",
+   "roman": "Rajkiya Uchch Prathmik Vidyalaya, Hadahedi me ek kamre ki chhat aur farsh ka poora jeernoddhar karwaya gaya."
+  },
+  {
+   "id": "D-S4",
+   "parent": "M9",
+   "category": "school",
+   "topics": [
+    "education",
+    "sanitation"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "hi": "राजकीय उच्च प्राथमिक विद्यालय, हाड़ाहेड़ी में बच्चों की सुविधा के लिए सुलभ शौचालय बनवाया गया।",
+   "roman": "Rajkiya Uchch Prathmik Vidyalaya, Hadahedi me bachchon ki suvidha ke liye sulabh shauchalay banwaya gaya."
+  },
+  {
+   "id": "D-S5",
+   "parent": "M9",
+   "category": "school",
+   "topics": [
+    "education"
+   ],
+   "villages": [
+    "sihali_khurd",
+    "sihali_kalan"
+   ],
+   "hi": "सिहाली खुर्द और सिहाली कलां के सरकारी स्कूलों के प्रांगण में इंटरलॉकिंग टाइल्स लगवाई गईं।",
+   "roman": "Sihali Khurd aur Sihali Kalan ke sarkari schoolon ke prangan me interlocking tiles lagwayi gayi."
+  },
+  {
+   "id": "D-K1",
+   "parent": "M1",
+   "category": "sports",
+   "topics": [
+    "youth"
+   ],
+   "villages": [],
+   "hi": "खेल मैदान के चारों तरफ़ पक्की चारदीवारी का ज़्यादातर (लगभग 75%) हिस्सा बनवाया गया।",
+   "roman": "Khel maidan ke chaaron taraf pakki chaardiwari ka zyadatar (lagbhag 75%) hissa banwaya gaya."
+  },
+  {
+   "id": "D-K2",
+   "parent": "M1",
+   "category": "sports",
+   "topics": [
+    "youth",
+    "seniors"
+   ],
+   "villages": [],
+   "hi": "बच्चों-युवाओं के दौड़ने और बुज़ुर्गों के टहलने के लिए रनिंग ट्रैक बनवाया गया।",
+   "roman": "Bachchon-yuvaon ke daudne aur buzurgon ke tehalne ke liye running track banwaya gaya."
+  },
+  {
+   "id": "D-K3",
+   "parent": "M1",
+   "category": "sports",
+   "topics": [
+    "youth"
+   ],
+   "villages": [],
+   "hi": "खेल मैदान में बास्केटबॉल, बैडमिंटन और खो-खो के कोर्ट बनवाए गए।",
+   "roman": "Khel maidan me basketball, badminton aur kho-kho ke court banwaye gaye."
+  },
+  {
+   "id": "D-K4",
+   "parent": "M1",
+   "category": "sports",
+   "topics": [
+    "youth"
+   ],
+   "villages": [],
+   "hi": "युवाओं की सेहत के लिए खेल मैदान में आधुनिक ओपन जिम के उपकरण लगवाए गए।",
+   "roman": "Yuvaon ki sehat ke liye khel maidan me aadhunik open gym ke upkaran lagwaye gaye."
+  },
+  {
+   "id": "D-K5",
+   "parent": "M1",
+   "category": "sports",
+   "topics": [
+    "youth",
+    "cc_lanes"
+   ],
+   "villages": [],
+   "hi": "मेन रोड से बास्केटबॉल कोर्ट तक इंटरलॉकिंग रास्ता बनवाया गया।",
+   "roman": "Main road se basketball court tak interlocking rasta banwaya gaya.",
+   "landmarks": [
+    "बास्केटबॉल",
+    "basketball"
+   ]
+  },
+  {
+   "id": "D-W1",
+   "parent": "M2",
+   "category": "water",
+   "topics": [
+    "water"
+   ],
+   "villages": [
+    "sihali_khurd",
+    "sihali_kalan"
+   ],
+   "hi": "सिहाली खुर्द और सिहाली कलां में जल जीवन मिशन के तहत पानी की टंकियाँ (ऊँची व नीची) बनवाई गईं।",
+   "roman": "Sihali Khurd aur Sihali Kalan me Jal Jeevan Mission ke tahat paani ki tankiyan (oonchi aur neechi) banwayi gayi."
+  },
+  {
+   "id": "D-W2",
+   "parent": "M2",
+   "category": "water",
+   "topics": [
+    "water"
+   ],
+   "villages": [],
+   "hi": "घर-घर पानी पहुँचाने के लिए नल कनेक्शन दिए गए।",
+   "roman": "Ghar-ghar paani pahunchane ke liye nal connection diye gaye."
+  },
+  {
+   "id": "D-B1",
+   "parent": "M11",
+   "category": "borewell",
+   "topics": [
+    "water",
+    "cremation"
+   ],
+   "villages": [],
+   "hi": "मोक्षधाम (श्मशान घाट) में दो नए बोरवेल और मोटर लगवाई गईं।",
+   "roman": "Mokshdham (shmashan ghat) me do naye borewell aur motor lagwayi gayi."
+  },
+  {
+   "id": "D-B2",
+   "parent": "M11",
+   "category": "borewell",
+   "topics": [
+    "water"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "hi": "हाड़ाहेड़ी में तिगावां की सरहद के पास नया बोरवेल और मोटर लगवाई गई।",
+   "roman": "Hadahedi me Tigawan ki sarhad ke paas naya borewell aur motor lagwayi gayi.",
+   "landmarks": [
+    "तिगावां",
+    "tigawan",
+    "tigaon"
+   ]
+  },
+  {
+   "id": "D-B3",
+   "parent": "M11",
+   "category": "borewell",
+   "topics": [
+    "water"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "hi": "सिहाली कलां में नया बोरवेल और मोटर लगवाई गई।",
+   "roman": "Sihali Kalan me naya borewell aur motor lagwayi gayi.",
+   "hiFull": "सिहाली कलां में सत्यवीर कप्तान के घर के पास नया बोरवेल व मोटर लगवाई गई।",
+   "romanFull": "Sihali Kalan me Satyavir Kaptan ke ghar ke paas naya borewell aur motor lagwayi gayi.",
+   "landmarks": [
+    "सत्यवीर",
+    "satyavir",
+    "satyaveer"
+   ]
+  },
+  {
+   "id": "D-B4",
+   "parent": "M12",
+   "category": "borewell",
+   "topics": [
+    "water",
+    "ashram"
+   ],
+   "villages": [],
+   "hi": "बाबा कुन्दनदास आश्रम परिसर में नया बोरवेल और मोटर लगवाई गई।",
+   "roman": "Baba Kundandas Ashram parisar me naya borewell aur motor lagwayi gayi."
+  },
+  {
+   "id": "D-B5",
+   "parent": "M11",
+   "category": "borewell",
+   "topics": [
+    "water"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "hi": "सिहाली कलां की कुम्हारों वाली बस्ती में नया बोरवेल और मोटर लगवाई गई।",
+   "roman": "Sihali Kalan ki kumharon wali basti me naya borewell aur motor lagwayi gayi.",
+   "landmarks": [
+    "कुम्हार",
+    "kumhar"
+   ]
+  },
+  {
+   "id": "D-A1",
+   "parent": "M12",
+   "category": "ashram",
+   "topics": [
+    "ashram",
+    "road"
+   ],
+   "villages": [],
+   "hi": "मुख्य सड़क से बाबा कुन्दनदास आश्रम परिसर तक सीधी पक्की डामर सड़क का पुनर्निर्माण करवाया गया।",
+   "roman": "Main road se Baba Kundandas Ashram parisar tak seedhi pakki damar sadak ka punarnirmaan karwaya gaya."
+  },
+  {
+   "id": "D-A2",
+   "parent": "M12",
+   "category": "ashram",
+   "topics": [
+    "ashram"
+   ],
+   "villages": [],
+   "hi": "बाबा कुन्दनदास आश्रम की चारदीवारी बनवाई गई।",
+   "roman": "Baba Kundandas Ashram ki chaardiwari banwayi gayi."
+  },
+  {
+   "id": "D-A3",
+   "parent": "M12",
+   "category": "ashram",
+   "topics": [
+    "ashram",
+    "pond"
+   ],
+   "villages": [],
+   "status": "ongoing",
+   "hi": "बाबा कुन्दनदास आश्रम में अमृत सरोवर का निर्माण कार्य अभी चालू है।",
+   "roman": "Baba Kundandas Ashram me Amrit Sarovar ka nirmaan kaam abhi chalu hai.",
+   "landmarks": [
+    "अमृत सरोवर",
+    "amrit sarovar"
+   ]
+  },
+  {
+   "id": "D-A4",
+   "parent": "M12",
+   "category": "ashram",
+   "topics": [
+    "ashram",
+    "sanitation"
+   ],
+   "villages": [],
+   "hi": "आश्रम परिसर में सार्वजनिक शौचालय बनवाया गया।",
+   "roman": "Ashram parisar me saarvajanik shauchalay banwaya gaya."
+  },
+  {
+   "id": "D-N1",
+   "parent": "M5",
+   "category": "sewer",
+   "topics": [
+    "drainage"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "hi": "हाड़ाहेड़ी में जोहड़ की ओर भूमिगत सीवरेज लाइन डाली गई।",
+   "roman": "Hadahedi me johad ki or bhumigat sewerage line daali gayi.",
+   "hiFull": "हाड़ाहेड़ी में महिपाल तंवर (मण्डल अध्यक्ष) के घर से जोहड़ तक भूमिगत सीवरेज लाइन डाली गई।",
+   "romanFull": "Hadahedi me Mahipal Tanwar (Mandal Adhyaksh) ke ghar se johad tak bhumigat sewerage line daali gayi.",
+   "landmarks": [
+    "महिपाल",
+    "mahipal",
+    "तंवर",
+    "tanwar"
+   ]
+  },
+  {
+   "id": "D-N2",
+   "parent": "M5",
+   "category": "sewer",
+   "topics": [
+    "drainage"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "hi": "सिहाली खुर्द में मुख्य सड़क से गंदे पानी की निकासी के लिए भूमिगत सीवरेज लाइन डाली गई।",
+   "roman": "Sihali Khurd me main road se gande paani ki nikasi ke liye bhumigat sewerage line daali gayi.",
+   "hiFull": "सिहाली खुर्द में मुख्य सड़क से राजेश मास्टर के घर की तरफ़ गंदे पानी की निकासी के लिए भूमिगत सीवरेज लाइन डाली गई।",
+   "romanFull": "Sihali Khurd me main road se Rajesh Master ke ghar ki taraf gande paani ki nikasi ke liye bhumigat sewerage line daali gayi.",
+   "landmarks": [
+    "राजेश मास्टर",
+    "rajesh master"
+   ]
+  },
+  {
+   "id": "D-N3",
+   "parent": "M5",
+   "category": "sewer",
+   "topics": [
+    "drainage"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "hi": "हाड़ाहेड़ी में सरकारी स्कूल की तरफ़ पक्की सीवरेज लाइन और नाला बनवाया गया।",
+   "roman": "Hadahedi me sarkari school ki taraf pakki sewerage line aur naala banwaya gaya.",
+   "hiFull": "हाड़ाहेड़ी में मदन पंच के घर से राजकीय विद्यालय की तरफ़ पक्की सीवरेज लाइन व नाला बनवाया गया।",
+   "romanFull": "Hadahedi me Madan Panch ke ghar se sarkari school ki taraf pakki sewerage line aur naala banwaya gaya.",
+   "landmarks": [
+    "मदन पंच",
+    "madan panch"
+   ]
+  },
+  {
+   "id": "D-M1",
+   "parent": "M10",
+   "category": "mokshdham",
+   "topics": [
+    "cremation"
+   ],
+   "villages": [],
+   "hi": "मोक्षधाम परिसर में पूरी मिट्टी भराव और समतलीकरण का काम करवाया गया।",
+   "roman": "Mokshdham parisar me poori mitti bharav aur samtalikaran ka kaam karwaya gaya."
+  },
+  {
+   "id": "D-M2",
+   "parent": "M10",
+   "category": "mokshdham",
+   "topics": [
+    "cremation"
+   ],
+   "villages": [],
+   "hi": "मोक्षधाम परिसर में इंटरलॉकिंग टाइल्स लगवाई गईं।",
+   "roman": "Mokshdham parisar me interlocking tiles lagwayi gayi."
+  },
+  {
+   "id": "D-M3",
+   "parent": "M10",
+   "category": "mokshdham",
+   "topics": [
+    "cremation",
+    "water"
+   ],
+   "villages": [],
+   "hi": "मोक्षधाम में दो नए बोरवेल, पानी की टंकी और नियमित पीने के पानी की व्यवस्था की गई।",
+   "roman": "Mokshdham me do naye borewell, paani ki tanki aur niyamit peene ke paani ki vyavastha ki gayi."
+  },
+  {
+   "id": "D-J1",
+   "parent": "M4",
+   "category": "johad",
+   "topics": [
+    "pond",
+    "farming"
+   ],
+   "villages": [
+    "hadahedi",
+    "sihali_kalan"
+   ],
+   "hi": "हाड़ाहेड़ी और सिहाली कलां के पुराने जोहड़ों व जलाशयों की गहरी खुदाई और जीर्णोद्धार हुआ, जिससे बारिश का पानी ज़्यादा जमा होता है।",
+   "roman": "Hadahedi aur Sihali Kalan ke purane johadon va jalashayon ki gehri khudai aur jeernoddhar hua, jisse baarish ka paani zyada jama hota hai."
+  },
+  {
+   "id": "D-L1",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "शिव मंदिर से वेद प्रकाश के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Shiv mandir se Ved Prakash ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "वेद प्रकाश",
+    "ved prakash",
+    "vedprakash",
+    "shiv mandir",
+    "शिव मंदिर"
+   ]
+  },
+  {
+   "id": "D-L2",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "बाबू (JCB वाले) के घर से महिपाल के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Babu (JCB wale) ke ghar se Mahipal ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "jcb",
+    "जेसीबी"
+   ]
+  },
+  {
+   "id": "D-L3",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "कृष्ण पंडित के घर से नरेश के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Krishan Pandit ke ghar se Naresh ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "कृष्ण पंडित",
+    "krishan pandit",
+    "krishna pandit",
+    "नरेश",
+    "naresh"
+   ]
+  },
+  {
+   "id": "D-L4",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "रामपत मिस्त्री के घर से सुदेश के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Rampat Mistri ke ghar se Sudesh ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "रामपत",
+    "rampat"
+   ]
+  },
+  {
+   "id": "D-L5",
+   "parent": "M9",
+   "category": "lane",
+   "topics": [
+    "cc_lanes",
+    "education"
+   ],
+   "villages": [
+    "sihali_khurd"
+   ],
+   "laneOnly": true,
+   "hi": "राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द के प्रांगण में इंटरलॉकिंग बनी है।",
+   "roman": "Rajkiya Uchch Madhyamik Vidyalaya, Sihali Khurd ke prangan me interlocking bani hai."
+  },
+  {
+   "id": "D-L6",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "शिव मंदिर से श्योराम की हवेली की ओर और सीताराम मंदिर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Shiv mandir se Shyoram ki haveli ki or aur Sitaram mandir ki or interlocking bani hai.",
+   "landmarks": [
+    "श्योराम",
+    "shyoram",
+    "sheoram",
+    "सीताराम",
+    "sitaram",
+    "shiv mandir",
+    "शिव मंदिर"
+   ]
+  },
+  {
+   "id": "D-L7",
+   "parent": "M9",
+   "category": "lane",
+   "topics": [
+    "cc_lanes",
+    "education"
+   ],
+   "villages": [
+    "sihali_kalan"
+   ],
+   "laneOnly": true,
+   "hi": "राजकीय माध्यमिक विद्यालय (सिहाली कलां) के प्रार्थना स्थल पर इंटरलॉकिंग टाइल्स का प्रांगण बना है।",
+   "roman": "Rajkiya Madhyamik Vidyalaya (Sihali Kalan) ke prarthna sthal par interlocking tiles ka prangan bana hai."
+  },
+  {
+   "id": "D-L8",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मेन रोड से महेंद्र के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Main road se Mahendra ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "महेंद्र",
+    "महेन्द्र",
+    "mahendra",
+    "mahender",
+    "mahinder"
+   ]
+  },
+  {
+   "id": "D-L9",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "आशावरी माता मंदिर मेन सड़क (शीशे वाले कुएँ) से राजू चौहान के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Ashavari Mata mandir main sadak (sheeshe wale kuan) se Raju Chauhan ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "आशावरी",
+    "ashavari",
+    "asavari",
+    "शीशे वाले",
+    "sheeshe wale",
+    "shishe wale",
+    "राजू चौहान",
+    "raju chauhan"
+   ]
+  },
+  {
+   "id": "D-L10",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes",
+    "drainage"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मेन रोड से भंवर सिंह के घर की ओर नाली समेत इंटरलॉकिंग बनी है।",
+   "roman": "Main road se Bhanwar Singh ke ghar ki or naali samet interlocking bani hai.",
+   "landmarks": [
+    "भंवर",
+    "bhanwar",
+    "bhawar",
+    "bhanwar singh"
+   ]
+  },
+  {
+   "id": "D-L11",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मुख्य सड़क से दशरथ के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Main road se Dashrath ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "दशरथ",
+    "dashrath",
+    "dasrath"
+   ]
+  },
+  {
+   "id": "D-L12",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "दशरथ के घर से मदन (चक्की वाले) के घर की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Dashrath ke ghar se Madan (chakki wale) ke ghar ki or interlocking bani hai.",
+   "landmarks": [
+    "चक्की",
+    "chakki"
+   ]
+  },
+  {
+   "id": "D-L13",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "सुदेश के घर से देवता के स्थान की ओर इंटरलॉकिंग बनी है।",
+   "roman": "Sudesh ke ghar se devta ke sthaan ki or interlocking bani hai.",
+   "landmarks": [
+    "सुदेश",
+    "sudesh"
+   ]
+  },
+  {
+   "id": "D-L14",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes",
+    "education"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "laneOnly": true,
+   "hi": "हाड़ाहेड़ी में मदन पंच के घर से सरकारी स्कूल की ओर मुख्य इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Hadahedi me Madan Panch ke ghar se sarkari school ki or mukhya interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "मदन पंच",
+    "madan panch"
+   ]
+  },
+  {
+   "id": "D-L15",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मेन रोड से रामकुंवार के घर की ओर इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Main road se Ramkunwar ke ghar ki or interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "रामकुंवार",
+    "रामकँवार",
+    "ramkunwar",
+    "ramkanwar",
+    "ram kunwar"
+   ]
+  },
+  {
+   "id": "D-L16",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "laneOnly": true,
+   "hi": "हाड़ाहेड़ी में रामसिंह के घर से अभय सिंह (हाड़ाहेड़ी वाले) के घर की ओर इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Hadahedi me Ramsingh ke ghar se Abhay Singh (Hadahedi wale) ke ghar ki or interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "रामसिंह",
+    "राम सिंह",
+    "ramsingh",
+    "ram singh"
+   ]
+  },
+  {
+   "id": "D-L17",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes",
+    "education"
+   ],
+   "villages": [
+    "hadahedi"
+   ],
+   "laneOnly": true,
+   "hi": "हाड़ाहेड़ी में सरकारी स्कूल के सामने वाले रास्ते में इंटरलॉकिंग टाइल्स लगवाई गईं।",
+   "roman": "Hadahedi me sarkari school ke saamne wale raste me interlocking tiles lagwayi gayi."
+  },
+  {
+   "id": "D-L18",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मुख्य सड़क से सूबेसिंह मास्टर के घर की ओर इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Main road se Subesingh Master ke ghar ki or interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "सूबेसिंह",
+    "सूबे सिंह",
+    "subesingh",
+    "sube singh",
+    "sube singh master"
+   ]
+  },
+  {
+   "id": "D-L19",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "मुख्य सड़क से नत्थूराम स्वामी के घर की ओर इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Main road se Natthuram Swami ke ghar ki or interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "नत्थूराम",
+    "नत्थू",
+    "natthuram",
+    "nathuram",
+    "nathu ram",
+    "natthu"
+   ]
+  },
+  {
+   "id": "D-L20",
+   "parent": "M6",
+   "category": "lane",
+   "topics": [
+    "cc_lanes"
+   ],
+   "villages": [],
+   "laneOnly": true,
+   "hi": "सुंदरलाल के घर से रामनिवास के घर की ओर इंटरलॉकिंग सड़क बनवाई गई।",
+   "roman": "Sundarlal ke ghar se Ramniwas ke ghar ki or interlocking sadak banwayi gayi.",
+   "landmarks": [
+    "सुंदरलाल",
+    "सुन्दरलाल",
+    "sundarlal",
+    "sunderlal",
+    "रामनिवास",
+    "ramniwas",
+    "ramnivas"
+   ]
+  }
+ ]
+}

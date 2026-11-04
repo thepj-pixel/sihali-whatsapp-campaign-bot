@@ -161,8 +161,8 @@ C.push({ name: 'hindi-woman-water-hadahedi', mode: 'pipeline', turns: [
     { m: 'हमारे यहाँ पानी की बहुत दिक्कत है', has: ['पानी', 'नल', 'जल'] },
     { m: 'आगे क्या करेंगे पानी के लिए?', has: ['संकल्प', 'पानी'] },
     { m: 'सोचकर बताएँगे' },
-    { m: 'ठीक है' },
-    { m: 'राम राम', has: ['पानी'] }
+    { m: 'ठीक है', has: ['पानी', 'दर्ज'] },          // v3: the parked samasya is confirmed (memory shows here)
+    { m: 'राम राम', has: ['राम राम', 'बहन जी'] }      // and is not recited again right after the confirmation
 ], after: (u) => {
     check('[hindi-woman] gender F from verb ending', u.memory.gender === 'F');
     check('[hindi-woman] village hadahedi', u.memory.village === 'hadahedi');
@@ -172,7 +172,7 @@ C.push({ name: 'hindi-woman-water-hadahedi', mode: 'pipeline', turns: [
 C.push({ name: 'elder-pension', mode: 'brain', turns: [
     { m: 'ram ram beta' },
     { m: 'meri umar 70 saal ki hai, main vote dalne zaroor aaunga' },
-    { m: 'pension nahi milti budhape ki', intent: 'complaint', has: ['chaupal'] },
+    { m: 'pension nahi milti budhape ki', intent: 'complaint', has: ['pension', 'note'] },  // v3: logged as samasya (no pension sankalp on the parcha -> none quoted)
     { m: 'buzurgon ke liye kya karoge?', intent: 'future' },
     { m: 'achha kaam kiya hai', intent: 'positive' },
     { m: 'pakka vote denge', intent: 'commit', has: ['Dada ji'] }
@@ -204,7 +204,7 @@ C.push({ name: 'bribe-abuse-calm', mode: 'brain', turns: [
     { m: 'daru milegi?', intent: 'bribe' },
     { m: 'bc bakwas band karo', intent: 'abuse' },
     { m: 'sorry gussa tha, sadak kharab hai', intent: 'complaint' },
-    { m: 'ward 2', intent: 'gave_ward', has: ['95'] },
+    { m: 'ward 2', intent: 'gave_ward', has: ['kab se', 'note'] },  // v3: samasya flow asks "since when" next
     { m: 'dhanyavad' }
 ] });
 
@@ -221,7 +221,7 @@ C.push({ name: 'stop-forever', mode: 'pipeline', consented: false, turns: [
 } });
 
 C.push({ name: 'who-joke-offtopic', mode: 'brain', turns: [
-    { m: 'tum kaun ho?', intent: 'who_are_you', has: ['Suman', 'automated'] },
+    { m: 'tum kaun ho?', intent: 'who_are_you', has: ['digital saathi'] },
     { m: 'joke sunao', intent: 'joke' },
     { m: 'modi ke baare me kya kehna hai', intent: 'off_topic', has: ['panchayat'] },
     { m: 'IPL match kaun jeetega', intent: 'off_topic' },
@@ -230,7 +230,7 @@ C.push({ name: 'who-joke-offtopic', mode: 'brain', turns: [
 ] });
 
 C.push({ name: 'was-sarpanch', mode: 'brain', turns: [
-    { m: 'kya abhay singh pehle sarpanch the?', intent: 'was_sarpanch', hasAll: ['nahi', 'pratinidhi'] },
+    { m: 'kya abhay singh pehle sarpanch the?', intent: 'was_sarpanch', hasAll: ['nahi', 'prayas'], not: /pratinidhi/i },
     { m: 'to kaam kisne karwaye?' },
     { m: 'Abhay singh kaun hai?', intent: 'about_baba', has: ['40 saal'] },
     { m: 'अभय सिंह जी पहले सरपंच रहे थे क्या?', intent: 'was_sarpanch', has: ['नहीं'] },
@@ -258,9 +258,10 @@ C.push({ name: 'greeting-loop', mode: 'brain', turns: [
     { m: 'ram ram' }, { m: 'ram ram' }, { m: 'ram ram' }, { m: 'hello' }, { m: 'namaste' }, { m: 'ram ram' }
 ] });
 
-C.push({ name: 'cc-held', mode: 'brain', turns: [
-    { m: 'hamari gali me interlocking kab lagegi?', has: ['jaanch', 'note', 'verify'], not: /\b45\b/ },
-    { m: 'cc road ka kya hua?', not: /\b45\b/ },
+C.push({ name: 'cc-lanes-parcha', mode: 'brain', turns: [
+    // v3: interlocking/CC IS on the parcha now; lane list only when the voter names the lane; never counts
+    { m: 'hamari gali me interlocking kab lagegi?', has: ['note'], not: /\b45\b/ },
+    { m: 'cc road ka kya hua?', has: ['interlocking', 'CC'], not: /\b45\b/ },
     { m: 'kitni cc sadkein bani?', not: /\b\d{2}\+?\s*(cc|sadk)/i },
     { m: 'ward 1', has: ['95'] },
     { m: 'theek hai' },
@@ -268,8 +269,8 @@ C.push({ name: 'cc-held', mode: 'brain', turns: [
 ] });
 
 C.push({ name: 'hindi-health', mode: 'brain', turns: [
-    { m: 'अस्पताल में डॉक्टर नहीं आता', intent: 'complaint', has: ['डॉक्टर'] },
-    { m: 'वार्ड 10', intent: 'gave_ward', has: ['98'] },
+    { m: 'अस्पताल में डॉक्टर नहीं आता', intent: 'complaint', has: ['नोट', 'वार्ड'] },
+    { m: 'वार्ड 10', intent: 'gave_ward', has: ['कब से'] },
     { m: 'एम्बुलेंस की सुविधा होगी?', has: ['एम्बुलेंस'] },
     { m: 'दवाई बहुत महंगी है', has: ['दवा', 'औषधि'] },
     { m: 'अच्छा' },
@@ -287,8 +288,8 @@ C.push({ name: 'youth-sports', mode: 'brain', turns: [
 
 C.push({ name: 'farmer-haryanvi', mode: 'brain', turns: [
     { m: 'mhara gaam sihali kalan se hu, kisan hu' },
-    { m: 'khaad beej ki dikkat ghani hai', has: ['kisan seva', 'khaad'] },
-    { m: 'patwari ke chakkar lagane padte hain', has: ['patwar'] },
+    { m: 'khaad beej ki dikkat ghani hai', has: ['kisan', 'note'] },
+    { m: 'patwari ke chakkar lagane padte hain', has: ['zameen', 'note'] },  // v3: new samasya (patwar) logged; sankalp quoted at confirmation
     { m: 'johad ka kya hua?', has: ['johad'] },
     { m: 'thik se' },
     { m: 'vote pakka', intent: 'commit' }
@@ -318,7 +319,7 @@ C.push({ name: 'stub-llm-good-context', mode: 'brain', llm: goodLLM, turns: [
     check('[llm-good] LLM wrote replies (source llm)', rs.filter(r => r.r && r.r.source === 'llm').length >= 3);
     const last = prompts[prompts.length - 1] || { sys: '' };
     check('[llm-good] prompt carries memory card with the concern', /concerns: .*drainage/.test(last.sys));
-    check('[llm-good] prompt carries retrieved fact lines', /\[(DONE|FUTURE SANKALP)\]/.test(prompts.map(p => p.sys).join('\n')));
+    check('[llm-good] prompt carries retrieved fact lines', /\[(DONE|FUTURE SANKALP)/.test(prompts.map(p => p.sys).join('\n')));
     check('[llm-good] prompt carries last turns as history', Array.isArray(last.history) && last.history.length >= 4);
 } });
 
@@ -330,14 +331,14 @@ C.push({ name: 'stub-llm-bad-rejected', mode: 'brain', llm: badLLM, turns: [
     { m: 'soch rahe hain' },
     { m: 'dusra candidate kaisa hai?' }
 ], after: (u, rs) => {
-    check('[llm-bad] every bad LLM output rejected', rs.every(r => r.r && /llm_rejected/.test(r.r.source)));
+    check('[llm-bad] every bad LLM output rejected', rs.every(r => r.r && /llm_rejected|^flow$/.test(r.r.source)));
 } });
 
 C.push({ name: 'stub-llm-json-extract', mode: 'brain', llmJson: async (prompt) => /Mahesh/.test(prompt) ? '{"name":"Mahesh","gender":"M","dialect":"haryanvi","ageGroup":"middle"} trailing' : 'not json', turns: [
     { m: 'mhare ghar me sab Mahesh ke kehne pe chalte hain, wo main hi hu' },
     { m: 'ram ram', has: ['Mahesh'] },
     { m: 'pani ki dikkat hai' },
-    { m: 'ward 11', has: ['98'] },
+    { m: 'ward 11', has: ['kab se', 'note'] },
     { m: 'theek hai' },
     { m: 'vote denge', intent: 'commit', has: ['Mahesh'] }
 ], after: (u) => { check('[llm-json] name merged from LLM extraction', u.memory.name === 'Mahesh' && u.memory.extractedBy === 'rules+llm'); check('[llm-json] honorific uses male middle-age (Tau ji)', /Tau ji/.test(u.history.map(h => h.text).join(' '))); } });
@@ -480,9 +481,11 @@ function kbChecks() {
     const items = kb.load().items;
     check('[kb] 12 major + 15 future + category items loaded', items.filter(i => i.kind === 'major').length === 12 && items.filter(i => i.kind === 'sankalp').length === 15 && items.filter(i => i.kind === 'detail').length > 50);
     check('[kb] no rupee/budget figure in any item', items.every(i => !/(₹|रुपये|रुपए|लाख|करोड़)/.test(i.text)));
-    check('[kb] CC/interlocking lanes are held', items.filter(i => i.category === 'interlocking_cc_sadak').every(i => i.held) && kb.getItem('M10').held);
-    check('[kb] conflicting Gayasi Ram road item is held', items.some(i => /गयासी राम/.test(i.text) && i.held));
-    check('[kb] held items never rendered with details', kb.render(kb.getItem('M10'), 'hi').includes('जाँच') && !/45/.test(kb.render(kb.getItem('M10'), 'en')));
+    check('[kb] source is ONLY the parcha (Gayasi Ram road gone, no 45+ counts)', !items.some(i => /गयासी|Gayasi/.test(i.text + i.roman)) && !items.some(i => /45\+/.test(i.text)));
+    check('[kb] interlocking lanes are lane-only (never volunteered)', items.filter(i => i.category === 'lane').length >= 18 && items.filter(i => i.category === 'lane').every(i => i.laneOnly) && !kb.retrieve('interlocking ka kya hua').some(i => i.laneOnly));
+    check('[kb] a named lane returns the parcha lane item', kb.retrieve('mahendra ke ghar ki or wali gali me interlocking').some(i => i.id === 'D-L8'));
+    check('[kb] public renders never name private individuals', items.filter(i => i.hiFull).every(i => !/(महिपाल|राजेश|मदन पंच|सत्यवीर|होशियार|सुरजन)/.test(i.hi)));
+    check('[kb] Amrit Sarovar is ongoing (chalu), mini stadium is a prayas', /चालू/.test(kb.getItem('D-A3').hi) && /प्रयास/.test(kb.getItem('F1').hi));
     const r1 = kb.retrieve('pani ki dikkat hai hadahedi me');
     check('[kb] water query -> JJM item first', r1[0] && r1[0].topics.includes('water'));
     const r2 = kb.retrieve('doctor nahi aata hospital me');
@@ -495,7 +498,7 @@ function kbChecks() {
     check('[kb] village detection (Haraheri/बड़ी सिहाली)', kb.detectVillages('haraheri').includes('hadahedi') && kb.detectVillages('बड़ी सिहाली').includes('sihali_kalan'));
     check('[kb] sanitize strips budgets', kb.sanitize('सड़क 5 लाख रुपये में बनी') === 'सड़क में बनी' || !/लाख/.test(kb.sanitize('सड़क 5 लाख रुपये में बनी')));
     // every rendered fact line in Hindi comes verbatim from a sheet item
-    const sample = items.filter(i => !i.held && i.kind !== 'detail').map(i => kb.render(i, 'hi').replace(/^संकल्प: /, '').replace(/…$/, '').slice(0, 40));
+    const sample = items.map(i => kb.render(i, 'hi').slice(0, 40));
     check('[kb] Hindi renders are sheet text', sample.every(s => ALL_FACT_TEXT.includes(s.toLowerCase())));
     // legacy backstop neutralised
     const legacy = aiService.getFastLocalAnswer('sankalp batao aage kya karoge', '919999000111') + aiService.getFastLocalAnswer('shubh ratri', '919999000111');

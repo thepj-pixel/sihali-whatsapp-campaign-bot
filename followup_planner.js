@@ -75,6 +75,8 @@ function blockReason(user, now = new Date(), cfg = config()) {
     if (daysToPoll(now, cfg) < 0) return 'after_poll';
     const m = voterMemory.ensure(user);
     if (user.persuasionStage === 'opposed' || m.commitment.status === 'opposed') return 'opposed';
+    if (m.condolenceAt && now.getTime() - Date.parse(m.condolenceAt) < 3 * 86400e3) return 'condolence_pause';
+    if (m.wrongNumberAt) return 'wrong_number';
     const p = m.proactive;
     if ((p.unanswered || 0) >= cfg.maxUnansweredProactive) return 'unanswered_limit';
     const today = istParts(now).day;
@@ -100,7 +102,7 @@ function daysLine(n, l) {
 }
 
 /** Build the personalised message for one voter (no eligibility checks). */
-function planFor(user, { goal = {}, now = new Date(), cfg = config() } = {}) {
+function planFor(user, { goal = {}, now = new Date(), cfg = config(), dryRun = false } = {}) {
     const brain = require('./reply_brain.js');
     const m = voterMemory.ensure(user);
     const l = lang(user);
@@ -127,18 +129,29 @@ function planFor(user, { goal = {}, now = new Date(), cfg = config() } = {}) {
         const where = fu.ward ? (l === 'hi' ? `वार्ड ${fu.ward} की ` : `ward ${fu.ward} ki `) : '';
         const label = kb.topicLabel(fu.topic, l);
         const line = pickItem(fu.topic, 'future') || pickItem(fu.topic);
+        const sid = fu.samasyaId || ((m.samasyaIds || []).slice(-1)[0]) || null;
         text = `${greet} ` + (l === 'hi'
-            ? `आपने ${where}${label} वाली बात बताई थी—वो अभय सिंह जी के रजिस्टर में प्राथमिकता पर दर्ज है।`
-            : `Aapne ${where}${label} wali baat batayi thi—wo Abhay Singh ji ke register me priority par darj hai.`)
+            ? `${where}${label} वाली आपकी शिकायत${sid ? ` (${sid})` : ''} टीम के पास है—कोई नई बात हो तो बताइए।`
+            : `${where}${label} wali aapki shikayat${sid ? ` (${sid})` : ''} team ke paas hai—koi nayi baat ho to bataiye.`)
             + (line ? ' ' + line : '') + ' ' + (stage === 'committed'
                 ? (l === 'hi' ? 'आपका साथ बना रहे 🙏' : 'Aapka saath bana rahe 🙏')
                 : (l === 'hi' ? '16 नवंबर को अभय सिंह जी का साथ देंगे ना?' : '16 November ko Abhay Singh ji ka saath denge na?'));
+    } else if (['leaning', 'committed'].includes(stage) && (m.familyVotes || m.told.familyAsk) && !m.told.mulaqatOffer && !(m.mulaqatIds || []).length && !dryRun) {
+        kind = 'mulaqat_invite';
+        text = `${greet} ` + (l === 'hi'
+            ? `आपके साथ के लिए दिल से धन्यवाद। क्या आप अभय सिंह जी को अपने घर बुलाना चाहेंगे? सुविधा का समय बता दीजिए।`
+            : `Aapke saath ke liye dil se dhanyavad. Kya aap Abhay Singh ji ko apne ghar bulana chahenge? Suvidha ka samay bata dijiye.`);
+        m.told.mulaqatOffer = new Date(now).toISOString();
+        m.flow = { type: 'mulaqat_offer', step: 'answer', at: new Date(now).toISOString() };
+    } else if (['leaning', 'committed'].includes(stage) && (m.familyVotes || m.told.familyAsk) && !m.told.mulaqatOffer && !(m.mulaqatIds || []).length && dryRun) {
+        kind = 'mulaqat_invite';
+        text = `${greet} ` + (l === 'hi' ? 'क्या आप अभय सिंह जी को अपने घर बुलाना चाहेंगे? सुविधा का समय बता दीजिए।' : 'Kya aap Abhay Singh ji ko apne ghar bulana chahenge? Suvidha ka samay bata dijiye.');
     } else if (stage === 'committed' && !m.familyVotes && !m.told.familyAsk) {
         kind = 'family_votes_ask';
         text = `${greet} ` + (l === 'hi'
             ? `आपके भरोसे के लिए फिर से धन्यवाद। आपके घर में कुल कितने वोट हैं? सबको 16 नवंबर को साथ लेकर आइएगा।`
             : `Aapke bharose ke liye phir se dhanyavad. Aapke ghar me kul kitne vote hain? Sabko 16 November ko saath lekar aaiyega.`);
-        m.told.familyAsk = true;
+        if (!dryRun) m.told.familyAsk = true;
     } else if (stage === 'committed') {
         kind = 'poll_reminder';
         const b = brain.boothForWard(ward, facts);
@@ -146,7 +159,7 @@ function planFor(user, { goal = {}, now = new Date(), cfg = config() } = {}) {
             + (b ? (l === 'hi' ? ` आपका बूथ ${b.booth}, कमरा ${b.room}।` : ` Aapka booth ${b.booth}, room ${b.room}.`) : '')
             + (m.familyVotes ? (l === 'hi' ? ` घर के ${m.familyVotes} वोट साथ लेकर आइएगा।` : ` Ghar ke ${m.familyVotes} vote saath lekar aaiyega.`) : '')
             + (!user.lastFoundVoter && !m.told.slipOffer ? (l === 'hi' ? ' पर्ची चाहिए तो नाम और पिता/पति का नाम भेज दीजिए।' : ' Parchi chahiye to naam aur pita/pati ka naam bhej dijiye.') : '');
-        if (!user.lastFoundVoter) m.told.slipOffer = true;
+        if (!user.lastFoundVoter && !dryRun) m.told.slipOffer = true;
     } else {
         kind = 'persuasion';
         const concern = m.concerns.length ? m.concerns[m.concerns.length - 1] : null;
@@ -163,6 +176,28 @@ function planFor(user, { goal = {}, now = new Date(), cfg = config() } = {}) {
     text = text.replace(/\s{2,}/g, ' ').trim();
     if (replyQuality.isRepeated(text, user)) return null;
     return { kind, text, used };
+}
+
+const NEXT_WINDOW_LABEL = { quiet_hours: 'after quiet hours (08:00 IST)', daily_limit: 'tomorrow 08:00 IST', recently_active: 'after the voter is idle', silence_period: 'none — pre-poll silence (replies only)', after_poll: 'none — poll is over' };
+/**
+ * Dashboard "Plan" view: what the bot will do next for this voter and roughly when (no side effects).
+ * @returns { kind, text, when (ISO|null), whenLabel, blockedBy }
+ */
+function nextAction(user, now = new Date(), cfg = config()) {
+    const clone = JSON.parse(JSON.stringify(user || {}));
+    const why = blockReason(clone, now, cfg);
+    let when = now, label = 'next planner cycle (≤15 min)';
+    if (why) {
+        const p = istParts(now);
+        const nextMorning = new Date(Date.parse(p.day + 'T08:00:00+05:30') + (p.hour >= 8 ? 86400e3 : 0));
+        if (why === 'quiet_hours') { when = nextMorning; label = NEXT_WINDOW_LABEL.quiet_hours; }
+        else if (why === 'daily_limit') { when = new Date(Date.parse(p.day + 'T08:00:00+05:30') + 86400e3); label = NEXT_WINDOW_LABEL.daily_limit; }
+        else if (why === 'recently_active') { const m = voterMemory.ensure(clone); const last = Date.parse(m.proactive.lastUserAt || clone.lastSeen || 0) || now.getTime(); when = new Date(Math.max(now.getTime(), last + cfg.minIdleHours * 3600e3)); if (inQuietHours(when, cfg)) when = nextMorning; label = 'after ' + cfg.minIdleHours + 'h idle'; }
+        else return { kind: null, text: null, when: null, whenLabel: NEXT_WINDOW_LABEL[why] || ('no proactive message: ' + why), blockedBy: why };
+    }
+    const plan = planFor(clone, { now: when, cfg, dryRun: true });
+    if (!plan) return { kind: null, text: null, when: null, whenLabel: 'nothing fresh to say (avoids repeating)', blockedBy: why || 'no_fresh_message' };
+    return { kind: plan.kind, text: plan.text, when: when.toISOString(), whenLabel: label, blockedBy: why || null };
 }
 
 /** Record that a proactive message went out (call after a successful send). */
@@ -221,4 +256,4 @@ async function runCycle({ users, lineId, send, goal = {}, now = new Date(), cfg 
     return { sent, skipped };
 }
 
-module.exports = { DEFAULTS, config, istParts, inQuietHours, inSilencePeriod, daysToPoll, blockReason, planFor, recordSent, runCycle, sentTodayOnLine };
+module.exports = { DEFAULTS, config, istParts, inQuietHours, inSilencePeriod, daysToPoll, blockReason, planFor, recordSent, runCycle, sentTodayOnLine, nextAction };

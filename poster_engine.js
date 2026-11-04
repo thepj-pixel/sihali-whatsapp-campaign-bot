@@ -109,7 +109,7 @@ class PosterEngine {
 
             <!-- Subtitle & Symbol -->
             <text x="${width / 2}" y="${aspect === '1:1' ? 268 : 375}" font-size="${aspect === '1:1' ? 19 : 24}" font-weight="700" fill="#fbbf24" text-anchor="middle" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', sans-serif">
-                सरपंच पद प्रत्याशी  |  मतपत्र क्रम संख्या: 1  |  चुनाव चिन्ह: 卐 (स्वस्तिक)
+                सरपंच पद प्रत्याशी  |  मतपत्र क्रम संख्या: 1  |  मोटी आंगली वाले
             </text>
 
             ${hasVoterPhoto ? `
@@ -149,7 +149,7 @@ class PosterEngine {
                 "${slogan}"
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? (hasVoterPhoto ? 775 : 815) : (aspect === '4:5' ? 1085 : 1305)}" font-size="${aspect === '1:1' ? 17 : 22}" font-weight="700" fill="#94a3b8" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                40 वर्षों से निष्पक्ष सेवा, चौपाल न्याय व सबका समान विकास
+                40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा
             </text>
 
             ${aspect === '9:16' ? `
@@ -274,7 +274,7 @@ class PosterEngine {
                 बाबा अभय सिंह
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? 185 : 255}" font-size="${aspect === '1:1' ? 18 : 24}" font-weight="700" fill="#94a3b8" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                सरपंच पद हेतु कर्मठ व निष्पक्ष प्रत्याशी • मतपत्र क्रम: 1 (卐 स्वस्तिक)
+                सरपंच पद हेतु कर्मठ व निष्पक्ष प्रत्याशी • मतपत्र क्रम संख्या: 1
             </text>
 
             ${hasVoterPhoto ? `
@@ -414,7 +414,7 @@ class PosterEngine {
                 बाबा अभय सिंह
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? 230 : 320}" font-size="${aspect === '1:1' ? 19 : 24}" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                सरपंच पद हेतु अनुभवी व विश्वसनीय नेतृत्व • मतपत्र क्रम: 1 (卐 स्वस्तिक)
+                सरपंच पद हेतु विश्वसनीय सेवक • मतपत्र क्रम संख्या: 1
             </text>
 
             ${hasVoterPhoto ? `
@@ -441,7 +441,7 @@ class PosterEngine {
                 "${slogan}"
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? 730 : (aspect === '4:5' ? 985 : 1205)}" font-size="${aspect === '1:1' ? 17 : 22}" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                हर सुख-दुख में गाँव के साथ • 40 वर्षों का निष्पक्ष सेवा भाव
+                हर सुख-दुख में गाँव के साथ • 40 वर्षों की निष्कलंक समाज सेवा
             </text>
 
             <!-- Bottom Appeal -->

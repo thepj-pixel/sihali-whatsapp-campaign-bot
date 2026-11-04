@@ -78,7 +78,8 @@ if (fs.existsSync(FONT_PATH)) {
 
 async function generateVoterCard(voter) {
     const cacheKey = voter.id || voter.sr_no || voter.epic || `${voter.ward || 1}_${voter.sr_no || 1}`;
-    const cacheFile = path.join(CARD_CACHE_DIR, `card_${cacheKey}.jpg`);
+    // v3 in the name: cards rendered before 4 Nov 2026 carried a symbol and must never be served again
+    const cacheFile = path.join(CARD_CACHE_DIR, `card_v3_${cacheKey}.jpg`);
     if (fs.existsSync(cacheFile)) {
         try {
             return fs.readFileSync(cacheFile);
@@ -181,15 +182,15 @@ async function generateVoterCard(voter) {
         (मोटी आंगली वाले)
       </text>
       <text x="265" y="304" font-size="16" font-weight="600" fill="#94a3b8">
-        40 वर्षों से निष्पक्ष सेवा, विकास व जन-कल्याण को समर्पित
+        40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा
       </text>
 
-      <!-- Official Electoral Swastik Voting Stamp (Mohar) Only -->
+      <!-- Ballot serial number badge (the parcha leaves the election symbol blank: never print a symbol) -->
       <g transform="translate(885, 232) rotate(-8)">
         <circle cx="0" cy="0" r="58" fill="#ffffff" stroke="#6d28d9" stroke-width="3.5" stroke-dasharray="6,3"/>
         <circle cx="0" cy="0" r="50" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
-        <text x="0" y="14" font-size="52" font-weight="900" fill="#6d28d9" text-anchor="middle">卐</text>
-        <text x="0" y="38" font-size="13" font-weight="900" fill="#5b21b6" text-anchor="middle" letter-spacing="2">★ मुहर ★</text>
+        <text x="0" y="-16" font-size="14" font-weight="900" fill="#5b21b6" text-anchor="middle">क्रम संख्या</text>
+        <text x="0" y="30" font-size="50" font-weight="900" fill="#6d28d9" text-anchor="middle">1</text>
       </g>
 
       <!-- Voter Details Grid -->

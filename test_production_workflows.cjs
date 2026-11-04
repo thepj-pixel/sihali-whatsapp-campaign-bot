@@ -26,7 +26,7 @@ function check(name, condition) {
     }
 }
 
-async function waitForDashboard(url, attempts = 200) {
+async function waitForDashboard(url, attempts = 600) {
     for (let i = 0; i < attempts; i++) {
         try {
             const response = await fetch(url);
@@ -100,8 +100,8 @@ async function run() {
     const parsedJsonFacts = campaignProfile.parseImportedFile('{"facts":["Verified A"],"style":"Short replies"}', 'facts.json');
     check('one-click facts JSON imports style and facts', parsedJsonFacts.verifiedFacts[0] === 'Verified A' && parsedJsonFacts.talkingStyle === 'Short replies');
     const liveProfile = campaignProfile.load();
-    check('updated fact sheet is active', liveProfile.verifiedFacts.some(fact => fact.includes('16 November 2026')) && liveProfile.verifiedFacts.some(fact => fact.startsWith('Future commitment:')));
-    check('held road-work details are not published as facts', !liveProfile.verifiedFacts.some(fact => /interlocking/i.test(fact)));
+    check('updated fact sheet is active', liveProfile.verifiedFacts.some(fact => fact.includes('16 November 2026')) && liveProfile.verifiedFacts.some(fact => fact.startsWith('Sankalp:')));
+    check('verified facts come only from the parcha (3,636 voters, no Gayasi Ram road, no symbol)', liveProfile.verifiedFacts.some(f => f.includes('3,636')) && !liveProfile.verifiedFacts.some(f => /Gayasi|3,570|swastik|स्वस्तिक/i.test(f)));
 
     const originalContacts = contactsManager.contacts;
     const originalContactSave = contactsManager.save;

@@ -34,7 +34,7 @@ function makeDom(html) {
         BROADCAST_STATE_PATH: path.join(tmp, 'tabs_bc.json'), CONTACTS_DB_PATH: path.join(tmp, 'tabs_contacts.json'), CAMPAIGN_AGENDA_PATH: path.join(tmp, 'tabs_agenda.json') } });
     try {
         let html = '';
-        for (let i = 0; i < 200 && !html; i++) {
+        for (let i = 0; i < 600 && !html; i++) {
             try { const r = await fetch(`http://127.0.0.1:${port}/?pin=2026`); if (r.ok) html = await r.text(); } catch (e) { await new Promise(r => setTimeout(r, 100)); }
         }
         check('dashboard served', html.length > 1000);
@@ -51,6 +51,12 @@ function makeDom(html) {
         document.getElementById('tab-btn-goal').click();
         check('Bulk Send tab click -> switchTab("bulk")', calls.includes('bulk'));
         check('Goal tab click -> switchTab("goal")', calls.includes('goal'));
+        for (const t of ['samasya', 'mulaqat', 'plan']) {
+            check(`v3 tab ${t} button + panel exist (data-tab)`, new RegExp('id="tab-btn-' + t + '"[^>]*data-tab="' + t + '"').test(html) && html.includes('id="tab-' + t + '"'));
+            document.getElementById('tab-btn-' + t).click();
+            check(`${t} tab click -> switchTab("${t}")`, calls.includes(t));
+        }
+        check('Samasya/Mulaqat CSV export links present', html.includes('/api/samasya.csv') && html.includes('/api/mulaqat.csv'));
     } finally {
         proc.kill();
     }
