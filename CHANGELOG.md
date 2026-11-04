@@ -42,6 +42,7 @@ This file records code and operational changes. Runtime delivery events are writ
 
 ### Fixed
 
+- Removed the live `user_memory.json` database from Git tracking so VM deployments preserve conversation state and are no longer blocked by runtime memory changes.
 - Repaired two inline dashboard-script syntax errors that prevented every non-default tab from opening.
 - Added the missing contact-table HTML escaping helper that previously broke the Voter Contacts tab at runtime.
 - CSV uploads are now parsed as CSV instead of being sent through the VCF-only parser.

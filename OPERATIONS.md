@@ -61,3 +61,5 @@ pm2 save
 Open the permanent domain and enter the `CAMPAIGN_PIN` configured for the PM2 process. If no custom value is configured, the application fallback is `2026`. The dashboard remains PIN-protected; no temporary tunnel process is required.
 
 `sessions_auth/`, `user_memory.json`, `campaign_runtime.json`, and the operational logs are Git-ignored, so switching branches does not delete the VM's WhatsApp sessions or conversation state.
+
+If a VM cloned an older revision where `user_memory.json` was still tracked, preserve it before the first switch with `cp user_memory.json /tmp/user_memory.json.vm-backup`, then restore that backup after switching branches.
