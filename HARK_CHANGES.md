@@ -1,3 +1,35 @@
+# HARK_CHANGES — Brain v3.1–3.3 (4 Nov 2026, night: fixes from the live self-test)
+
+LLM keys are live on the VM (2 NVIDIA keys). These fixes come from a human read of 11 live self-test scripts.
+
+| Problem seen live | Fix | Files |
+|---|---|---|
+| "hum to dusre candidate ke saath hain" was read as a commitment | Opponent support is recognised before commitment: dusre/doosre/samne wale (candidate/wale) ke saath, unko/usko vote denge, Abhay Singh ko vote nahi denge, against/khilaf. Commitment now needs no negation ("vote pakka nahi" = undecided) and no third party. The reply respects their choice, asks what matters most to them and does not attack anyone. Praise of the other side ("unka parivar purana hai") is answered with respect plus one work. | `reply_brain.js` |
+| "dusre wale to de rahe hain" got a deflection | New `bribe_others` intent: holds the line with a swabhimaan appeal and accuses nobody. | `reply_brain.js` |
+| "abhay singh me kya khaas hai" was deflected; "library ke baare me batao" returned his bio | `about_baba` (special) answers with 40 saal seva, bhumi daan for the up-swasthya kendra and one key work. "X ke baare me batao" with a topic goes to that topic. | `reply_brain.js`, `knowledge_base.js` (padhne/padhna/छात्र → education) |
+| "tum log chunav me hi yaad karte ho" got "samajh nahi paayi" | New `grievance` intent: empathy ("naraazgi jaayaz hai"), 40 saal saath, asks what the problem is. | `reply_brain.js` |
+| Bare "Ji." replies | `short_reply`/`thanks` always add something real: a warm line for elders, an open question, or a recall. New intents: `invite` (thanks warmly for a wedding invite), `money_ask` ("kitne crore": the campaign does not share spending figures; offers the works list), "vote ki baat baad me" (no pressure). The offline suite now fails on any bare Ji/Achha. | `reply_brain.js` |
+| "bhai kya scene hai" got a vote ask; "haryanvi me bol" was ignored | Greets naturally first. `dialect_switch` remembers `user.dialectPref` (Haryanvi/Rajasthani), adds a light dialect touch to templates and tells the LLM to write in that dialect. LLM output that ignores the dialect is rejected. Haryanvi "tai/te" (= se) is read as "since". | `reply_brain.js`, `conversation_flows.js` |
+| A question mid-samasya ("ladkiyon ke padhne ke liye kya hai") was stored as the location | A question never fills a samasya field. It is answered, then the flow asks its pending question once. "kya hoga iska" gets "no date promised, it is in the register" and the location is asked again. | `conversation_flows.js`, `reply_brain.js` |
+| Ghar-visit: "haan ghar bulana hai" saved as the time, the place lost when sent with "8 log", "gaon ki baat karni hai" got "Ji." | One message can fill several fields (when, place, ward, family, purpose). A repeated "ghar bulana hai" re-asks the time. The confirmation shows time, place, ward, purpose and family. A purpose or change sent after logging updates the same record. An already-open request takes new details instead of repeating "pehle se darj". | `conversation_flows.js` |
+| "mera naam aur ward yaad hai?" answered with a register number; the name triggered the voter-slip list | A self-introduction ("mera naam X") is stored and answered by the brain. The slip search does not run on it, in either `server.js` or the service, unless the voter asks for a parchi or gives a father/husband name. `memory_check` answers name and ward first. Register numbers show only when asked. | `server.js`, `ai_assistant_service.js`, `reply_brain.js` |
+| "hmm" after a sadak complaint re-logged it | Filler after a detour asks the location once and never creates or re-confirms a record. | `conversation_flows.js` |
+| Kab se asked before the gali; the visit question pushed again after "theek hai, dhanyavad" | When only the profile ward is known, the bot asks for the gali first. Thanks to the visit offer closes it warmly. The planner may ask again after 20h. "vote pakka" is not taken as a yes to the visit. | `conversation_flows.js` |
+| Elder (72) addressed neutrally; knee pain got a works list | "saal ka/ki hu" sets gender, so a 72-year-old man is addressed as Dada ji. Pain plus doctor/hospital gets empathy first, then the up-swasthya kendra and the doctor sankalp. | `voter_memory.js`, `reply_brain.js` |
+| "अभय सिंह ने क्या काम करवाए?" got a future sankalp | Past-tense works questions use only DONE items. With no topic, the major works are used (JJM, library, khel maidan, health centre). | `reply_brain.js` |
+
+**LLM path.** The LLM now writes conversational intents: works, topic, future, about, taunt, undecided, positive, daily life, grievance, invite, health, joke, off-topic and unclear/short. Sensitive or fact-exact intents stay on reviewed templates: opposition, bribes, money, the sarpanch question, memory, dialect switch, greeting/thanks/intro and commitment. Beyond the old rules, the validator now also rejects LLM output that:
+- drops the draft's facts (`dropped_facts`)
+- adds a vote push the draft didn't have (`unasked_vote_push`)
+- guesses the voter's gender (`gender_guess`)
+- ignores an asked dialect (`no_dialect`/`bad_dialect`)
+
+`<think>` blocks and "Reply:" labels are stripped, and temperature is 0.4. `/api/ai-status` now carries `replyStats`: counts by source (llm / template / flow / llm_rejected), rejection reasons, per-intent counts and the last 60 replies with any rejected LLM text.
+
+**Tests.** `test:brainv3` adds 11 regression conversations, each run with the LLM off and with a stub LLM, plus a pipeline memory conversation, classification units and validator units. Every reply in the suite is now checked for "never a bare Ji/Achha".
+
+---
+
 # HARK_CHANGES — Brain v2 (4 Nov 2026, evening)
 
 Pushed to `hark/production-ready`, `codex/production-readiness` (live) and `main`. Full design and 20 before/after dialogues: **`BRAIN_V2.md`**.

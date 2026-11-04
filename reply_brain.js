@@ -614,7 +614,7 @@ function compose(cls, ctx) {
             const tlist = [anyConcern && anyConcern.topic, ...(AUDIENCE_TOPICS[person.gender || 'none'] || []), 'water', 'health', 'road', 'youth', 'education'].filter(Boolean);
             let sn = '';
             for (const t of tlist) { sn = addFacts(topicItems(t, l, user, 'done'), 1); if (sn) break; }
-            if (sn) body += S(' बस एक बात ध्यान में रखिएगा: ', ' Bas ek baat dhyan me rakhiyega: ') + sn;
+            if (sn) body += S(' एक बात याद रखिएगा: ', ' Ek baat yaad rakhiyega: ') + sn;
             break;
         }
         case 'positive':
@@ -855,7 +855,8 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
     if (person.gender !== 'F' && /(chahti hain|chahti ho|sakti hain|rahi hain|karti hain|aayi hain|bolti hain|चाहती हैं|सकती हैं|रही हैं|करती हैं|आई हैं|बहन जी|behan ji|mata ji|माता जी)/i.test(r) && !/(behan ji|mata ji|बहन जी|माता जी|tai ji|ताई जी)/i.test(draft)) return 'gender_guess';
     if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
     if (/(\bmonday\b|\bsunday\b|\bvote dalna\b)/i.test(r) && l === 'hi') return 'wrong_script';
-    if (/(कड़ै|kade)\s*(वोट|vote)/i.test(r)) return 'bad_dialect';
+    if (/(kad़ै|कड़ै|kade)\s*(वोट|vote)/i.test(r)) return 'bad_dialect';
+    if (/((prayas|koshish|vaada|wada)\s+(karti|karungi|karta)\s*(hoon|hu|hun)?|(khulwa|banwa|karwa|lagwa|dila)\w*\s+(dungi|deti hoon|deti hu|karungi)|(प्रयास|कोशिश|वादा)\s+(करती|करूँगी|करूंगी)|(खुलवा|बनवा|करवा|लगवा|दिला)\S*\s+(दूँगी|दूंगी|देती हूँ|करूँगी))/i.test(r)) return 'self_promise';
     if (user && user.dialectPref === 'haryanvi' && !/(thar[aei]|thaar[aei]|mhar[aei]|\bsai\b|\bse\b|\bib\b|kade|\bke\b|थार|म्हार|सै|इब|कड़ै|के )/i.test(r)) return 'no_dialect';
     return null;
 }
@@ -929,7 +930,7 @@ function think(message, user, opts = {}, memoryDone = false) {
         const text = pool.find(p => p !== last) || pool[0];
         return { text, cls, stage, previousStage, ctx, c: { text, ask: false, used: [] }, flowResult: { quiet: true }, l, person, hon };
     }
-    let c, text;
+    let c, text, pendingQ = null;
     if (fr) {
         c = { text: fr.text, ask: fr.ask === true, used: fr.used || [], needsAdmin: !!(fr.samasyaId || fr.mulaqatId), concern: fr.concernTopic ? { topic: fr.concernTopic } : null };
         text = c.text;
@@ -946,13 +947,13 @@ function think(message, user, opts = {}, memoryDone = false) {
             text += ' ' + flows.offerMulaqat(ctx);
         } else if (flows.inFlow(user) && (mem.flow.parked || 0) === 1 && !mem.flow.resumed && !mem.flow.reassured && (mem.flow.asked || 1) < 2 && !/\?/.test(text) && text.length < 300) {
             const pq = flows.pendingQuestion(user, l);
-            if (pq) { text += ' ' + pq; mem.flow.resumed = true; }
+            if (pq) { pendingQ = pq; mem.flow.resumed = true; }
         } else if (c.ask && !/\?/.test(text) && text.length < 230) {
             const closer = pickCloser(stage, l, user, c.concern || null);
             if (closer) text += ' ' + closer;
         }
     }
-    return { text, cls, stage, previousStage, ctx, c, flowResult: fr, l, person, hon };
+    return { text, pendingQ, cls, stage, previousStage, ctx, c, flowResult: fr, l, person, hon };
 }
 
 /**
@@ -974,9 +975,12 @@ async function respond(message, user = {}, opts = {}) {
     if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
-            const out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));
+            let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));
+            // the model may not add its own question when the draft asks none (or when we re-ask a pending flow question)
+            if (out && (!/\?/.test(text) || t.pendingQ)) { const cut = out.replace(/[^.?!।]*\?\s*(😊|🙏)?\s*$/, '').trim(); if (cut.length >= 20) out = cut; }
             const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' 2026 16 7:30 5:30 40 1';
-            const why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user });
+            let why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user });
+            if (!why && t.pendingQ && /\?/.test(String(out))) why = 'extra_question';
             if (!why) { text = String(out).trim(); source = 'llm'; }
             else { source = 'template(llm_rejected:' + why + ')'; rejected = { why, out: String(out || '').slice(0, 300) }; }
         } catch (e) { source = 'template(llm_error)'; }
@@ -986,6 +990,7 @@ async function respond(message, user = {}, opts = {}) {
         text = alt || text;
         source += '+redirect';
     }
+    if (t.pendingQ) text += ' ' + t.pendingQ;
     if (source !== 'llm') text = dialectize(text, user, t.l);
     text = text.charAt(0).toUpperCase() + text.slice(1);
     if (user) voterMemory.markTold(user, t.c.used || []);
@@ -997,6 +1002,9 @@ async function respond(message, user = {}, opts = {}) {
 function cleanLLM(out) {
     if (!out) return out;
     let r = String(out).replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^[\s\S]*<\/think>/i, '');
+    // generic robotic tail questions ("Kya aapko aur kuch jaanna hai?") add nothing
+    r = r.replace(/\s*(kya\s+)?(aap|aapko)\s+[^.?!]{0,40}\b(aur|kuch)\b[^.?!]{0,40}(jaan|jankari|jaankari|madad)[^.?!]*\?\s*(😊|🙏)?\s*$/i, '').replace(/\s*(क्या\s+)?(आप|आपको)\s+[^।?!]{0,40}(और|कुछ)[^।?!]{0,40}(जान|जानकारी|मदद)[^।?!]*\?\s*(😊|🙏)?\s*$/, '');
+    r = r.replace(/([.?!।]\s+)([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\babhay singh\b/g, 'Abhay Singh');
     r = r.replace(/^\s*(reply|answer|response|jawab|जवाब|उत्तर)\s*[:：-]\s*/i, '').replace(/\*\*/g, '').replace(/^\s*["“'](.*)["”']\s*$/s, '$1').trim();
     return r;
 }
@@ -1019,7 +1027,7 @@ function dialectize(text, user, l) {
 /** Synchronous grounded reply (no LLM, no network) — the backstop used by server.js. */
 function respondSync(message, user = {}, opts = {}) {
     const t = think(message, user, opts, false);
-    let text = t.text;
+    let text = t.text + (t.pendingQ ? ' ' + t.pendingQ : '');
     if (!t.flowResult && replyQuality.isRepeated(text, user)) text = redirectVariants(user, t.l, message).find(v => !replyQuality.isRepeated(v, user)) || text;
     text = dialectize(text, user, t.l);
     voterMemory.markTold(user, t.c.used || []);
