@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const contactUtils = require('./contact_utils.js');
 
 const DB_PATH = process.env.CONTACTS_DB_PATH || path.join(__dirname, 'contacts_db.json');
 const LEGACY_VOTERS_PATH = path.join(__dirname, 'voters.json');
@@ -89,6 +90,9 @@ class ContactsManager {
         if (filter.ward && filter.ward !== 'all') {
             result = result.filter(c => String(c.ward) === String(filter.ward));
         }
+        if (filter.village && filter.village !== 'all') {
+            result = result.filter(c => String(c.village || '').trim() === String(filter.village).trim());
+        }
         if (filter.search) {
             const q = filter.search.toLowerCase().trim();
             result = result.filter(c => 
@@ -102,6 +106,9 @@ class ContactsManager {
 
     cleanPhone(raw) {
         if (!raw) return '';
+        // Indian mobiles: tolerate +91, 0-prefix, spaces, dashes -> 91XXXXXXXXXX
+        const indian = contactUtils.normalizeIndianPhone(raw);
+        if (indian) return indian;
         let cleaned = String(raw).replace(/[^\d]/g, '');
         if (cleaned.length === 10) cleaned = '91' + cleaned;
         return cleaned;
@@ -222,57 +229,71 @@ class ContactsManager {
         return imported;
     }
 
-    parseCSV(csvText) {
+    /**
+     * Flexible CSV import. Header columns are matched by name (phone/mobile/number, name/naam,
+     * ward, village/gaon, notes). Without a header the phone-like column is used as the phone.
+     * Accepts +91, 0-prefixed, spaced or 10-digit numbers. Invalid numbers are skipped.
+     */
+    parseCSV(csvText, opts = {}) {
         if (!csvText) return [];
-        const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
-        if (lines.length === 0) return [];
-
+        const rows = contactUtils.parseContactCsv(csvText);
         const imported = [];
-        const headerLine = lines[0].toLowerCase();
-        const isHeader = headerLine.includes('name') || headerLine.includes('phone') || headerLine.includes('naam') || headerLine.includes('mobile');
-        const startIdx = isHeader ? 1 : 0;
-
-        for (let i = startIdx; i < lines.length; i++) {
-            const row = this.parseCsvLine(lines[i]);
-            if (row.length === 0) continue;
-
-            let name = '';
-            let phone = '';
-            let ward = null;
-            let notes = '';
-
-            if (row.length === 1) {
-                phone = row[0].replace(/[^\d]/g, '');
-                name = 'ग्रामवासी';
-            } else if (row.length >= 2) {
-                const p1 = row[0].replace(/[^\d]/g, '');
-                const p2 = row[1].replace(/[^\d]/g, '');
-                if (p1.length >= 10) {
-                    phone = p1;
-                    name = row[1];
-                } else {
-                    name = row[0];
-                    phone = p2;
-                }
-                if (row.length >= 3 && !isNaN(parseInt(row[2]))) {
-                    ward = parseInt(row[2]);
-                }
-                if (row.length >= 4) {
-                    notes = row.slice(3).join(' | ');
-                }
-            }
-
-            if (phone && phone.length >= 10) {
-                imported.push(this.add({
-                    name: name || 'ग्रामवासी',
-                    phone: phone,
-                    ward: ward || null,
-                    notes: notes,
-                    tags: ['📊 CSV Import']
-                }));
-            }
+        for (const r of rows) {
+            const phone = contactUtils.normalizeIndianPhone(r.phone);
+            if (!phone) continue;
+            imported.push(this.add({
+                name: r.name || 'ग्रामवासी',
+                phone,
+                ward: r.ward || null,
+                village: r.village || undefined,
+                line: opts.line,
+                notes: r.notes || '',
+                tags: opts.tags || ['📊 CSV Import']
+            }));
         }
         return imported;
+    }
+
+    /** Add many {phone,name,ward,village} rows (manual paste). Returns added contacts. */
+    addMany(rows = [], opts = {}) {
+        const out = [];
+        const prevSave = this.save;
+        this.save = () => {};
+        try {
+            for (const r of rows) {
+                const phone = contactUtils.normalizeIndianPhone(r.phone);
+                if (!phone) continue;
+                const existing = this.contacts.find(c => c.phone === phone);
+                out.push(this.add({
+                    ...(existing || {}),
+                    name: r.name || existing?.name || 'ग्रामवासी',
+                    phone,
+                    ward: r.ward || existing?.ward || null,
+                    village: r.village || existing?.village || undefined,
+                    line: opts.line || existing?.line,
+                    tags: existing?.tags || opts.tags || ['✍️ Manual Entry']
+                }));
+            }
+        } finally {
+            this.save = prevSave;
+        }
+        this.save();
+        return out;
+    }
+
+    findByPhone(phone) {
+        const p = this.cleanPhone(phone);
+        return this.contacts.find(c => c.phone === p) || null;
+    }
+
+    /**
+     * Plain dialer/IVR CSV (name, phone_10, phone_91, ward, village).
+     * @param {object} filter  same filter as getAll (line, ward, village, search)
+     * @param {(phone:string)=>boolean} [isExcluded]  e.g. opted-out check; excluded rows are dropped
+     */
+    generateDialerCSV(filter = {}, isExcluded = null, rows = null) {
+        const list = (rows || this.getAll(filter)).filter(c => !(isExcluded && isExcluded(c.phone)));
+        return contactUtils.buildDialerCsv(list);
     }
 
     parseCsvLine(line) {

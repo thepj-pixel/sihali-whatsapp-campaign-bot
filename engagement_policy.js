@@ -50,13 +50,66 @@ function buildConsentPrompt(name = '') {
     return `राम राम ${greeting}! 🙏 हम बाबा अभय सिंह जनसंपर्क टीम से हैं। आपकी मतदाता पर्ची, वार्ड की जानकारी या गाँव की किसी समस्या में क्या सहायता चाहिए?`;
 }
 
+// Explicit opt-out messages. Matched against the WHOLE message (after trimming punctuation),
+// so ordinary sentences like "ruko main batata hoon" or "pata nahi" are not treated as opt-outs.
+const OPT_OUT_TERMS = Object.freeze([
+    'stop', 'stop karo', 'stop kro', 'unsubscribe', 'band', 'band karo', 'band kro', 'ruko',
+    'mat bhejo', 'message mat karo', 'message mat bhejo', 'msg mat karo', 'msg mat bhejo',
+    'बंद', 'बन्द', 'बंद करो', 'बन्द करो', 'रुको', 'स्टॉप', 'मत भेजो', 'मैसेज मत करो', 'मैसेज मत भेजो', 'संदेश बंद करो', 'मैसेज बंद करो'
+]);
+const OPT_IN_TERMS = Object.freeze(['start', 'unstop', 'shuru', 'shuru karo', 'शुरू', 'शुरू करो']);
+
+function normalizeShortReply(text) {
+    return String(text || '').toLowerCase().replace(/[!।.,?🙏🚩\s]+/g, ' ').trim();
+}
+
+function isOptOutMessage(text) {
+    return OPT_OUT_TERMS.includes(normalizeShortReply(text));
+}
+
+function isOptInMessage(text) {
+    return OPT_IN_TERMS.includes(normalizeShortReply(text));
+}
+
 function parseConsentResponse(text) {
-    const value = String(text || '').toLowerCase().trim();
+    const value = normalizeShortReply(text);
     if (!value) return null;
-    const negative = ['nahi', 'nhi', 'नहीं', 'no', 'stop', 'band karo', 'बंद करो', 'message mat karo', 'मैसेज मत करो'];
-    if (negative.some(term => value === term || value.includes(term))) return 'rejected';
+    if (isOptOutMessage(value)) return 'rejected';
+    // Short refusals must be whole words in a short reply: "no" must not match "know"/"nominee",
+    // and "pata nahi, parchi chahiye" is a question, not a refusal.
+    const words = value.split(' ');
+    const shortNegatives = ['nahi', 'nhi', 'नहीं', 'no', 'nahin'];
+    if (words.length <= 3 && words.some(w => shortNegatives.includes(w)) && !/parchi|पर्ची|voter|वोटर|chahiye|चाहिए/.test(value)) return 'rejected';
+    const phraseNegatives = ['band karo', 'बंद करो', 'message mat karo', 'मैसेज मत करो', 'mat bhejo', 'मत भेजो', 'stop karo'];
+    if (phraseNegatives.some(term => value.includes(term))) return 'rejected';
     // Any meaningful reply to the introductory assistance question starts the requested conversation.
     return value.length >= 2 ? 'accepted' : null;
+}
+
+/** Whether a contact may receive a bulk broadcast. Returns null if allowed, or a skip reason. */
+function broadcastBlockReason(user) {
+    if (!user) return null;
+    if (user.broadcastOptOut === true) return 'opted_out';
+    if (user.consentStatus === 'REJECTED' || user.consented === false) return 'declined_outreach';
+    return null;
+}
+
+/** Record an explicit opt-out (STOP/बंद/रुको): disables automation and all future broadcasts. */
+function applyOptOut(user, now = new Date()) {
+    if (!user) return user;
+    applyConsentDecision(user, 'rejected');
+    user.broadcastOptOut = true;
+    user.broadcastOptOutAt = now.toISOString();
+    return user;
+}
+
+/** Explicit re-enrolment (START/शुरू) — the only way to undo an opt-out. */
+function applyOptIn(user, now = new Date()) {
+    if (!user) return user;
+    applyConsentDecision(user, 'accepted');
+    user.broadcastOptOut = false;
+    user.broadcastOptInAt = now.toISOString();
+    return user;
 }
 
 function markConsentPrompted(user) {
@@ -121,6 +174,13 @@ module.exports = {
     buildSaveContactPrompt,
     buildConsentPrompt,
     parseConsentResponse,
+    OPT_OUT_TERMS,
+    OPT_IN_TERMS,
+    isOptOutMessage,
+    isOptInMessage,
+    broadcastBlockReason,
+    applyOptOut,
+    applyOptIn,
     markConsentPrompted,
     applyConsentDecision,
     canSendConsentReminder,

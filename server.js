@@ -644,6 +644,35 @@ async function startSession(sessionObj) {
                 // Anti-Rogue Protection: Check if AutoPilot is PAUSED for this specific contact
                 const user = userMemory.getUser(senderPhone);
 
+                // Explicit opt-out (STOP / बंद / रुको …) — permanent for automation AND bulk broadcasts.
+                // Checked before the consent flow so a broadcast recipient replying STOP never gets a consent prompt.
+                if (engagementPolicy.isOptOutMessage(body)) {
+                    const firstTime = !user.broadcastOptOut;
+                    engagementPolicy.applyOptOut(user);
+                    userMemory.save();
+                    broadcastEngine.markOptOut(senderPhone, body);
+                    operationsTracker.record('opt_out', 'recorded', { lineId: sessionObj.id });
+                    if (firstTime) {
+                        const ack = 'जी, आपका निर्णय दर्ज कर लिया है। अब आपको कोई चुनावी संदेश नहीं भेजा जाएगा। 🙏 (दोबारा जुड़ने के लिए START लिखें)';
+                        try {
+                            await sendSafeMessage(sock, replyJid, { text: ack });
+                            userMemory.recordMessage(senderPhone, 'bot', ack, 'opt_out_ack', sessionObj.name);
+                        } catch (e) {}
+                    }
+                    logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: '[Opted out of all campaign messages]', status: 'OPTED_OUT' });
+                    continue;
+                }
+                if (user.broadcastOptOut && engagementPolicy.isOptInMessage(body)) {
+                    engagementPolicy.applyOptIn(user);
+                    userMemory.save();
+                    broadcastEngine.removeOptOut(senderPhone);
+                    operationsTracker.record('opt_in', 'recorded', { lineId: sessionObj.id });
+                    const welcomeBack = 'धन्यवाद! 🙏 आप फिर से जुड़ गए हैं। बताइए—मतदाता पर्ची, वार्ड जानकारी या गाँव की कोई समस्या?';
+                    await sendSafeMessage(sock, replyJid, { text: welcomeBack });
+                    userMemory.recordMessage(senderPhone, 'bot', welcomeBack, 'opt_in_ack', sessionObj.name);
+                    continue;
+                }
+
                 // Consent is a real state transition, not just message copy.
                 // New contacts receive the permission prompt before campaign automation starts.
                 const consentDecision = engagementPolicy.parseConsentResponse(body);
@@ -1188,6 +1217,44 @@ function getActiveSocket(preferredId = 'sim_636') {
     const anyConnected = SESSIONS.find(s => s.status === 'CONNECTED' && s.sock);
     if (anyConnected) return { session: anyConnected, sock: anyConnected.sock };
     return null;
+}
+
+
+// ==================== BULK SEND (BROADCAST ENGINE) ====================
+// Anti-ban bulk sender. Consent/opt-out rules come from engagement_policy.js; the engine keeps its
+// own durable opt-out list + queue in broadcast_state.json (gitignored) so pm2 restarts resume safely.
+const { BroadcastEngine } = require('./broadcast_engine.js');
+const contactUtils = require('./contact_utils.js');
+const broadcastEngine = new BroadcastEngine({
+    stateFile: process.env.BROADCAST_STATE_PATH || path.join(__dirname, 'broadcast_state.json'),
+    mediaDir: path.join(__dirname, 'media'),
+    getSessions: () => SESSIONS,
+    isBlocked: (phone) => engagementPolicy.broadcastBlockReason(userMemory.users[phone]),
+    onSent: ({ phone, name, text, line, lineName, media }) => {
+        try {
+            const u = userMemory.getUser(phone, name || '');
+            if (u && !u.name && name) u.name = name;
+            userMemory.recordMessage(phone, 'bot', text, media ? `broadcast_${media.type}` : 'broadcast', lineName);
+            userMemory.save();
+        } catch (e) {}
+        logMessage({ session: lineName, phone, incoming: '[Bulk Send]', reply: text, status: media ? 'MEDIA_SENT' : 'DELIVERED' });
+        operationsTracker.record('broadcast_send', 'sent', { lineId: line, mediaType: media ? media.type : 'text' });
+    }
+});
+broadcastEngine.start(2000);
+
+function isBroadcastOptedOut(phone) {
+    const p = contactUtils.normalizeIndianPhone(phone) || String(phone || '');
+    return broadcastEngine.isOptedOut(p) || !!engagementPolicy.broadcastBlockReason(userMemory.users[p]);
+}
+
+function resolveBroadcastAudience(body = {}) {
+    let contacts = [];
+    const useContacts = body.useContacts === true || body.useContacts === 'true' || body.audience === 'contacts';
+    if (useContacts) {
+        contacts = contactsManager.getAll({ line: body.contactLine, ward: body.contactWard, village: body.contactVillage, search: body.contactSearch });
+    }
+    return { phones: body.phones || '', csvText: body.csvText || '', contacts };
 }
 
 // ==================== REST APIS ====================
@@ -1878,6 +1945,108 @@ app.get('/api/contacts/export-csv', (req, res) => {
     }
 });
 
+// ---------- Bulk Send API (behind PIN middleware) ----------
+function sendEngineResult(res, r) {
+    if (r.ok) return res.json({ success: true, campaign: r.campaign });
+    return res.status(r.status || 400).json({ success: false, error: r.error, code: r.code, preview: r.preview });
+}
+
+app.post('/api/broadcast/preview', (req, res) => {
+    try {
+        res.json({ success: true, preview: broadcastEngine.preview({ ...resolveBroadcastAudience(req.body), message: req.body.message, caps: req.body.caps }) });
+    } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/broadcast/create', (req, res) => {
+    try {
+        const body = req.body || {};
+        const audience = resolveBroadcastAudience(body);
+        // Optionally save pasted / uploaded contacts into the Contacts list
+        let savedContacts = 0;
+        if (body.saveToContacts === true || body.saveToContacts === 'true') {
+            const rows = [...contactUtils.parsePastedContacts(audience.phones), ...(audience.csvText ? contactUtils.parseContactCsv(audience.csvText) : [])];
+            savedContacts = contactsManager.addMany(rows, { tags: ['📣 Bulk Send'] }).length;
+        }
+        const r = broadcastEngine.create({ ...audience, message: body.message, mediaFile: body.mediaFile || null, lines: body.lines, caps: body.caps });
+        operationsTracker.record('broadcast_create', r.ok ? 'ok' : 'rejected', { reason: r.ok ? undefined : r.error, statusCode: r.status });
+        if (r.ok) return res.json({ success: true, campaign: r.campaign, savedContacts });
+        return sendEngineResult(res, r);
+    } catch (e) {
+        console.error('Error in /api/broadcast/create:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get('/api/broadcast/status', (req, res) => {
+    try { res.json({ success: true, ...broadcastEngine.status() }); }
+    catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/broadcast/pause', (req, res) => sendEngineResult(res, broadcastEngine.pause('manual')));
+app.post('/api/broadcast/resume', (req, res) => sendEngineResult(res, broadcastEngine.resume()));
+app.post('/api/broadcast/cancel', (req, res) => sendEngineResult(res, broadcastEngine.cancel()));
+
+app.get('/api/broadcast/media', (req, res) => {
+    res.json({ success: true, media: broadcastEngine.listMedia() });
+});
+
+app.get('/api/broadcast/results.csv', (req, res) => {
+    const csv = broadcastEngine.resultsCsv(req.query.id);
+    if (!csv) return res.status(404).json({ success: false, error: 'No broadcast found' });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="bulk_send_results_${String(req.query.id || 'latest').replace(/[^a-z0-9_]/gi, '')}.csv"`);
+    res.send(csv);
+});
+
+app.get('/api/broadcast/opt-outs', (req, res) => {
+    res.json({ success: true, optOuts: broadcastEngine.state.optOuts });
+});
+
+// Dialer / IVR export: plain CSV with name, phone_10, phone_91, ward, village. Opted-out excluded by default.
+// source=contacts (filters: line, ward, village, search) | source=broadcast (id, status=sent,failed,skipped, reason=not_on_whatsapp,...)
+app.get('/api/export/dialer.csv', (req, res) => {
+    try {
+        const q = req.query || {};
+        const includeOptedOut = q.includeOptedOut === '1' || q.includeOptedOut === 'true';
+        const excluded = includeOptedOut ? null : (phone => isBroadcastOptedOut(phone));
+        let rows;
+        let label = 'contacts';
+        if (q.source === 'broadcast') {
+            const statuses = q.status ? String(q.status).split(',').map(s => s.trim()).filter(Boolean) : null;
+            const reasons = q.reason ? String(q.reason).split(',').map(s => s.trim()).filter(Boolean) : null;
+            const list = broadcastEngine.campaignRecipients(q.id, { statuses, reasons });
+            if (!list) return res.status(404).json({ success: false, error: 'No broadcast found' });
+            rows = list.map(r => {
+                const c = contactsManager.findByPhone(r.phone);
+                return { name: r.name || c?.name || '', phone: r.phone, ward: r.ward || c?.ward || '', village: r.village || c?.village || '' };
+            });
+            label = 'broadcast_' + (statuses ? statuses.join('-') : 'all') + (reasons ? '_' + reasons.join('-') : '');
+        } else {
+            rows = contactsManager.getAll({ line: q.line, ward: q.ward, village: q.village, search: q.search });
+            if (q.ward || q.village) label += '_filtered';
+        }
+        const { csv, count } = contactsManager.generateDialerCSV({}, excluded, rows);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('X-Row-Count', String(count));
+        res.setHeader('Content-Disposition', `attachment; filename="dialer_${label.replace(/[^a-z0-9_-]/gi, '')}.csv"`);
+        res.send(csv);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Manual contact entry / paste (one per line: phone, name, ward, village)
+app.post('/api/contacts/bulk-add', (req, res) => {
+    try {
+        const rows = [...contactUtils.parsePastedContacts(req.body.text || req.body.rows || ''), ...(req.body.csvText ? contactUtils.parseContactCsv(req.body.csvText) : [])];
+        const valid = rows.filter(r => contactUtils.normalizeIndianPhone(r.phone));
+        const added = contactsManager.addMany(valid, { line: req.body.line, tags: ['✍️ Manual Entry'] });
+        res.json({ success: true, added: added.length, invalid: rows.length - valid.length });
+    } catch (e) {
+        res.status(400).json({ success: false, error: e.message });
+    }
+});
+
 // API: Request Pairing Code (for Canada + Baba accounts)
 app.post('/api/request-pairing-code', async (req, res) => {
     try {
@@ -2365,6 +2534,7 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-voters" class="tab-btn" onclick="switchTab('voters', this)">💬 WhatsApp Web Live CRM (<span id="voter-count">0</span>)</button>
                     <button id="tab-btn-contacts" class="tab-btn" onclick="switchTab('contacts', this)">📇 Voter Contacts & VCF/CSV (<span id="contacts-count">0</span>)</button>
                     <button id="tab-btn-media" class="tab-btn" onclick="switchTab('media', this)">📸 Media Bank & Uploader</button>
+                    <button id="tab-btn-bulk" class="tab-btn" type="button" data-tab="bulk">📣 Bulk Send</button>
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -2870,6 +3040,9 @@ app.get('/', (req, res) => {
                             <a href="/api/contacts/export-csv" download="sihali_voter_contacts.csv" style="background: #0284c7; color: white; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
                                 📊 Export to CSV
                             </a>
+                            <a href="/api/export/dialer.csv?source=contacts" download style="background: #7c3aed; color: white; border: none; padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;" title="name, phone_10, phone_91, ward, village — opted-out excluded">
+                                📞 Dialer/IVR CSV
+                            </a>
                         </div>
                     </div>
 
@@ -3086,6 +3259,96 @@ app.get('/', (req, res) => {
                             <div style="font-weight: 700;">3D Campaign Video Reel (MP4)</div>
                             <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">Triggered by: "video", "reel"</div>
                             <a href="/media/campaign_reel.mp4" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 600;">Play Campaign Video Reel →</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Bulk Send Tab (broadcast_engine.js) ===== -->
+                <div id="tab-bulk" class="card tab-content" style="display: none;">
+                    <h3 style="margin-top:0;">📣 Bulk Send (Safe Broadcast)</h3>
+                    <div style="font-size: 12px; color: #64748b; margin-bottom: 14px;">हर लाइन पर 20-60 सेकंड का अंतर, घंटे/दिन की सीमा, रात 9 से सुबह 8 बजे तक बंद, STOP/बंद/रुको लिखने वालों को कभी नहीं भेजा जाता। केवल उन्हीं लोगों को भेजें जिन्होंने संपर्क की अनुमति दी है।</div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin: 0 0 8px 0;">1️⃣ Audience</h4>
+                            <label style="font-size: 12px; font-weight: 700;">Paste numbers (one per line: phone, name, ward, village)</label>
+                            <textarea id="bulk-phones" rows="6" style="width: 100%; box-sizing: border-box; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="9876543210, राम लाल, 5, सिहाली खुर्द&#10;+91 98290 12345"></textarea>
+                            <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                <label style="font-size: 12px; font-weight: 700;">📄 CSV upload:</label>
+                                <input type="file" id="bulk-csv-file" accept=".csv,.txt,text/csv" style="font-size: 12px;">
+                                <span id="bulk-csv-info" style="font-size: 12px; color: #0369a1;"></span>
+                                <button type="button" id="bulk-csv-clear" data-action="csv-clear" style="display:none; font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: white; cursor: pointer;">✕ Remove CSV</button>
+                            </div>
+                            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Columns: phone/mobile/number, name, ward, village (any order, header optional). +91, spaces, 0 and 10-digit numbers are all fine.</div>
+                            <div style="margin-top: 10px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+                                <label style="font-size: 12px; font-weight: 700;"><input type="checkbox" id="bulk-use-contacts"> 📇 Saved contacts also</label>
+                                <span style="font-size: 12px;"> — ward <input id="bulk-contact-ward" style="width: 50px; font-size: 12px;" placeholder="all"> village <input id="bulk-contact-village" style="width: 110px; font-size: 12px;" placeholder="all"></span>
+                            </div>
+                            <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                <label style="font-size: 12px;"><input type="checkbox" id="bulk-save-contacts" checked> Save pasted/CSV numbers to Contacts</label>
+                                <button type="button" data-action="save-contacts" style="font-size: 12px; padding: 5px 10px; border-radius: 6px; border: none; background: #0f766e; color: white; font-weight: 700; cursor: pointer;">💾 Save to Contacts now</button>
+                            </div>
+                        </div>
+
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin: 0 0 8px 0;">2️⃣ Message</h4>
+                            <textarea id="bulk-message" rows="6" style="width: 100%; box-sizing: border-box; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="{राम राम|नमस्ते} {name}! 🙏 ..."></textarea>
+                            <div style="font-size: 11px; color: #64748b;">{name} = recipient name • {राम राम|नमस्ते} = random choice per person, so no two messages are identical.</div>
+                            <div style="margin-top: 8px;">
+                                <label style="font-size: 12px; font-weight: 700;">🖼️ Media (optional):</label>
+                                <select id="bulk-media" style="font-size: 12px; padding: 4px; max-width: 220px;"><option value="">— text only —</option></select>
+                            </div>
+                            <div style="margin-top: 10px; font-size: 12px; font-weight: 700;">Preview:</div>
+                            <div id="bulk-preview" style="white-space: pre-wrap; background: #dcf8c6; border-radius: 8px; padding: 8px; font-size: 13px; min-height: 40px;"></div>
+                            <div id="bulk-preview-counts" style="font-size: 12px; color: #334155; margin-top: 6px;"></div>
+                            <button type="button" data-action="preview" style="margin-top: 6px; font-size: 12px; padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer;">🔍 Check audience & preview</button>
+                        </div>
+
+                        <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
+                            <h4 style="margin: 0 0 8px 0;">3️⃣ Lines & Safety Caps</h4>
+                            <div id="bulk-lines" style="font-size: 13px;">Loading lines…</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; font-size: 12px;">
+                                <label>Per line / hour <input type="number" id="bulk-hourly" value="60" min="1" max="200" style="width: 60px;"></label>
+                                <label>Per line / day <input type="number" id="bulk-daily" value="250" min="1" max="1000" style="width: 60px;"></label>
+                                <label>Min delay (s) <input type="number" id="bulk-min-delay" value="20" min="10" max="600" style="width: 60px;"></label>
+                                <label>Max delay (s) <input type="number" id="bulk-max-delay" value="60" min="10" max="1800" style="width: 60px;"></label>
+                                <label>Quiet from (IST h) <input type="number" id="bulk-quiet-start" value="21" min="0" max="23" style="width: 50px;"></label>
+                                <label>Quiet until (IST h) <input type="number" id="bulk-quiet-end" value="8" min="0" max="23" style="width: 50px;"></label>
+                            </div>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px;">
+                                <button type="button" data-action="start" style="padding: 8px 14px; border-radius: 6px; border: none; background: #16a34a; color: white; font-weight: 800; cursor: pointer;">▶️ Start</button>
+                                <button type="button" data-action="pause" style="padding: 8px 14px; border-radius: 6px; border: none; background: #f59e0b; color: white; font-weight: 800; cursor: pointer;">⏸️ Pause</button>
+                                <button type="button" data-action="resume" style="padding: 8px 14px; border-radius: 6px; border: none; background: #2563eb; color: white; font-weight: 800; cursor: pointer;">⏯️ Resume</button>
+                                <button type="button" data-action="cancel" style="padding: 8px 14px; border-radius: 6px; border: none; background: #dc2626; color: white; font-weight: 800; cursor: pointer;">⏹️ Cancel</button>
+                            </div>
+                            <div id="bulk-action-status" style="margin-top: 8px; font-size: 13px; font-weight: 600;"></div>
+                        </div>
+                    </div>
+
+                    <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-top: 16px;">
+                        <h4 style="margin: 0 0 8px 0;">📊 Live Progress</h4>
+                        <div id="bulk-progress-summary" style="font-size: 14px;">No broadcast yet.</div>
+                        <div style="background: #e2e8f0; border-radius: 6px; height: 12px; margin: 8px 0; overflow: hidden;"><div id="bulk-progress-bar" style="background: #16a34a; height: 12px; width: 0%;"></div></div>
+                        <a id="bulk-results-link" href="/api/broadcast/results.csv" download style="font-size: 12px; font-weight: 700; color: #0284c7;">⬇️ Download results CSV</a>
+                        <div class="table-responsive" style="max-height: 280px; overflow-y: auto; margin-top: 8px;">
+                            <table class="table"><thead><tr><th>Phone</th><th>Name</th><th>Status</th><th>Reason</th><th>Line</th><th>Time</th></tr></thead><tbody id="bulk-recent-body"></tbody></table>
+                        </div>
+                    </div>
+
+                    <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-top: 16px;">
+                        <h4 style="margin: 0 0 8px 0;">📞 Export for bulk calling / IVR (CSV: name, phone_10, phone_91, ward, village)</h4>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 12px;">
+                            <label>Source <select id="export-source" style="font-size: 12px;"><option value="contacts">All saved contacts</option><option value="broadcast">Latest broadcast results</option></select></label>
+                            <span id="export-contact-filters">ward <input id="export-ward" style="width: 50px;" placeholder="all"> village <input id="export-village" style="width: 110px;" placeholder="all"></span>
+                            <span id="export-broadcast-filters" style="display: none;">
+                                <label><input type="checkbox" class="export-status" value="sent" checked> sent</label>
+                                <label><input type="checkbox" class="export-status" value="failed"> failed</label>
+                                <label><input type="checkbox" class="export-status" value="skipped"> skipped</label>
+                                <label><input type="checkbox" class="export-status" value="pending"> pending</label>
+                                reason <select id="export-reason" style="font-size: 12px;"><option value="">any</option><option value="not_on_whatsapp">not on WhatsApp</option><option value="cancelled">cancelled</option></select>
+                            </span>
+                            <label><input type="checkbox" id="export-include-optout"> include opted-out (not recommended)</label>
+                            <button type="button" data-action="export" style="font-size: 12px; padding: 6px 12px; border-radius: 6px; border: none; background: #0284c7; color: white; font-weight: 700; cursor: pointer;">⬇️ Export CSV</button>
                         </div>
                     </div>
                 </div>
@@ -4409,6 +4672,189 @@ app.get('/', (req, res) => {
                 // Initial contacts load
                 setTimeout(loadContacts, 1200);
 
+            </script>
+            <script>
+            (function () {
+                var bulkCsvText = '';
+                var bulkMediaLoaded = false;
+                var bulkPreviewTimer = null;
+                var NL = String.fromCharCode(10);
+
+                function el(id) { return document.getElementById(id); }
+                function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                function setStatus(msg, ok) { var s = el('bulk-action-status'); if (!s) return; s.style.color = ok ? '#16a34a' : '#dc2626'; s.textContent = msg; }
+                function fmtEta(sec) {
+                    if (sec === null || sec === undefined) return 'waiting for a connected line';
+                    if (!sec) return '—';
+                    var h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+                    return (h ? h + 'h ' : '') + m + 'm';
+                }
+                function selectedLines() {
+                    return Array.prototype.slice.call(document.querySelectorAll('.bulk-line-cb:checked')).map(function (c) { return c.value; });
+                }
+                function payload() {
+                    return {
+                        phones: el('bulk-phones').value,
+                        csvText: bulkCsvText,
+                        useContacts: el('bulk-use-contacts').checked,
+                        contactWard: el('bulk-contact-ward').value.trim() || undefined,
+                        contactVillage: el('bulk-contact-village').value.trim() || undefined,
+                        saveToContacts: el('bulk-save-contacts').checked,
+                        message: el('bulk-message').value,
+                        mediaFile: el('bulk-media').value || null,
+                        lines: selectedLines(),
+                        caps: {
+                            hourlyCap: el('bulk-hourly').value, dailyCap: el('bulk-daily').value,
+                            minDelaySec: el('bulk-min-delay').value, maxDelaySec: el('bulk-max-delay').value,
+                            quietStartHour: el('bulk-quiet-start').value, quietEndHour: el('bulk-quiet-end').value
+                        }
+                    };
+                }
+                function postJson(url, body) {
+                    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+                        .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); });
+                }
+
+                function renderLines(lines, campaign) {
+                    var box = el('bulk-lines');
+                    if (!box) return;
+                    var prev = selectedLines();
+                    var chosen = campaign && (campaign.status === 'running' || campaign.status === 'paused') ? campaign.lines : null;
+                    box.innerHTML = lines.map(function (l) {
+                        var checked = chosen ? chosen.indexOf(l.id) !== -1 : (prev.length ? prev.indexOf(l.id) !== -1 : l.connected);
+                        var badge = l.connected ? (l.paused ? '⏸️ ' + esc(l.pausedReason || 'paused') : '🟢 connected') : '🔴 ' + esc(l.status);
+                        return '<label style="display:block; margin-bottom:4px;"><input type="checkbox" class="bulk-line-cb" value="' + esc(l.id) + '"' + (checked ? ' checked' : '') + '> <b>' + esc(l.name) + '</b> — ' + badge +
+                            ' <span style="color:#64748b; font-size:11px;">(' + l.sentLastHour + '/h, ' + l.sentToday + ' today' + (l.nextSendInSec ? ', next in ' + l.nextSendInSec + 's' : '') + ')</span></label>';
+                    }).join('') || 'No lines configured';
+                }
+
+                function renderStatus(d) {
+                    renderLines(d.lines || [], d.campaign);
+                    var sum = el('bulk-progress-summary');
+                    var c = d.campaign;
+                    if (!c) { sum.textContent = 'No broadcast yet. Connected lines: ' + d.connectedLines + ' • Opted-out numbers: ' + d.optOutCount; el('bulk-progress-bar').style.width = '0%'; el('bulk-recent-body').innerHTML = ''; return; }
+                    var k = c.counts;
+                    var done = k.total ? Math.round(((k.sent + k.failed + k.skipped) / k.total) * 100) : 0;
+                    var state = c.status + (c.pauseReason ? ' (' + c.pauseReason + ')' : '') + (c.waitingReason ? ' — waiting: ' + c.waitingReason.replace('_', ' ') : '');
+                    sum.innerHTML = '<b>' + esc(state) + '</b> • ✅ sent ' + k.sent + ' • ❌ failed ' + k.failed + ' • ⏭️ skipped ' + k.skipped + ' • ⏳ remaining ' + k.remaining + ' / ' + k.total +
+                        ' • ETA ' + esc(fmtEta(c.etaSeconds)) + ' • opted-out total ' + d.optOutCount;
+                    el('bulk-progress-bar').style.width = done + '%';
+                    el('bulk-results-link').href = '/api/broadcast/results.csv?id=' + encodeURIComponent(c.id);
+                    el('bulk-recent-body').innerHTML = (c.recent || []).map(function (r) {
+                        var color = r.status === 'sent' ? '#16a34a' : (r.status === 'failed' ? '#dc2626' : '#64748b');
+                        return '<tr><td>' + esc(r.phone) + '</td><td>' + esc(r.name) + '</td><td style="color:' + color + '; font-weight:700;">' + esc(r.status) + '</td><td>' + esc(r.reason) + '</td><td>' + esc(r.line) + '</td><td>' + esc(r.at ? new Date(r.at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) : '') + '</td></tr>';
+                    }).join('');
+                }
+
+                function loadBulkStatus() {
+                    return fetch('/api/broadcast/status').then(function (r) { return r.json(); }).then(renderStatus).catch(function (e) { setStatus('Status error: ' + e.message, false); });
+                }
+
+                function loadBulkMedia() {
+                    if (bulkMediaLoaded) return;
+                    fetch('/api/broadcast/media').then(function (r) { return r.json(); }).then(function (d) {
+                        var sel = el('bulk-media');
+                        (d.media || []).forEach(function (m) {
+                            var o = document.createElement('option');
+                            o.value = m.file;
+                            o.textContent = (m.type === 'video' ? '🎬 ' : '🖼️ ') + m.file + ' (' + Math.round(m.size / 1024) + ' KB)';
+                            sel.appendChild(o);
+                        });
+                        bulkMediaLoaded = true;
+                    }).catch(function () {});
+                }
+
+                function runPreview() {
+                    postJson('/api/broadcast/preview', payload()).then(function (d) {
+                        if (!d.success) { el('bulk-preview-counts').textContent = d.error || 'Preview failed'; return; }
+                        var p = d.preview;
+                        el('bulk-preview').textContent = p.samples && p.samples.length ? p.samples.map(function (s) { return s.text; }).join(NL + '— — —' + NL) : '';
+                        el('bulk-preview-counts').textContent = '✅ ' + p.valid + ' ready • ❌ ' + p.invalid + ' invalid • 🔁 ' + p.duplicates + ' duplicates removed • 🚫 ' + p.optedOut + ' opted-out/declined' + (p.capErrors && p.capErrors.length ? ' • ⚠️ ' + p.capErrors.join('; ') : '');
+                    }).catch(function (e) { el('bulk-preview-counts').textContent = 'Preview error: ' + e.message; });
+                }
+                function schedulePreview() { clearTimeout(bulkPreviewTimer); bulkPreviewTimer = setTimeout(runPreview, 600); }
+
+                function doAction(action) {
+                    if (action === 'preview') return runPreview();
+                    if (action === 'csv-clear') { bulkCsvText = ''; el('bulk-csv-file').value = ''; el('bulk-csv-info').textContent = ''; el('bulk-csv-clear').style.display = 'none'; return schedulePreview(); }
+                    if (action === 'save-contacts') {
+                        return postJson('/api/contacts/bulk-add', { text: el('bulk-phones').value, csvText: bulkCsvText }).then(function (d) {
+                            setStatus(d.success ? '💾 ' + d.added + ' contacts saved (' + d.invalid + ' invalid skipped)' : (d.error || 'Save failed'), !!d.success);
+                            if (d.success && typeof loadContacts === 'function') loadContacts();
+                        });
+                    }
+                    if (action === 'export') {
+                        var src = el('export-source').value;
+                        var q = ['source=' + encodeURIComponent(src)];
+                        if (src === 'contacts') {
+                            if (el('export-ward').value.trim()) q.push('ward=' + encodeURIComponent(el('export-ward').value.trim()));
+                            if (el('export-village').value.trim()) q.push('village=' + encodeURIComponent(el('export-village').value.trim()));
+                        } else {
+                            var st = Array.prototype.slice.call(document.querySelectorAll('.export-status:checked')).map(function (c) { return c.value; });
+                            if (st.length) q.push('status=' + encodeURIComponent(st.join(',')));
+                            if (el('export-reason').value) q.push('reason=' + encodeURIComponent(el('export-reason').value));
+                        }
+                        if (el('export-include-optout').checked) q.push('includeOptedOut=1');
+                        window.location.href = '/api/export/dialer.csv?' + q.join('&');
+                        return;
+                    }
+                    if (action === 'start') {
+                        var body = payload();
+                        if (!body.lines.length) return setStatus('Select at least one line', false);
+                        if (!window.confirm('Start bulk send? Messages will go out slowly with random gaps.')) return;
+                        return postJson('/api/broadcast/create', body).then(function (d) {
+                            setStatus(d.success ? '▶️ Started: ' + d.campaign.counts.pending + ' queued' + (d.savedContacts ? ' • ' + d.savedContacts + ' saved to contacts' : '') : '❌ ' + (d.error || 'Failed'), !!d.success);
+                            loadBulkStatus();
+                        });
+                    }
+                    if (action === 'pause' || action === 'resume' || action === 'cancel') {
+                        if (action === 'cancel' && !window.confirm('Cancel this broadcast? Remaining numbers will not be sent.')) return;
+                        return postJson('/api/broadcast/' + action, {}).then(function (d) {
+                            setStatus(d.success ? 'OK: ' + d.campaign.status : '❌ ' + (d.error || 'Failed'), !!d.success);
+                            loadBulkStatus();
+                        });
+                    }
+                }
+
+                function initBulkTab() {
+                    var btn = el('tab-btn-bulk');
+                    if (btn) btn.addEventListener('click', function () {
+                        switchTab(this.dataset.tab, this);
+                        loadBulkMedia();
+                        loadBulkStatus();
+                    });
+                    var tab = el('tab-bulk');
+                    if (!tab) return;
+                    tab.addEventListener('click', function (e) {
+                        var t = e.target.closest('[data-action]');
+                        if (t && tab.contains(t)) { e.preventDefault(); doAction(t.dataset.action); }
+                    });
+                    el('bulk-message').addEventListener('input', schedulePreview);
+                    el('bulk-phones').addEventListener('input', schedulePreview);
+                    el('bulk-use-contacts').addEventListener('change', schedulePreview);
+                    el('export-source').addEventListener('change', function () {
+                        var b = this.value === 'broadcast';
+                        el('export-broadcast-filters').style.display = b ? 'inline' : 'none';
+                        el('export-contact-filters').style.display = b ? 'none' : 'inline';
+                    });
+                    el('bulk-csv-file').addEventListener('change', function () {
+                        var f = this.files && this.files[0];
+                        if (!f) return;
+                        var reader = new FileReader();
+                        reader.onload = function (ev) {
+                            bulkCsvText = String(ev.target.result || '');
+                            var rows = bulkCsvText.split(NL).filter(function (l) { return l.trim(); }).length;
+                            el('bulk-csv-info').textContent = '✅ ' + f.name + ' (' + rows + ' lines)';
+                            el('bulk-csv-clear').style.display = 'inline-block';
+                            schedulePreview();
+                        };
+                        reader.readAsText(f);
+                    });
+                    setInterval(function () { if (tab.style.display !== 'none') loadBulkStatus(); }, 5000);
+                }
+
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initBulkTab); else initBulkTab();
+            })();
             </script>
         </body>
         </html>

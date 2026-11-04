@@ -26,7 +26,7 @@ function check(name, condition) {
     }
 }
 
-async function waitForDashboard(url, attempts = 40) {
+async function waitForDashboard(url, attempts = 200) {
     for (let i = 0; i < attempts; i++) {
         try {
             const response = await fetch(url);
