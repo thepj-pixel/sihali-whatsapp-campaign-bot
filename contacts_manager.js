@@ -1,13 +1,59 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'contacts_db.json');
-const VOTERS_PATH = path.join(__dirname, 'voters.json');
+const DB_PATH = process.env.CONTACTS_DB_PATH || path.join(__dirname, 'contacts_db.json');
+const VOTERS_PATH = process.env.VOTERS_PATH || path.join(__dirname, 'voters.json');
 
 class ContactsManager {
     constructor() {
         this.contacts = [];
+        this.voters = [];
+        this.loadVoters();
         this.load();
+    }
+
+    loadVoters() {
+        try {
+            this.voters = fs.existsSync(VOTERS_PATH) ? JSON.parse(fs.readFileSync(VOTERS_PATH, 'utf8')) : [];
+        } catch (e) {
+            console.error('[ContactsManager] Error loading voter list:', e.message);
+            this.voters = [];
+        }
+    }
+
+    normalizeName(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\b(shri|smt|mr|mrs|ji|kumar|kumari)\b/g, ' ')
+            .replace(/[^a-z0-9\u0900-\u097f]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    matchVoter(contact = {}) {
+        const targetName = this.normalizeName(contact.name);
+        if (!targetName || targetName === 'contact') return null;
+        let matches = this.voters.filter(v => {
+            const names = [v.name, v.name_hi, v.name_en, v.n, v.ne].map(value => this.normalizeName(value));
+            return names.includes(targetName);
+        });
+        const requestedWard = Number(contact.ward);
+        if (requestedWard > 0) {
+            const sameWard = matches.filter(v => Number(v.ward || v.w) === requestedWard);
+            if (sameWard.length) matches = sameWard;
+        }
+        if (matches.length !== 1) return null;
+        const voter = matches[0];
+        return {
+            matched: true,
+            voterId: voter.epic || voter.e || `W${voter.ward || voter.w}-${voter.sr_no || voter.s}`,
+            epic: voter.epic || voter.e || '',
+            serial: voter.sr_no || voter.s || '',
+            ward: voter.ward || voter.w || '',
+            booth: voter.booth || voter.b || '',
+            voterName: voter.name || voter.name_hi || '',
+            confidence: 'exact_name'
+        };
     }
 
     load() {
@@ -68,12 +114,13 @@ class ContactsManager {
             id: contact.id || `c_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
             name: contact.name || 'ग्रामवासी',
             phone: cleanedPhone,
-            ward: parseInt(contact.ward) || 1,
+            ward: parseInt(contact.ward) || null,
             village: contact.village || 'सिहाली खुर्द',
             line: contact.line || 'sim_636',
             notes: contact.notes || '',
             tags: contact.tags || ['नया संपर्क'],
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            voterMatch: contact.voterMatch || this.matchVoter(contact)
         };
 
         if (existingIdx !== -1) {
@@ -100,8 +147,7 @@ class ContactsManager {
         if (!fs.existsSync(VOTERS_PATH)) {
             throw new Error('Master voter list not found');
         }
-        const voters = JSON.parse(fs.readFileSync(VOTERS_PATH, 'utf8'));
-        let target = voters;
+        let target = this.voters;
         if (ward !== 'all') {
             target = target.filter(v => String(v.ward || v.w) === String(ward));
         }
@@ -117,16 +163,27 @@ class ContactsManager {
             const house = v.house_no || v.h || '';
             const relName = v.rel_name_hi || v.rel_name || '';
 
-            const pseudoPhone = v.phone || `9198${String(vWard).padStart(2,'0')}${String(v.sr_no||v.s).padStart(4,'0')}`;
+            const realPhone = this.cleanPhone(v.phone || v.mobile || '');
+            if (!realPhone || realPhone.length < 10) continue;
             
             this.add({
                 name: name,
-                phone: pseudoPhone,
+                phone: realPhone,
                 ward: vWard,
                 village: v.village || 'सिहाली खुर्द',
                 line: line,
                 notes: `EPIC: ${epic} | मकान: ${house} | संबंधी: ${relName}`,
-                tags: [`वार्ड ${vWard}`, '📋 वोटर लिस्ट']
+                tags: [`वार्ड ${vWard}`, '📋 वोटर लिस्ट'],
+                voterMatch: {
+                    matched: true,
+                    voterId: epic || `W${vWard}-${v.sr_no || v.s}`,
+                    epic,
+                    serial: v.sr_no || v.s || '',
+                    ward: vWard,
+                    booth: v.booth || v.b || '',
+                    voterName: name,
+                    confidence: 'voter_database'
+                }
             });
             addedCount++;
         }
@@ -174,12 +231,12 @@ class ContactsManager {
         const startIdx = isHeader ? 1 : 0;
 
         for (let i = startIdx; i < lines.length; i++) {
-            const row = lines[i].split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+            const row = this.parseCsvLine(lines[i]);
             if (row.length === 0) continue;
 
             let name = '';
             let phone = '';
-            let ward = 1;
+            let ward = null;
             let notes = '';
 
             if (row.length === 1) {
@@ -207,7 +264,7 @@ class ContactsManager {
                 imported.push(this.add({
                     name: name || 'ग्रामवासी',
                     phone: phone,
-                    ward: ward || 1,
+                    ward: ward || null,
                     notes: notes,
                     tags: ['📊 CSV Import']
                 }));
@@ -216,13 +273,35 @@ class ContactsManager {
         return imported;
     }
 
+    parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let quoted = false;
+        for (let i = 0; i < String(line || '').length; i++) {
+            const char = line[i];
+            if (char === '"' && quoted && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else if (char === '"') {
+                quoted = !quoted;
+            } else if (char === ',' && !quoted) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+
     generateVCF(filter = {}) {
         const list = this.getAll(filter);
         let vcf = '';
 
         for (const c of list) {
             const formattedPhone = c.phone.startsWith('+') ? c.phone : '+' + c.phone;
-            const displayName = `[SK26-W${c.ward}] ${c.name}`;
+            const displayName = `[SK26-W${c.ward || 'NA'}] ${c.name}`;
             vcf += `BEGIN:VCARD\r\n`;
             vcf += `VERSION:3.0\r\n`;
             vcf += `FN:${displayName}\r\n`;
@@ -244,7 +323,7 @@ class ContactsManager {
             const safeName = `"${(c.name || '').replace(/"/g, '""')}"`;
             const safeNotes = `"${(c.notes || '').replace(/"/g, '""')}"`;
             const safeTags = `"${(c.tags || []).join('; ')}"`;
-            csv += `${safeName},+${c.phone},${c.ward || 1},${c.village || 'सिहाली खुर्द'},${c.line || 'sim_636'},${safeNotes},${safeTags}\n`;
+            csv += `${safeName},+${c.phone},${c.ward || ''},${c.village || 'सिहाली खुर्द'},${c.line || 'sim_636'},${safeNotes},${safeTags}\n`;
         }
 
         return csv;

@@ -51,7 +51,7 @@ async function run50MessageBrutalSimulation() {
         { id: 24, text: 'hospital me kya kaam hua', expectNotLoop: true, expectKeyword: ['up-swasthya', 'उप-स्वास्थ्य'] },
         { id: 25, text: 'sports aur gym ka kya hua', expectNotLoop: true, expectKeyword: ['open gym', 'ओपन जिम'] },
         { id: 26, text: 'pani ki samasya hai drinking water', expectNotLoop: true, expectKeyword: ['JJM', 'meetha'] },
-        { id: 27, text: 'sadak aur cc road ka kya hua', expectNotLoop: true, expectKeyword: ['CC', 'सी.सी.'] },
+        { id: 27, text: 'sadak aur cc road ka kya hua', expectNotLoop: true, expectKeyword: ['verification', 'सत्यापन'] },
         { id: 28, text: 'school aur library ka batao', expectNotLoop: true, expectKeyword: ['library', 'लाइब्रेरी'] },
         { id: 29, text: 'mokshdham aur johad ka kya hua', expectNotLoop: true, expectKeyword: ['Mokshdham', 'मोक्षधाम'] },
         { id: 30, text: 'aage kya sankalp hai agle 5 saal ka', expectNotLoop: true, expectKeyword: ['sankalp', 'संकल्प'] },

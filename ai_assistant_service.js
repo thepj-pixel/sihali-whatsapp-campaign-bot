@@ -14,6 +14,20 @@ try {
     console.error('Error loading campaign_knowledge_base.json:', e);
 }
 
+function removeHeldRoadDetails(value) {
+    if (Array.isArray(value)) {
+        return value
+            .filter(item => !(typeof item === 'string' && /interlocking|इंटरलॉकिंग|सी\.सी\.|\bCC\b/i.test(item)))
+            .map(removeHeldRoadDetails);
+    }
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, removeHeldRoadDetails(item)]));
+    }
+    return value;
+}
+
+const KB_FOR_PROMPT = removeHeldRoadDetails(KB);
+
 // Config file with keys for NVIDIA, Groq, and Gemini
 const configPath = path.join(__dirname, 'api_config.json');
 let CONFIG = {
@@ -79,14 +93,14 @@ const SYSTEM_PROMPT = `
 🎯 ⚠️ सख्त मनाही — कामों की संख्या/गिनती (NO Work Counts):
 - किसी भी गाँव में कुल कामों की गिनती या संख्या (जैसे 44 काम, 28 काम या 15 काम) कभी भी मत बोलना! 
 - गिनती बोलने से लोग आपस में तुलना करने लगते हैं कि 'हमारे गाँव में कम क्यों, दूसरे में ज़्यादा क्यों'।
-- हमेशा कहें: "सिहाली खुर्द, सिहाली कलां और हाड़ाहेड़ी तीनों गाँव बाबा अभय सिंह के लिए बराबर हैं। तीनों में हर मुख्य रास्ते पर पक्की सड़कें, इंटरलॉकिंग, घर-घर मीठा पानी और स्कूल-श्मशान विकास का काम पूरी निष्ठा से हुआ है।"
+- हमेशा कहें: "सिहाली खुर्द, सिहाली कलां और हाड़ाहेड़ी तीनों गाँव बाबा अभय सिंह के लिए बराबर हैं।" किसी रोके गए/असत्यापित सड़क-विवरण को न गिनाएं।
 
 🎯 विरोधी, अपशब्द व विपक्षी 'विकास पुरुषों' को करारा जवाब:
 - यदि कोई गाली दे या कहे 'कोई काम नहीं हुआ' या किसी विपक्षी नेता (जैसे 'राजेश का विकास पुरुष' या अन्य) की तारीफ करके बाबा अभय सिंह पर कीचड़ उछाले:
   बिल्कुल गुस्सा न करें। तीखे सच और आत्मीयता से आईना दिखाएं:
   "अरे भैया, जो आज चुनाव आते ही खुद को नया 'विकास पुरुष' बताकर बड़ी-बड़ी बातें कर रहे हैं, ज़रा उनसे पूछना कि पिछले 5 साल जब रास्तों में कीचड़ और गलियों में जलभराव था, तब वो किस बिल में सो रहे थे? चुनाव आते ही जो लोग दारू की बोतलें और 500 के नोट बांटकर आपको खरीदना चाहते हैं, वो 5 दिन का नशा और 5 साल का रोना देकर चले जाएंगे! बाबा अभय सिंह 40 साल से बिना किसी लोभ या स्वार्थ के आधी रात को भी सुख-दुख में खूंटा गाड़ कर साथ खड़े मिले हैं।"
 - सीधा समाधान (बाबा अभय सिंह का प्राथमिकता रजिस्टर):
-  "भैया, आपकी नाराजगी बिल्कुल समझ सकती हूँ। जहाँ काम अटका हो वहाँ गुस्सा आना स्वाभाविक है। पर जो काम प्रार्थना पत्र में था—जैसे मुख्य सीसी सड़कें, नाली, इंटरलॉकिंग और JJM मीठा पानी—बाबा अभय सिंह ने सब चीजों का पूरा ध्यान रखा है। और अगर फिर भी आपके मोहल्ले में कोई काम बाकी रह गया है, तो बस गली का नाम बता दो, ये मैं सीधे बाबा अभय सिंह के रजिस्टर में नोट करवा कर प्राथमिकता पर रखवा दूंगी।"
+  "भैया, आपकी नाराजगी समझ सकती हूँ। सही जगह और वार्ड बता दें; मैं आपकी बात प्राथमिकता रजिस्टर में दर्ज कर दूँगी। जिस काम का सत्यापन बाकी है उस पर दावा नहीं करूँगी।"
 
 🎯 ज़मीनी माहौल व बातचीत का प्राकृतिक प्रवाह (Natural Panchayat Flow — No Robot Loops):
 - हर संदेश के अंत में एक ही सवाल बार-बार दोहराने की सख्त मनाही है! बातचीत बिल्कुल स्वाभाविक और ताज़ी लगे।
@@ -103,12 +117,12 @@ const SYSTEM_PROMPT = `
 - कभी भी 'स्पेलिंग अलग होगी' या 'हाथ से चेक करवाती हूँ' जैसे बहाने नहीं बनाना। अगर नाम मिला है तो सीधे पर्ची प्रस्तुत करें।
 5. मुख्य विकास कार्य (Locked Facts):
    - JJM के तहत घर-घर शुद्ध मीठा पेयजल और पानी की नई टंकियां।
-   - मुख्य रास्तों पर पक्की सी.सी. सड़कें व इंटरलॉकिंग टाइल्स (जैसे सीताराम मंदिर से शिव मंदिर, भजनलाल से लालसिंह, गौरव पथ से किशनलाल)।
+   - सड़क-टाइल/सीसी-लेन का विस्तृत विवरण अभी सत्यापन पर है; कोई संख्या, सूची या दावा न दें।
    - पूज्य बाबा कुन्दनदास आश्रम तक पक्की डामर सड़क व जोहड़ों का सौंदर्यीकरण।
    (⚠️ किसी भी काम का रुपया या बजट कभी नहीं बताना)।
 
 📌 ग्राम पंचायत प्रमाणित ज्ञानकोश (Knowledge Base):
-${JSON.stringify(KB, null, 2)}
+${JSON.stringify(KB_FOR_PROMPT, null, 2)}
 `;
 
 // Fast Local Village Answer Engine (<0.001s, 100% Reliable Offline Fallback)
@@ -293,26 +307,32 @@ function getFastLocalAnswerCore(query, phone = null) {
         );
     }
 
-    // F. Roads & Infrastructure (CC Roads / Interlocking / Asphalt)
+    // F. Roads & Infrastructure (held details are never claimed)
     if (!q.includes('kichad') && !q.includes('gaddha') && !q.includes('samasya') && !q.includes('shikayat') && (q.includes('road') || q.includes('sadak') || q.includes('cc road') || q.includes('damar') || q.includes('interlocking') || q.includes('सड़क') || q.includes('डामर'))) {
+        const heldDetailRequested = q.includes('cc road') || q.includes('interlocking') || q.includes('सी.सी') || q.includes('इंटरलॉकिंग');
+        if (heldDetailRequested) {
+            return isHinglish
+                ? `${honorific}, internal lane/road-tile details abhi verification me hain. Main bina pakki jaanch ke koi list ya count nahi bataunga.`
+                : `${honorific}, अंदरूनी गली/सड़क-टाइल का विवरण अभी सत्यापन में है। पक्की जाँच के बिना कोई सूची या संख्या नहीं बताऊँगा।`;
+        }
         if (isHinglish) {
             return (
                 `Ram Ram ${honorific}! 🛣️\n` +
                 `Sadak va raaston ke mukhya vikas karya:\n` +
-                `• Sihali Kalan se Hadahedi mukhya damar road va ashram marg ka chaudikaran va punarnirman!\n` +
-                `• Teeno gaon ki aantarik galiyon me 45+ pakki CC sadakein va interlocking pakki naliyan!\n` +
-                `• Aage Sihali Khurd-Hadahedi link road ka chaudikaran sankalp hai. 🚩`
+                `• Sihali Kalan-Hadahedi main road aur Baba Kundandas Ashram road ka pakka punarnirman hua.\n` +
+                `• Baniya Wala Kudi se Baba Mathuradas Mandir tak pakki damar road bani.\n` +
+                `• Aage Sihali Khurd-Hadahedi main link road ka sankalp hai. 🚩`
             );
         }
         return (
             `राम राम ${honorific}! 🛣️\n` +
             `सड़क व रास्तों के मुख्य विकास कार्य:
 ` +
-            `• सिहाली कलां से हाड़ाहेड़ी मुख्य संपर्क डामर सड़क व आश्रम मार्ग का चौड़ीकरण व पुनः निर्माण!
+            `• सिहाली कलां-हाड़ाहेड़ी मुख्य सड़क और बाबा कुन्दनदास आश्रम मार्ग का पक्का पुनर्निर्माण हुआ।
 ` +
-            `• तीनों गाँवों की आंतरिक गलियों में 45+ पक्की सी.सी. सड़कें व इंटरलॉकिंग मय पक्की नालियां!
+            `• बनिया वाला कूड़ी से बाबा मथुरादास मंदिर तक पक्की डामर सड़क बनी।
 ` +
-            `• आगे सिहाली खुर्द-हाड़ाहेड़ी लिंक रोड का उच्च-गुणवत्ता चौड़ीकरण संकल्प है। 🚩`
+            `• आगे सिहाली खुर्द-हाड़ाहेड़ी मुख्य लिंक सड़क का संकल्प है। 🚩`
         );
     }
 
@@ -322,7 +342,7 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 🕊️\n` +
                 `Mokshdham va paryavaran sanrakshan ke kaam:\n` +
-                `• Mokshdham ka mitti bharat, samtlikaran, interlocking va 2 naye borewell!\n` +
+                `• Mokshdham ka mitti bharat, samtlikaran, 2 naye borewell aur paani ki tanki!\n` +
                 `• Paramparik johadon ki gehari khudai va ped-paudhe lagane ka kaam. 🌳🚩`
             );
         }
@@ -330,7 +350,7 @@ function getFastLocalAnswerCore(query, phone = null) {
             `राम राम ${honorific}! 🕊️\n` +
             `मोक्षधाम व पर्यावरण संरक्षण के कार्य:
 ` +
-            `• मोक्षधाम का संपूर्ण मिट्टी भरत, समतलीकरण, इंटरलॉकिंग मय पक्की नाली व 2 नए बोरवेल अधिष्ठापन!
+            `• मोक्षधाम का मिट्टी भरत, समतलीकरण, 2 नए बोरवेल और पानी की टंकी की व्यवस्था!
 ` +
             `• पारंपरिक जोहड़ों की गहरी खुदाई व सघन छायादार वृक्षारोपण कार्य। 🌳🚩`
         );
@@ -344,7 +364,7 @@ function getFastLocalAnswerCore(query, phone = null) {
                 `Baba Abhay Singh dwara karwaye gaye pramanit mukhya kaam:\n` +
                 `• Up-swasthya kendra hetu swayam niji zameen daan va Sihali Kalan me pashu aspatal nirman\n` +
                 `• JJM ghar-ghar meetha peyejal va naye borewell\n` +
-                `• 45+ pakki CC sadakein, ashram damar road va 1000+ ft underground sewerage line\n` +
+                `• Pakki damar roads aur satyapit underground drainage lines\n` +
                 `• Modern digital library va open gym khel maidan!\n\n` +
                 `Agar kisi specific kaam ke bare me janna ho to batayein ${honorific}! 😊🚩`
             );
@@ -358,7 +378,7 @@ function getFastLocalAnswerCore(query, phone = null) {
 ` +
             `• JJM घर-घर मीठा पेयजल व नए बोरवेल
 ` +
-            `• 45+ पक्की सी.सी. सड़कें, आश्रम डामर सड़क व 1000+ फुट भूमिगत सीवरेज लाइन
+            `• पक्की डामर सड़कें और सत्यापित भूमिगत जलनिकासी लाइनें
 ` +
             `• अत्याधुनिक डिजिटल लाइब्रेरी व ओपन जिम युक्त खेल मैदान!
 
@@ -465,7 +485,7 @@ function getFastLocalAnswerCore(query, phone = null) {
                 `Baba Abhay Singh ko support karne ke 3 sabse bade reason hain:\n` +
                 `1. Nishwarth Seva: Niji zameen daan dekar aspatal banwaya, kabhi rajniti ko dhandha nahi banaya!\n` +
                 `2. 40 saal ka bharosa: 24 ghante har sukh-dukh me khunta gaad kar sath khade rahe hain.\n` +
-                `3. Pramanit Vikas: JJM meetha paani, 45+ pakki CC sadakein aur digital library!\n\n` +
+                `3. Pramanit Vikas: JJM paani, modular library, health-centre land donation aur sports ground!\n\n` +
                 `Saaf niyat, saccha irada — baki aap khud samajhdar hain ${honorific}, vikas dekhkar hi aashirwad dijiyega! 🚩`
             );
         }
@@ -478,7 +498,7 @@ function getFastLocalAnswerCore(query, phone = null) {
 ` +
             `2. 40 साल का भरोसा: 24 घंटे हर सुख-दुख में खूंटा गाड़ कर गाँव के साथ खड़े रहे हैं।
 ` +
-            `3. प्रमाणित विकास: JJM मीठा पानी, 45+ पक्की CC सड़कें व अत्याधुनिक डिजिटल लाइब्रेरी!
+            `3. प्रमाणित विकास: JJM पेयजल, मॉड्यूलर लाइब्रेरी, स्वास्थ्य केंद्र भूमिदान और खेल मैदान!
 
 ` +
             `साफ़ नीयत, सच्चा इरादा — बाकी आप खुद समझदार हैं ${honorific}, विकास देखकर ही आशीर्वाद दीजिएगा! 🚩`

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const FILE = path.join(__dirname, 'campaign_profile.json');
+const FILE = process.env.CAMPAIGN_PROFILE_PATH || path.join(__dirname, 'campaign_profile.json');
 const DEFAULTS = {
     verifiedFacts: [],
     talkingStyle: 'Natural, respectful village conversation. Reply directly and briefly. Never invent a fact.',
@@ -44,4 +44,37 @@ function getPrompt() {
     return `[LIVE VERIFIED FACTS - highest priority; do not add unsupported details]\n${facts}\n\n[TALKING STYLE]\n${profile.talkingStyle}`;
 }
 
-module.exports = { FILE, load, update, getPrompt, normalizeFacts };
+function parseImportedFile(content, fileName = '') {
+    const text = String(content || '').replace(/^\uFEFF/, '').trim();
+    if (!text) return { verifiedFacts: [], talkingStyle: '' };
+
+    if (String(fileName).toLowerCase().endsWith('.json') || text.startsWith('{') || text.startsWith('[')) {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return { verifiedFacts: normalizeFacts(parsed), talkingStyle: '' };
+        return {
+            verifiedFacts: normalizeFacts(parsed.verifiedFacts || parsed.facts || parsed.items || []),
+            talkingStyle: String(parsed.talkingStyle || parsed.style || '').trim()
+        };
+    }
+
+    const facts = text.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'))
+        .map(line => line.replace(/^[-*•\d.)\s]+/, '').trim())
+        .filter(Boolean);
+    return { verifiedFacts: normalizeFacts(facts), talkingStyle: '' };
+}
+
+function importFile(content, fileName = '', mode = 'replace') {
+    const parsed = parseImportedFile(content, fileName);
+    const current = load();
+    const facts = mode === 'append'
+        ? Array.from(new Set([...current.verifiedFacts, ...parsed.verifiedFacts]))
+        : parsed.verifiedFacts;
+    return update({
+        verifiedFacts: facts,
+        talkingStyle: parsed.talkingStyle || current.talkingStyle
+    });
+}
+
+module.exports = { FILE, load, update, getPrompt, normalizeFacts, parseImportedFile, importFile };

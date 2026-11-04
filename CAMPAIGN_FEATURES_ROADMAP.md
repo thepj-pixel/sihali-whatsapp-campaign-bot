@@ -25,7 +25,7 @@
 | **Daily Fixed Target Poster/Reel** | 🟡 **DEPLOYING** | आज रात तक कौन सा पोस्टर/वीडियो प्राथमिकता पर भेजना है, इसका एडमिन टारगेट टॉगल। |
 | **On-the-Fly Name Poster Generator** | ✅ **DONE** | वोटर के नाम का 9:16 WhatsApp Status पोस्टर जेनरेट करके भेजना। |
 | **Voter Parchi (Slip) Precision Engine** | ✅ **DONE** | 3,435 वोटरों की प्रमाणित लिस्ट से वार्ड/नाम/EPIC द्वारा तुरंत डिजिटल पर्ची जारी करना। |
-| **Cloudflare Tunnel Discovery & Badge** | 🟡 **DEPLOYING** | डैशबोर्ड हेडर पर लाइव `trycloudflare.com` लिंक व कॉपी बटन। |
+| **Permanent Domain & Nginx Proxy** | ✅ **DONE** | एक स्थायी domain VM public IP पर point होता है; Nginx dashboard को port 3000 से serve करता है। Temporary tunnel की जरूरत नहीं। |
 | **Direct Baba Register & Ground Intel** | ✅ **DONE** | समस्याएं सीधे `baba_direct_register.json` व `ground_intelligence_feed.json` में दर्ज। |
 
 ---
@@ -57,12 +57,13 @@ nano /home/patrikryian/sihali-whatsapp-campaign-bot/api_config.json
 pm2 restart whatsapp-bot
 ```
 
-#### 2. Cloudflare Tunnel चेक करने की कमांड
+#### 2. Permanent dashboard domain चेक करने की कमांड
 ```bash
-# VM पर एक्टिव टनल लिंक देखने के लिए
-pm2 logs tunnel --lines 30 --nostream
+# Local app और Nginx दोनों चेक करें
+curl -fsS http://127.0.0.1:3000/health
+sudo nginx -t
 ```
-या सीधे डैशबोर्ड पर `/api/debug` या हेडर में लाइव टनल लिंक देख सकते हैं।
+Domain setup के लिए `OPERATIONS.md` और `deploy/nginx-whatsapp-bot.conf` इस्तेमाल करें।
 
 ---
 

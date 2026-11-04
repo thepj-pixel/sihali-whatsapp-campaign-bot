@@ -10,3 +10,5 @@ voters.json
 parchi_cache/
 operations_log.jsonl
 campaign_runtime.json
+dashboard_test_contacts.json
+dashboard_test_profile.json

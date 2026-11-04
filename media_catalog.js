@@ -42,7 +42,7 @@ const POSTERS = [
         github_url: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster_vikas_infra.png',
         title: 'डिजिटल पंचायत इंफ्रास्ट्रक्चर',
         tags: ['digital', 'sadak', 'pani', 'jjm', 'सड़क', 'पानी'],
-        caption: 'हर घर तक मीठा पानी, हर मुख्य रास्ते पर पक्की सी.सी. सड़कें — बाबा अभय सिंह का संकल्प 🚩\n16 नवम्बर 2026 — अपना आशीर्वाद जरूर दें!'
+        caption: 'हर घर तक मीठा पानी, बेहतर स्वास्थ्य सेवा और सुरक्षित मुख्य रास्ते — बाबा अभय सिंह का संकल्प 🚩\n16 नवम्बर 2026 — मतदान जरूर करें!'
     },
     {
         id: 'poster_statesman',

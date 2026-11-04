@@ -107,6 +107,7 @@ function syncCampaignProfileToGit() {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ limit: '60mb', extended: true }));
@@ -133,6 +134,8 @@ app.get('/api/ground-intel', (req, res) => {
 const PORT = process.env.PORT || 3000;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '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';
 const CAMPAIGN_PIN = process.env.CAMPAIGN_PIN || '2026';
+const DASHBOARD_ONLY = process.env.DASHBOARD_ONLY === 'true';
+const PUBLIC_DASHBOARD_URL = String(process.env.PUBLIC_DASHBOARD_URL || '').replace(/\/$/, '');
 
 // Persistent Live Message Feed Store (survives restarts)
 const FEED_FILE = path.join(__dirname, 'messages_feed.json');
@@ -1167,10 +1170,15 @@ async function startSession(sessionObj) {
     });
 }
 
-// Start all sessions
-SESSIONS.forEach(sess => {
-    startSession(sess).catch(e => console.error(`Failed to start ${sess.id}:`, e));
-});
+// Start WhatsApp only in live mode. Dashboard-only mode is safe for browser tests.
+if (!DASHBOARD_ONLY) {
+    SESSIONS.forEach(sess => {
+        startSession(sess).catch(e => console.error(`Failed to start ${sess.id}:`, e));
+    });
+} else {
+    SESSIONS.forEach(sess => { sess.status = 'DASHBOARD_ONLY'; });
+    console.log('[Server] Dashboard-only mode active; WhatsApp sessions and proactive sends are disabled.');
+}
 
 // Helper to get connected socket
 function getActiveSocket(preferredId = 'sim_636') {
@@ -1393,6 +1401,18 @@ app.post('/api/campaign-profile', (req, res) => {
     } catch (error) {
         operationsTracker.record('campaign_profile', 'failed', { reason: error.message });
         res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/campaign-profile/import', (req, res) => {
+    try {
+        const updated = campaignProfile.importFile(req.body?.content, req.body?.fileName, req.body?.mode);
+        operationsTracker.record('campaign_profile_import', 'updated', { factCount: updated.verifiedFacts.length });
+        syncCampaignProfileToGit();
+        res.json({ success: true, profile: updated, factCount: updated.verifiedFacts.length });
+    } catch (error) {
+        operationsTracker.record('campaign_profile_import', 'failed', { reason: error.message });
+        res.status(400).json({ error: error.message });
     }
 });
 
@@ -1634,17 +1654,10 @@ app.post('/api/ai-draft', async (req, res) => {
     }
 });
 
-// API: Get Cloudflare Tunnel Status
+// API: Stable public dashboard URL (normally a fixed domain through Nginx)
 app.get('/api/tunnel-status', (req, res) => {
-    exec('pm2 logs tunnel --lines 60 --nostream 2>/dev/null', (err, stdout, stderr) => {
-        const text = stdout || stderr || '';
-        const matches = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g);
-        if (matches && matches.length > 0) {
-            const url = matches[matches.length - 1];
-            return res.json({ success: true, url: url, provider: 'Cloudflare' });
-        }
-        res.json({ success: false, message: 'Tunnel URL not found in recent logs', hint: 'Run: pm2 logs tunnel --lines 50' });
-    });
+    const url = PUBLIC_DASHBOARD_URL || `${req.protocol}://${req.get('host')}`;
+    res.json({ success: true, url, provider: PUBLIC_DASHBOARD_URL ? 'Fixed domain' : 'Current host' });
 });
 
 app.post('/api/daily-target', (req, res) => {
@@ -1825,9 +1838,18 @@ app.post('/api/contacts/import-voters', (req, res) => {
 
 app.post('/api/contacts/import-vcf', (req, res) => {
     try {
-        const { vcfText } = req.body;
-        const imported = contactsManager.parseVCF(vcfText || '');
-        res.json({ success: true, count: imported.length });
+        const { vcfText, fileText, fileName } = req.body;
+        const text = fileText || vcfText || '';
+        const isCsv = String(fileName || '').toLowerCase().endsWith('.csv') || !/BEGIN:VCARD/i.test(text);
+        const imported = isCsv ? contactsManager.parseCSV(text) : contactsManager.parseVCF(text);
+        const matched = imported.filter(contact => contact?.voterMatch?.matched).length;
+        res.json({
+            success: true,
+            format: isCsv ? 'csv' : 'vcf',
+            count: imported.length,
+            matched,
+            unmatched: imported.length - matched
+        });
     } catch (e) {
         res.status(400).json({ error: e.message });
     }
@@ -1872,9 +1894,9 @@ app.post('/api/request-pairing-code', async (req, res) => {
     }
 });
 
-// API: PM2 Debug Logs (Tunnel + Bot)
+// API: PM2 Bot Debug Logs
 app.get('/api/debug', (req, res) => {
-    exec('pm2 logs tunnel --lines 25 --nostream 2>/dev/null; pm2 logs whatsapp-bot --lines 60 --nostream', (err, stdout, stderr) => {
+    exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
         res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
     });
 });
@@ -2246,7 +2268,7 @@ app.get('/', (req, res) => {
                         <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
                     </div>
                     <div class="top-actions">
-                        <span id="tunnel-badge" style="background: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">🔗 टनल जांच रहे हैं...</span>
+                        <span id="public-url-badge" style="background: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">🔗 Fixed dashboard address</span>
                         <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
                         <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
                     </div>
@@ -2671,6 +2693,12 @@ app.get('/', (req, res) => {
                                 </button>
                             </div>
                             <div class="wa-search-bar">
+                                <select id="crm-line-filter" onchange="applyVoterFilters()" style="width:100%;margin-bottom:7px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;background:white;color:#0f172a;font-size:12px;">
+                                    <option value="all">All WhatsApp lines</option>
+                                    <option value="sim_636">Primary (6367810227)</option>
+                                    <option value="baba_aux">Baba Aux line</option>
+                                    <option value="canada">Canada line (+1)</option>
+                                </select>
                                 <input type="text" id="voter-search" placeholder="🔍 नाम, फोन नंबर या टैग से खोजें..." style="width: 100%; padding: 8px 12px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 13px; outline: none; background: #f8fafc; color: #0f172a;" oninput="filterVoters(this.value)">
                             </div>
                             <!-- 17 Smart Filter Chips -->
@@ -2980,6 +3008,14 @@ app.get('/', (req, res) => {
                             <h4 style="margin:0 0 8px;color:#0f172a;">Verified Facts & Talking Pattern</h4>
                             <textarea id="campaign-verified-facts" rows="6" placeholder="Paste one verified fact per line. The bot will not invent missing details." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
                             <textarea id="campaign-talking-style" rows="4" placeholder="Describe the natural talking pattern, tone, word length, and phrases to avoid." style="width:100%;margin-top:8px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></textarea>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+                                <input id="campaign-facts-file" type="file" accept=".txt,.md,.json,.csv" style="font-size:12px;">
+                                <select id="campaign-facts-import-mode" style="padding:7px;border:1px solid #cbd5e1;border-radius:7px;">
+                                    <option value="replace">Replace old facts</option>
+                                    <option value="append">Add to existing facts</option>
+                                </select>
+                                <button onclick="uploadCampaignFactsFile()" style="background:#0f766e;color:white;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;">One-click Facts Upload</button>
+                            </div>
                             <button onclick="saveCampaignProfileUI()" style="margin-top:8px;background:#7c3aed;color:white;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;">Save Facts & Style</button>
                             <span id="campaign-profile-status" style="margin-left:10px;font-size:12px;color:#475569;"></span>
                         </div>
@@ -3061,6 +3097,12 @@ app.get('/', (req, res) => {
                 let currentPosterBlob = null;
                 let aiHistory = [];
 
+                function escapeHtml(value) {
+                    return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function(char) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+                    });
+                }
+
                 async function loadDailyGoalUI() {
                     try {
                         const goalRes = await fetch('/api/daily-target');
@@ -3128,6 +3170,35 @@ app.get('/', (req, res) => {
                         status.textContent = e.message;
                     }
                 }
+
+                async function uploadCampaignFactsFile() {
+                    const input = document.getElementById('campaign-facts-file');
+                    const status = document.getElementById('campaign-profile-status');
+                    const file = input.files && input.files[0];
+                    if (!file) {
+                        status.textContent = 'Choose a facts file first';
+                        return;
+                    }
+                    try {
+                        const content = await file.text();
+                        const res = await fetch('/api/campaign-profile/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                content: content,
+                                fileName: file.name,
+                                mode: document.getElementById('campaign-facts-import-mode').value
+                            })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Import failed');
+                        status.textContent = data.factCount + ' verified facts active';
+                        input.value = '';
+                        loadCampaignProfileUI();
+                    } catch (e) {
+                        status.textContent = e.message;
+                    }
+                }
                 loadDailyGoalUI();
                 loadCampaignProfileUI();
 
@@ -3154,7 +3225,7 @@ app.get('/', (req, res) => {
                                 phone: phone,
                                 name: name,
                                 mediaOption: 'custom_poster',
-                                customText: 'राम राम ' + (name ? name + ' जी' : 'भाई जी') + '! 🙏\nबाबा अभय सिंह टीम द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\nइसे अपने स्टेटस व प्रोफाइल पर ज़रूर लगाएं! 🚩'
+                                customText: 'राम राम ' + (name ? name + ' जी' : 'भाई जी') + '! 🙏\\nबाबा अभय सिंह टीम द्वारा आपके नाम का विशेष WhatsApp Status पोस्टर तैयार कर दिया गया है।\\nइसे अपने स्टेटस व प्रोफाइल पर ज़रूर लगाएं! 🚩'
                             })
                         });
                         const data = await res.json();
@@ -3443,7 +3514,7 @@ app.get('/', (req, res) => {
 
                 // Update Live Voter Chat Feed (Voters Only)
                 function openVoterInCRM(phone) {
-                    const crmBtn = document.querySelectorAll('.tab-btn')[4];
+                    const crmBtn = document.getElementById('tab-btn-voters');
                     switchTab('voters', crmBtn);
                     setTimeout(function() { selectVoter(phone); }, 150);
                 }
@@ -3616,7 +3687,7 @@ app.get('/', (req, res) => {
                         allVoters = await res.json();
                         document.getElementById('voter-count').innerText = allVoters.length;
                         document.getElementById('voter-count-badge').innerText = allVoters.length;
-                        applyTagFilter(currentFilterTag);
+                        applyVoterFilters();
                     } catch (e) {
                         console.error('Error loading voters:', e);
                     }
@@ -3629,26 +3700,28 @@ app.get('/', (req, res) => {
                         el.classList.add('active');
                     }
 
-                    if (tag === 'ALL') {
-                        renderVoterList(allVoters);
-                    } else if (tag === 'MANUAL') {
-                        const filtered = allVoters.filter(function(v) { return v.autoPilot === false; });
-                        renderVoterList(filtered);
-                    } else {
-                        const filtered = allVoters.filter(function(v) {
-                            return (v.tags && v.tags.indexOf(tag) !== -1) || v.voterSentiment === tag;
-                        });
-                        renderVoterList(filtered);
-                    }
+                    applyVoterFilters();
                 }
 
                 function filterVoters(q) {
-                    const lower = (q || '').toLowerCase();
+                    applyVoterFilters(q);
+                }
+
+                function applyVoterFilters(query) {
+                    const searchInput = document.getElementById('voter-search');
+                    const lower = String(query === undefined ? (searchInput ? searchInput.value : '') : query).toLowerCase();
+                    const line = document.getElementById('crm-line-filter')?.value || 'all';
                     const filtered = allVoters.filter(function(v) {
+                        const lineMatch = line === 'all' || v.lastSessionId === line;
                         const nameMatch = v.name && v.name.toLowerCase().indexOf(lower) !== -1;
                         const phoneMatch = v.phone && v.phone.indexOf(lower) !== -1;
                         const tagMatch = v.tags && v.tags.some(function(t) { return t.toLowerCase().indexOf(lower) !== -1; });
-                        return nameMatch || phoneMatch || tagMatch;
+                        const searchMatch = !lower || nameMatch || phoneMatch || tagMatch;
+                        const tagFilterMatch = currentFilterTag === 'ALL'
+                            || (currentFilterTag === 'MANUAL' && v.autoPilot === false)
+                            || (v.tags && v.tags.indexOf(currentFilterTag) !== -1)
+                            || v.voterSentiment === currentFilterTag;
+                        return lineMatch && searchMatch && tagFilterMatch;
                     });
                     renderVoterList(filtered);
                 }
@@ -3924,19 +3997,20 @@ app.get('/', (req, res) => {
                 }
             
             
-                async function checkTunnelStatus() {
+                async function loadPublicDashboardUrl() {
                     try {
                         const res = await fetch('/api/tunnel-status');
                         const data = await res.json();
-                        const el = document.getElementById('tunnel-badge');
+                        const el = document.getElementById('public-url-badge');
                         if (data.success && data.url) {
-                            el.innerHTML = '🔗 <a href="' + data.url + '" target="_blank" style="color:#0369a1; text-decoration:none; font-weight:bold;">' + data.url.replace("https://", "") + '</a> <button data-url="' + data.url + '" onclick="navigator.clipboard.writeText(this.dataset.url); alert(&quot;Tunnel URL Copied!&quot;);" style="background:none; border:none; cursor:pointer; font-size:11px;" title="Copy Tunnel URL">📋</button>';
+                            const displayUrl = data.url.replace('https://', '').replace('http://', '');
+                            el.innerHTML = '🔗 <a href="' + data.url + '" target="_blank" style="color:#0369a1; text-decoration:none;font-weight:bold;">' + displayUrl + '</a> <button data-url="' + data.url + '" onclick="navigator.clipboard.writeText(this.dataset.url)" style="background:none;border:none;cursor:pointer;" title="Copy dashboard URL">📋</button>';
                         } else {
-                            el.innerHTML = '🔗 Port 3000 Active';
+                            el.innerHTML = '🔗 Dashboard active';
                         }
                     } catch (e) {}
                 }
-                checkTunnelStatus();
+                loadPublicDashboardUrl();
 
                 async function generateAIDraft() {
                     if (!selectedVoterPhone) return;
@@ -4203,9 +4277,9 @@ app.get('/', (req, res) => {
                         const safeName = (c.name || '').replace(/'/g, "\\'");
                         rows += '<tr>' +
                             '<td><input type="checkbox" class="contact-checkbox" value="' + c.id + '"></td>' +
-                            '<td style="font-weight:700; color:#0f172a;">' + escapeHtml(c.name) + '</td>' +
+                            '<td style="font-weight:700; color:#0f172a;">' + escapeHtml(c.name) + (c.voterMatch && c.voterMatch.matched ? '<div style="font-size:10px;color:#15803d;margin-top:2px;">✓ Voter matched • ' + escapeHtml(c.voterMatch.epic || ('Serial ' + c.voterMatch.serial)) + '</div>' : '<div style="font-size:10px;color:#64748b;margin-top:2px;">Contact only • no unique voter match</div>') + '</td>' +
                             '<td style="font-family:monospace; font-weight:600; color:#2563eb;">' + escapeHtml(c.phone) + '</td>' +
-                            '<td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700;">वार्ड ' + c.ward + '</span></td>' +
+                            '<td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700;">वार्ड ' + (c.ward || '--') + '</span></td>' +
                             '<td><span style="background:' + lineBg + '; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">' + lineBadge + '</span></td>' +
                             '<td style="font-size:12px; color:#64748b;">' + escapeHtml(c.notes || '--') + '</td>' +
                             '<td>' +
@@ -4305,11 +4379,11 @@ app.get('/', (req, res) => {
                             const res = await fetch('/api/contacts/import-vcf', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ vcfText: text })
+                                body: JSON.stringify({ fileText: text, fileName: file.name })
                             });
                             const data = await res.json();
                             if (data.success) {
-                                alert('✅ ' + data.count + ' संपर्क सफलतापूर्वक आयात हुए!');
+                                alert('✅ ' + data.count + ' contacts imported • ' + data.matched + ' voter matches • ' + data.unmatched + ' contact-only');
                                 loadContacts();
                                 input.value = '';
                             } else {
@@ -4344,6 +4418,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
+        mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live',
+        publicDashboardUrl: PUBLIC_DASHBOARD_URL || null,
         uptime: process.uptime(),
         sessions: SESSIONS.map(s => ({
             id: s.id,
@@ -4356,7 +4432,7 @@ app.get('/health', (req, res) => {
 // Background Auto-Sync Watchdog (Checks GitHub every 35s, resets cleanly, installs fonts, reloads PM2)
 if (process.platform === 'linux') {
     console.log('[AutoSync] 🛡️ Continuous GitHub Auto-Update Watchdog Active (every 35s)');
-    setInterval(() => {
+    if (!DASHBOARD_ONLY) setInterval(() => {
         exec(`git fetch origin ${DEPLOY_BRANCH} > /dev/null 2>&1`, (err) => {
             if (err) return;
             exec(`git rev-parse HEAD && git rev-parse origin/${DEPLOY_BRANCH} && git rev-list --count HEAD..origin/${DEPLOY_BRANCH}`, (err2, stdout2) => {
@@ -4390,7 +4466,7 @@ if (process.platform === 'linux') {
 
 
     // Start Proactive Daytime Nudge Interval (Every 15 mins)
-    setInterval(() => {
+    if (!DASHBOARD_ONLY) setInterval(() => {
         const prim = SESSIONS.find(s => s.id === 'sim_636');
         if (prim && prim.sock && prim.status === 'CONNECTED') {
             runProactiveNudges(prim.sock);

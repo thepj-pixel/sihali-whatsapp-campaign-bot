@@ -10,6 +10,11 @@
 | Context repetition guard | Working | Production workflow suite |
 | Structured conversation context | Working | Topic/concern/follow-up assertions |
 | Editable verified facts and talking style | Working | Dashboard/API and prompt integration |
+| One-click fact-sheet upload | Working | TXT/MD/JSON/CSV replace/append tests |
+| Seven dashboard sections | Working | In-app browser click test, 4 Nov 2026 |
+| VCF/CSV contact import and voter matching | Working | Quoted CSV, VCF, exact-match assertions |
+| Multi-line CRM filtering | Working | Browser selection test |
+| Permanent domain through Nginx | Configuration ready | Requires domain and VM public IP |
 | Consent-only proactive follow-up | Working | Production workflow suite |
 | Context-aware proactive follow-up | Working | Production workflow suite |
 | Automatic daily-goal progress | Working | Unique consented-contact tracking |
@@ -37,9 +42,22 @@ DEPLOY_BRANCH=codex/production-readiness pm2 restart whatsapp-bot --update-env
 pm2 save
 curl -fsS http://127.0.0.1:3000/health
 pm2 logs whatsapp-bot --lines 60 --nostream
-pm2 logs tunnel --lines 30 --nostream
 ```
 
-The final command prints the current public `https://...trycloudflare.com` dashboard URL. The tunnel address can change after a tunnel restart. Open that URL and enter the `CAMPAIGN_PIN` configured for the PM2 process. If no custom value is configured, the current application fallback is `2026`.
+## Put the dashboard on one permanent domain (no Cloudflare tunnel)
+
+1. In the domain provider, create an `A` record pointing the chosen dashboard hostname to the VM public IPv4 address.
+2. On the VM, install Nginx: `sudo apt-get update && sudo apt-get install -y nginx`.
+3. Copy `deploy/nginx-whatsapp-bot.conf` to `/etc/nginx/sites-available/whatsapp-bot` and replace `dashboard.example.com` with the real domain.
+4. Enable it: `sudo ln -s /etc/nginx/sites-available/whatsapp-bot /etc/nginx/sites-enabled/whatsapp-bot`.
+5. Validate and reload: `sudo nginx -t && sudo systemctl reload nginx`.
+6. Set the public URL for PM2 and restart:
+
+```bash
+PUBLIC_DASHBOARD_URL=http://YOUR_DOMAIN DEPLOY_BRANCH=codex/production-readiness pm2 restart whatsapp-bot --update-env
+pm2 save
+```
+
+Open the permanent domain and enter the `CAMPAIGN_PIN` configured for the PM2 process. If no custom value is configured, the application fallback is `2026`. The dashboard remains PIN-protected; no temporary tunnel process is required.
 
 `sessions_auth/`, `user_memory.json`, `campaign_runtime.json`, and the operational logs are Git-ignored, so switching branches does not delete the VM's WhatsApp sessions or conversation state.
