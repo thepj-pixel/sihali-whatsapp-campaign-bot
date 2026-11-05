@@ -1456,6 +1456,100 @@ app.post('/api/quick-add-send', async (req, res) => {
     }
 });
 
+// ==================== OPERATOR: find a voter in the roll, then send the slip (or the list to choose from) ====================
+// GET /api/voter-lookup?q=name&rel=father/husband&ward=3 -> up to 40 roll matches (own name must match)
+function lookupVoters(q, rel, ward) {
+    q = String(q || '').trim().slice(0, 60); if (q.length < 2) return [];
+    const w = parseInt(ward) || null;
+    let list = slipFlow.search(q, {}, q + (w ? ` ward ${w}` : ''), false) || [];
+    if (w) list = list.filter(v => Number(v.ward) === w);
+    const relT = String(rel || '').toLowerCase().split(/\s+/).filter(x => x.length >= 2);
+    if (relT.length) {
+        const tr = x => (voterEngine.translit ? voterEngine.translit(x) : x);
+        const hit = list.filter(v => { const r = `${String(v.rel_name_hi || '')} ${String(v.rel_name_en || v.re || '').toLowerCase()}`; return relT.every(t => r.includes(t) || r.includes(tr(t))); });
+        list = hit;
+    }
+    return list.slice(0, 40);
+}
+const voterKey = v => `W${Number(v.ward)}-${Number(v.sr_no || v.s)}`;
+app.get('/api/voter-lookup', (req, res) => {
+    try {
+        const list = lookupVoters(req.query.q, req.query.rel, req.query.ward);
+        const RL = require('./relation_label');
+        res.json({ success: true, count: list.length, results: list.map(v => ({ key: voterKey(v), name: v.name_hi || v.name, nameEn: v.name_en || v.ne || '', rel: RL.relLabel(v), relName: v.rel_name_hi || '', ward: Number(v.ward) || null, sr: v.sr_no || v.s || null, age: v.age || v.a || null, house: v.house_no || v.h || null })) });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+function voterByKey(key) {
+    key = String(key || ''); if (!key) return null;
+    const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : null;
+    if (Array.isArray(all)) { const f = all.find(v => voterKey(v) === key); if (f) return f; }
+    const r = voterEngine.searchVoters(key, 5) || [];
+    return r.find(v => voterKey(v) === key) || null;
+}
+// POST /api/operator-slip {phone, lineId, mode:'send'|'choose', key | keys[], query?, forceCard?}
+//  send   -> the operator knows this person: save the contact as that voter and send their parchi card now
+//  choose -> send the numbered list (max 5); the voter replies with a number and the bot sends that parchi
+app.post('/api/operator-slip', async (req, res) => {
+    const b = req.body || {};
+    try {
+        const phone = identity.normalizePhone(b.phone);
+        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'सही मोबाइल नंबर डालें (10 अंक या +देश कोड)' });
+        const lineId = String(b.lineId || 'sim_636');
+        const sess = SESSIONS.find(x => x.id === lineId);
+        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'चुनी गई लाइन (' + lineId + ') कनेक्ट नहीं है' });
+        const u = userMemory.getUser(phone);
+        if (isBroadcastOptedOut(phone) || (u && (u.broadcastOptOut || u.consentStatus === 'REJECTED'))) return res.status(409).json({ success: false, error: 'इस नंबर ने STOP/मना किया है — मैसेज नहीं भेजा गया', optedOut: true });
+        const mode = b.mode === 'choose' ? 'choose' : 'send';
+        const keys = (Array.isArray(b.keys) ? b.keys : [b.key]).filter(Boolean).slice(0, 5);
+        const voters = keys.map(voterByKey).filter(Boolean);
+        if (!voters.length) return res.status(400).json({ success: false, error: 'वोटर नहीं मिला — फिर से खोजें' });
+        const jid = `${phone}@s.whatsapp.net`;
+        const existing = contactsManager.findByPhone(phone);
+        let text, sent, kind;
+        if (mode === 'send') {
+            const v = voters[0];
+            const nm = String(v.name_hi || v.name || '').replace(/^कृ\s+/, '');
+            const keepName = existing && identity.isRealName(existing.name) ? existing.name : '';
+            contactsManager.add({ ...(existing || {}), phone, name: keepName || nm || 'ग्रामवासी', ward: Number(v.ward) || (existing && existing.ward) || null, line: lineId,
+                tags: Array.from(new Set([...((existing && existing.tags) || []), '📄 पर्ची (टीम)'])) });
+            if (!u.name || !identity.isRealName(u.name)) u.name = nm;
+            u.ward = Number(v.ward) || u.ward; if (!u.assignedLine) u.assignedLine = lineId;
+            u.identityConfirmedBy = { by: req.dashUser ? req.dashUser.username : 'team', at: new Date().toISOString(), key: voterKey(v) };
+            slipFlow.deliverTo(u, v, false);
+            text = voterEngine.formatShortSlipResponse(v) + slipFlow.FAMILY_TAIL;
+            let cardBuffer = null;
+            try { cardBuffer = await voterCardGen.generateVoterCard(v); } catch (e) { console.error('operator slip card:', e.message); }
+            sent = cardBuffer ? await sendSafeMessage(sess.sock, jid, { image: cardBuffer, caption: text }) : await sendSafeMessage(sess.sock, jid, { text });
+            kind = cardBuffer ? 'voterSlipCard' : 'voterSlip';
+        } else {
+            if (!existing) contactsManager.add({ phone, name: identityResolver.nameFor(phone) || 'ग्रामवासी', line: lineId, tags: ['📄 पर्ची (टीम)'] });
+            if (!u.assignedLine) u.assignedLine = lineId;
+            const q = String(b.query || voters[0].name_hi || '').trim().slice(0, 40);
+            u.lastSlipQuery = q;
+            slipFlow.setPending(u, 'choose', voters, 'self');
+            text = 'राम राम जी 🙏 आपकी मतदाता पर्ची निकाल रही हूँ।\n\n' + slipFlow.listText(voters, voters[0].name_hi || q, false);
+            sent = await sendSafeMessage(sess.sock, jid, { text });
+            kind = 'disambiguation';
+        }
+        userMemory.recordMessage(phone, 'bot', text, kind, sess.name);
+        let card = 'already_sent';
+        if (b.forceCard || contactCard.needsCard(u, lineId)) {
+            await new Promise(r => setTimeout(r, 800));
+            await sendMultiContactCard(sess.sock, jid, lineId);
+            contactCard.markSent(u, lineId);
+            userMemory.recordMessage(phone, 'bot', '📇 [Line contact card sent]', null, sess.name);
+            card = 'sent';
+        }
+        userMemory.save();
+        logMessage({ session: sess.name, phone, incoming: mode === 'send' ? `[टीम ने पर्ची भेजी: ${voters[0].name_hi}]` : `[टीम ने सूची भेजी: ${voters.length}]`, reply: text, by: req.dashUser ? req.dashUser.username : undefined, status: kind === 'voterSlipCard' ? 'MEDIA_SENT' : 'DELIVERED' });
+        operationsTracker.record('operator_slip', 'sent', { lineId, mode, n: voters.length, card });
+        res.json({ success: true, mode, phone, lineName: sess.name, voter: voters[0].name_hi, count: voters.length, contactCard: card, messageId: sent && sent.key ? sent.key.id : null });
+    } catch (e) {
+        operationsTracker.record('operator_slip', 'failed', { reason: e.message });
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // API: Send Message directly from Dashboard (Quick-Add / Field Mode)
 app.post('/api/send-message', async (req, res) => {
     try {
@@ -2901,6 +2995,17 @@ app.get('/', (req, res) => {
                     body:not(.show-full) .header-bar h1 { font-size: 17px; }
                     body:not(.show-full) .qa-row { grid-template-columns: 1fr; }
                 }
+                .qa-vbox { background: rgba(255,255,255,.1); border-radius: 12px; padding: 8px 10px; }
+                .qa-vbox summary { cursor: pointer; font-weight: 800; font-size: 15px; padding: 4px 0; }
+                .qa-vbox > * + * { margin-top: 8px; }
+                .qa-vbtn { width: 100%; min-height: 44px; border: 0; border-radius: 10px; background: #e2e8f0; color: #0f172a; font-size: 15px; font-weight: 800; cursor: pointer; }
+                .qa-vgo { background: #facc15; }
+                .qa-vres { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; }
+                .qa-vitem { display: flex; gap: 10px; align-items: flex-start; background: #fff; color: #0f172a; border-radius: 10px; padding: 9px 10px; font-size: 14px; cursor: pointer; }
+                .qa-vitem input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+                .qa-vitem b { font-size: 15px; }
+                .qa-vitem small { color: #475569; display: block; }
+                .qa-vhint { font-size: 12px; opacity: .85; }
                 .qa-panel { background: linear-gradient(135deg, #065f46, #0f766e); color: #fff; border-radius: 14px; padding: 14px; margin-bottom: 16px; box-shadow: 0 6px 18px rgba(6,95,70,.25); }
                 .qa-head { font-weight: 800; font-size: 17px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
                 .qa-panel form { display: grid; gap: 8px; max-width: 760px; }
@@ -3013,6 +3118,20 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <select id="qa-poster"><option value="">🖼️ बिना पोस्टर</option></select>
                             <label class="qa-check"><input id="qa-forcecard" type="checkbox" checked> नंबर-सेव कार्ड भेजें</label>
                         </div>
+                        <details id="qa-vbox" class="qa-vbox">
+                            <summary>🔎 वोटर लिस्ट में खोजें → पर्ची भेजें</summary>
+                            <div class="qa-row">
+                                <input id="qa-vq" type="text" placeholder="वोटर का नाम (जैसे rajesh devi)">
+                                <input id="qa-vrel" type="text" placeholder="पिता/पति का नाम (optional)">
+                            </div>
+                            <button id="qa-vsearch" type="button" class="qa-vbtn">🔎 खोजें</button>
+                            <div id="qa-vres" class="qa-vres"></div>
+                            <div id="qa-vact" class="qa-row" style="display:none;">
+                                <button id="qa-vsend" type="button" class="qa-vbtn qa-vgo">📄 चुनी हुई पर्ची भेजें</button>
+                                <button id="qa-vchoose" type="button" class="qa-vbtn">📋 सूची भेजें, वोटर खुद चुने</button>
+                            </div>
+                            <div class="qa-vhint">पहचानते हैं तो एक चुनें → "पर्ची भेजें"। पक्का नहीं → 2–5 पर टिक करें → "सूची भेजें", वोटर नंबर लिखकर अपनी पर्ची ले लेगा।</div>
+                        </details>
                         <button id="qa-send" type="button" class="qa-send">📲 Save &amp; Send now</button>
                         <div id="qa-status" class="qa-status" role="status" aria-live="polite"></div>
                     </form>
@@ -3048,6 +3167,51 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         }).catch(function (e) { setStatus('❌ नेटवर्क त्रुटि: ' + e.message, false); })
                           .then(function () { busy = false; btn.disabled = false; });
                     });
+                    // 🔎 voter search -> send parchi / send list to choose
+                    var vSel = {};
+                    function vEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+                    function vKeys() { return Object.keys(vSel).filter(function (k) { return vSel[k]; }); }
+                    function vRender(list) {
+                        vSel = {}; var box = $('qa-vres');
+                        if (!list.length) { box.innerHTML = '<div class="qa-vhint">कोई नहीं मिला — नाम वोटर कार्ड जैसा लिखें या वार्ड हटा कर देखें।</div>'; $('qa-vact').style.display = 'none'; return; }
+                        box.innerHTML = '<div class="qa-vhint">' + list.length + ' मिले' + (list.length > 15 ? ' — पिता/पति या वार्ड डालकर छोटा करें' : '') + '</div>' + list.map(function (v) {
+                            return '<label class="qa-vitem"><input type="checkbox" data-k="' + vEsc(v.key) + '" data-n="' + vEsc(v.name) + '" data-w="' + vEsc(v.ward) + '"><span><b>' + vEsc(v.name) + '</b><small>' + vEsc(v.rel) + ': ' + vEsc(v.relName) + ' • वार्ड ' + vEsc(v.ward) + ' • उम्र ' + vEsc(v.age) + ' • मकान ' + vEsc(v.house) + '</small></span></label>';
+                        }).join('');
+                        $('qa-vact').style.display = 'grid';
+                        box.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.addEventListener('change', function () {
+                            vSel[this.dataset.k] = this.checked;
+                            var ks = vKeys();
+                            if (ks.length === 1 && this.checked) { if (!$('qa-name').value.trim()) $('qa-name').value = this.dataset.n; if (!$('qa-ward').value) $('qa-ward').value = this.dataset.w; }
+                            $('qa-vsend').disabled = ks.length !== 1; $('qa-vchoose').disabled = ks.length < 2 || ks.length > 5;
+                        }); });
+                        $('qa-vsend').disabled = true; $('qa-vchoose').disabled = true;
+                    }
+                    function vSearch() {
+                        var q = $('qa-vq').value.trim(); if (q.length < 2) { setStatus('❌ वोटर का नाम लिखें', false); return; }
+                        setStatus('🔎 खोज रहे हैं…');
+                        fetch('/api/voter-lookup?q=' + encodeURIComponent(q) + '&rel=' + encodeURIComponent($('qa-vrel').value.trim()) + '&ward=' + encodeURIComponent($('qa-ward').value || ''), { credentials: 'same-origin' })
+                          .then(function (r) { return r.json(); }).then(function (d) { setStatus(''); vRender(d.results || []); }).catch(function (e) { setStatus('❌ ' + e.message, false); });
+                    }
+                    $('qa-vsearch').addEventListener('click', vSearch);
+                    $('qa-vq').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); vSearch(); } });
+                    $('qa-vrel').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); vSearch(); } });
+                    function vSend(mode) {
+                        if (busy) return;
+                        var phone = $('qa-phone').value.trim();
+                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ ऊपर मोबाइल नंबर डालें', false); $('qa-phone').focus(); return; }
+                        var ks = vKeys();
+                        if (mode === 'send' && ks.length !== 1) { setStatus('❌ पर्ची के लिए एक ही वोटर चुनें', false); return; }
+                        if (mode === 'choose' && (ks.length < 2 || ks.length > 5)) { setStatus('❌ सूची के लिए 2 से 5 वोटर चुनें', false); return; }
+                        busy = true; setStatus('⏳ भेज रहे हैं…');
+                        fetch('/api/operator-slip', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+                            phone: phone, lineId: $('qa-line').value, mode: mode, key: ks[0], keys: ks, query: $('qa-vq').value.trim(), forceCard: $('qa-forcecard').checked
+                        }) }).then(function (r) { return r.json(); }).then(function (d) {
+                            if (d.success) { setStatus(d.mode === 'send' ? ('✅ पर्ची भेजी: ' + d.voter + ' → ' + d.phone + ' via ' + d.lineName) : ('✅ ' + d.count + ' नाम की सूची भेजी → ' + d.phone + ' (वोटर नंबर लिखेगा तो पर्ची अपने आप जाएगी)'), true); $('qa-vres').innerHTML = ''; $('qa-vact').style.display = 'none'; $('qa-vq').value = ''; $('qa-vrel').value = ''; }
+                            else setStatus('❌ ' + (d.error || 'Failed'), false);
+                        }).catch(function (e) { setStatus('❌ नेटवर्क त्रुटि: ' + e.message, false); }).then(function () { busy = false; });
+                    }
+                    $('qa-vsend').addEventListener('click', function () { vSend('send'); });
+                    $('qa-vchoose').addEventListener('click', function () { vSend('choose'); });
                 })();
                 </script>
 

@@ -652,6 +652,7 @@ function formatFallbackResponse() {
 module.exports = {
     translit: (w) => (TRANSLIT_MAP[String(w || '').toLowerCase()] || String(w || '').toLowerCase()),
     getVoterById,
+    getAllVoters: () => VOTERS,
     getVoterByWardAndSr,
     searchVoters,
     getFamilyMembers,
