@@ -79,7 +79,7 @@ if (fs.existsSync(FONT_PATH)) {
 async function generateVoterCard(voter) {
     const cacheKey = voter.id || voter.sr_no || voter.epic || `${voter.ward || 1}_${voter.sr_no || 1}`;
     // v3 in the name: cards rendered before 4 Nov 2026 carried a symbol and must never be served again
-    const cacheFile = path.join(CARD_CACHE_DIR, `card_v5_${cacheKey}.jpg`);
+    const cacheFile = path.join(CARD_CACHE_DIR, `card_v6_${cacheKey}.jpg`);
     if (fs.existsSync(cacheFile)) {
         try {
             return fs.readFileSync(cacheFile);
@@ -186,12 +186,12 @@ async function generateVoterCard(voter) {
         40 साल की सच्ची समाज सेवा • अटूट भाईचारा
       </text>
 
-      <!-- Ballot serial number badge (the parcha leaves the election symbol blank: never print a symbol) -->
+      <!-- Stamp badge (Prince 5 Nov: no ballot serial number, only मुहर) (the parcha leaves the election symbol blank: never print a symbol) -->
       <g transform="translate(885, 232) rotate(-8)">
         <circle cx="0" cy="0" r="58" fill="#ffffff" stroke="#6d28d9" stroke-width="3.5" stroke-dasharray="6,3"/>
         <circle cx="0" cy="0" r="50" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
-        <text x="0" y="-16" font-size="14" font-weight="900" fill="#5b21b6" text-anchor="middle">क्रम संख्या</text>
-        <text x="0" y="30" font-size="50" font-weight="900" fill="#6d28d9" text-anchor="middle">1</text>
+        <text x="0" y="10" font-size="34" font-weight="900" fill="#6d28d9" text-anchor="middle">मुहर</text>
+        <text x="0" y="34" font-size="15" font-weight="800" fill="#5b21b6" text-anchor="middle">लगाएं</text>
       </g>
 
       <!-- Voter Details Grid -->
