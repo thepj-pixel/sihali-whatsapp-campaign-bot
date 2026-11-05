@@ -285,7 +285,7 @@ MSG_STORE.set = (k, v) => {
     return MSG_STORE;
 };
 // Retry/decrypt health, shown in GET /api/msg-health (proves the "Waiting for this message" fix live)
-const MSG_HEALTH = { since: new Date().toISOString(), retryServed: 0, retryMissing: 0, stored: 0 };
+const MSG_HEALTH = { since: new Date().toISOString(), retryServed: 0, retryMissing: 0, stored: 0, incomingUndecrypted: 0 };
 // Disappearing messages (owner 5 Nov: auto-delete chats after the poll, on both sides). WhatsApp only allows
 // 24h / 7 days / 90 days. Setting lives in gitignored disappearing.json; 0 = off.
 const DISAPPEAR_FILE = path.join(__dirname, 'disappearing.json');
@@ -1242,6 +1242,8 @@ async function startSession(sessionObj) {
     sock.ev.on('messages.upsert', (m) => {
         if (!m || !Array.isArray(m.messages) || !m.messages.length) return;
         for (const one of m.messages) {
+            // decrypt failure on our side (Baileys asks the sender's phone to re-send automatically); counted in /api/msg-health
+            if (one.messageStubType === 2 && !one.message) { MSG_HEALTH.incomingUndecrypted = (MSG_HEALTH.incomingUndecrypted || 0) + 1; MSG_HEALTH.lastUndecryptedAt = new Date().toISOString(); }
             const chatKey = one.key?.remoteJid || 'unknown';
             const dedupeId = one.key?.id ? `${sessionObj.id}:${chatKey}:${one.key.id}:${one.key.fromMe ? 1 : 0}` : null;
             incomingQueue.enqueue(chatKey, () => handleIncomingUpsert({ ...m, messages: [one] }), dedupeId);
