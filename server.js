@@ -284,6 +284,15 @@ MSG_STORE.set = (k, v) => {
     }, 3000);
     return MSG_STORE;
 };
+// Retry/decrypt health, shown in GET /api/msg-health (proves the "Waiting for this message" fix live)
+const MSG_HEALTH = { since: new Date().toISOString(), retryServed: 0, retryMissing: 0, stored: 0 };
+// Disappearing messages (owner 5 Nov: auto-delete chats after the poll, on both sides). WhatsApp only allows
+// 24h / 7 days / 90 days. Setting lives in gitignored disappearing.json; 0 = off.
+const DISAPPEAR_FILE = path.join(__dirname, 'disappearing.json');
+const DISAPPEAR_ALLOWED = [0, 86400, 604800, 7776000];
+let DISAPPEAR = { seconds: 0, applied: {} };
+try { DISAPPEAR = Object.assign(DISAPPEAR, JSON.parse(fs.readFileSync(DISAPPEAR_FILE, 'utf8'))); } catch (_) {}
+function saveDisappear() { try { fs.writeFileSync(DISAPPEAR_FILE, JSON.stringify(DISAPPEAR)); } catch (e) { console.error('[Disappear] save', e.message); } }
 const MSG_RETRY_COUNTER = new Map();
 const msgRetryCounterCache = { get: k => MSG_RETRY_COUNTER.get(k), set: (k, v) => { MSG_RETRY_COUNTER.set(k, v); if (MSG_RETRY_COUNTER.size > 5000) MSG_RETRY_COUNTER.delete(MSG_RETRY_COUNTER.keys().next().value); return true; }, del: k => MSG_RETRY_COUNTER.delete(k), flushAll: () => MSG_RETRY_COUNTER.clear() };
 
@@ -536,8 +545,10 @@ async function startSession(sessionObj) {
         msgRetryCounterCache,
         getMessage: async (key) => {
             if (key?.id && MSG_STORE.has(key.id)) {
+                MSG_HEALTH.retryServed++;
                 return MSG_STORE.get(key.id);
             }
+            MSG_HEALTH.retryMissing++;
             return undefined;
         }
     });
@@ -545,8 +556,17 @@ async function startSession(sessionObj) {
     // keep every outgoing message for retry receipts (bulk, scheduled, self-test, cards, status — all paths)
     const _rawSend = sock.sendMessage.bind(sock);
     sock.sendMessage = async (jid, content, options) => {
+        const secs = Number(DISAPPEAR.seconds) || 0;
+        const personal = typeof jid === 'string' && jid.endsWith('@s.whatsapp.net');
+        if (secs && personal && content && !('disappearingMessagesInChat' in content) && !content.delete && !content.react) {
+            const tag = sessionObj.id + '|' + jid;
+            if (DISAPPEAR.applied[tag] !== secs) {
+                try { await _rawSend(jid, { disappearingMessagesInChat: secs }); DISAPPEAR.applied[tag] = secs; saveDisappear(); } catch (e) { console.warn('[Disappear]', e.message); }
+            }
+            options = Object.assign({}, options || {}, { ephemeralExpiration: secs });
+        }
         const sent = await _rawSend(jid, content, options);
-        try { if (sent && sent.key && sent.key.id && sent.message) MSG_STORE.set(sent.key.id, sent.message); } catch (_) {}
+        try { if (sent && sent.key && sent.key.id && sent.message) { MSG_STORE.set(sent.key.id, sent.message); MSG_HEALTH.stored++; } } catch (_) {}
         return sent;
     };
 
@@ -586,6 +606,7 @@ async function startSession(sessionObj) {
             sessionObj.status = 'CONNECTED';
             sessionObj.qr = null;
             console.log(`[${sessionObj.id}] ✅ WhatsApp Connected & Healthy!`);
+            if (DISAPPEAR.seconds && sock.updateDefaultDisappearingMode) sock.updateDefaultDisappearingMode(Number(DISAPPEAR.seconds)).catch(e => console.warn('[Disappear] default', e.message));
             sendAdminBootReport(sessionObj).catch(e => console.warn('[AdminReport]', e.message));
         }
     });
@@ -1440,6 +1461,20 @@ app.post('/api/admin/pin', (req, res) => {
     try { fs.writeFileSync(PIN_FILE, JSON.stringify({ pin: p, changedAt: new Date().toISOString(), by: req.dashUser.username }), { mode: 0o600 }); } catch (e) { return res.status(500).json({ success: false, error: 'save failed' }); }
     CAMPAIGN_PIN = p; dashAuth.setPin(p);
     res.json({ success: true });
+});
+
+// API: message delivery health (retry receipts served from our store vs missing)
+app.get('/api/msg-health', (req, res) => res.json({ success: true, ...MSG_HEALTH, storeSize: MSG_STORE.size, disappearingSeconds: DISAPPEAR.seconds || 0, chatsWithTimer: Object.keys(DISAPPEAR.applied || {}).length }));
+// API: disappearing messages for all our chats (admin). POST {seconds: 0|86400|604800|7776000}
+app.get('/api/admin/disappearing', (req, res) => res.json({ success: true, seconds: DISAPPEAR.seconds || 0, allowed: DISAPPEAR_ALLOWED }));
+app.post('/api/admin/disappearing', async (req, res) => {
+    if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
+    const secs = Number((req.body || {}).seconds);
+    if (!DISAPPEAR_ALLOWED.includes(secs)) return res.status(400).json({ success: false, error: 'WhatsApp allows only 0 (off), 86400 (24h), 604800 (7 days), 7776000 (90 days)' });
+    DISAPPEAR.seconds = secs; saveDisappear();
+    const out = [];
+    for (const s of SESSIONS) { if (s.sock && s.status === 'CONNECTED' && s.sock.updateDefaultDisappearingMode) { try { await s.sock.updateDefaultDisappearingMode(secs); out.push(s.id); } catch (e) { out.push(s.id + ': ' + e.message); } } }
+    res.json({ success: true, seconds: secs, defaultSetOn: out, note: 'Existing chats get the timer on our next message to them; new chats get it by default.' });
 });
 
 // API: Mobile "➕ Add contact & send now" (operator-triggered). Saves the contact on the chosen line, sends the
