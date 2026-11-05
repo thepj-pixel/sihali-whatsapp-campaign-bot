@@ -246,7 +246,7 @@ function create(opts = {}) {
         const existing = findUser(name);
         if (password != null && password !== '') {
             const pw = String(password);
-            if (pw.length < 8 || pw.length > 200) throw Object.assign(new Error('password: कम से कम 8 अक्षर'), { status: 400 });
+            if (pw.length < 6 || pw.length > 200) throw Object.assign(new Error('password: कम से कम 6 अक्षर'), { status: 400 });
         } else if (!existing) throw Object.assign(new Error('password required for a new user'), { status: 400 });
         const t = new Date(now()).toISOString();
         if (existing) {
@@ -552,7 +552,7 @@ ${m === 'pin' ? pinForm : userForm}
                         <div style="color:#64748b;font-size:12px;margin-bottom:10px;">परिवार के हर सदस्य का अपना यूज़रनेम-पासवर्ड। पासवर्ड कहीं सेव नहीं दिखता — भूल जाएँ तो यहीं नया डाल दें।</div>
                         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
                             <input id="du-name" type="text" placeholder="यूज़रनेम" autocapitalize="none" autocomplete="off" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:140px;flex:1;">
-                            <input id="du-pass" type="password" placeholder="नया पासवर्ड (8+ अक्षर)" autocomplete="new-password" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:160px;flex:1;">
+                            <input id="du-pass" type="password" placeholder="नया पासवर्ड (6+ अक्षर)" autocomplete="new-password" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:160px;flex:1;">
                             <select id="du-role" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;"><option value="member">सदस्य</option><option value="admin">admin</option></select>
                             <button type="button" id="du-save" style="background:#2563eb;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;">💾 जोड़ें / पासवर्ड बदलें</button>
                         </div>
