@@ -697,7 +697,9 @@ async function startSession(sessionObj) {
 
                 const imageCaption = hasImage ? body : '';
                 // Caption + a photo we could not classify (or a plain personal photo): the caption text drives the reply
-                if (hasImage && imageAnalysis && imageCaption && (imageAnalysis.fallback || ['other', 'personal_photo'].includes(imageAnalysis.category))) {
+                // a short caption ("ye dekhiye", "ye lo") says nothing on its own: the photo reply (ack + one-line ask) is used instead
+                const captionSays = imageCaption && (imageCaption.trim().split(/\s+/).length > 4 || /\?/.test(imageCaption) || /(naali|nali|sadak|road|paani|pani|bijli|kachra|नाली|सड़क|पानी|बिजली|कचरा|गड्ढ|parchi|पर्ची)/i.test(imageCaption));
+                if (hasImage && imageAnalysis && imageCaption && captionSays && (imageAnalysis.fallback || ['other', 'personal_photo'].includes(imageAnalysis.category))) {
                     try { const um = userMemory.getUser(senderPhone); if (um) { require('./voter_memory.js').ensure(um).photoOpenAt = new Date().toISOString(); } } catch (e) {}
                     imageAnalysis = null;
                 }
@@ -947,8 +949,11 @@ async function startSession(sessionObj) {
                     }
 
                     const isMediaToken = replyBrain.MEDIA_RX.test(body.trim());
-                    const isPhotoQuery = !isMediaToken && lower.includes('photo') || lower.includes('poster') || lower.includes('फोटो') || lower.includes('पोस्टर') || lower.includes('तस्वीर') || lower.includes('banner') || lower.includes('image');
-                    const isVideoQuery = !isMediaToken && lower.includes('video') || lower.includes('reel') || lower.includes('वीडियो') || lower.includes('रील') || lower.includes('clip');
+                    // 5 Nov: only a REQUEST for a poster/video sends one ("poster bhejo", "video dikhao"); a voter who is sending us a
+                    // photo ("photo bhej raha hu, dekhiye") or whose message came with an image is never answered with our poster.
+                    const mediaAsk = /(bhejo|bhej do|bhejiye|bhej dijiye|dikhao|dikhaiye|dikha do|chahiye|chaiye|de do|send|भेजो|भेज दो|भेजिए|भेज दीजिए|दिखाओ|दिखाइए|दिखा दो|चाहिए|दे दो)/i.test(lower) && !/(bhej raha|bhej rahi|bhej rha|bhej rhi|bhej diya|bhej di|bhejta|dekhiye|dekho|dekh lo|भेज रहा|भेज रही|भेज दिया|भेज दी|देखिए|देखो|देख लो)/i.test(lower);
+                    const isPhotoQuery = !isMediaToken && !hasImage && mediaAsk && /(photo|poster|फोटो|पोस्टर|तस्वीर|banner|image)/i.test(lower);
+                    const isVideoQuery = !isMediaToken && !hasImage && mediaAsk && /(video|reel|वीडियो|रील|clip)/i.test(lower);
                     const isPosterGenQuery = lower.includes('poster bana') || lower.includes('status bana') || lower.includes('फोटो बना') || lower.includes('पोस्टर बना');
 
                     // Check if user is confirming previous query ("ye hie details h", "yahi h", "itna hi pata h", etc.)
