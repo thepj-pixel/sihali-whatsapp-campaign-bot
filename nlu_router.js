@@ -111,7 +111,7 @@ function plan(n, user, ctx = {}) {
             const st = user && user.slipTarget && !user.slipTarget.done ? user.slipTarget : null;
             let t = name ? S(`आप ${ji(name)} हैं—आपने बताया था 🙏`, `Aap ${name} ji hain—aapne bataya tha 🙏`)
                 : S('आपने अभी तक अपना नाम नहीं बताया 🙏 बता दीजिए, याद रखूँगी।', 'Aapne abhi tak apna naam nahi bataya 🙏 Bata dijiye, yaad rakhungi.');
-            if (st && st.who === 'other' && st.name) t += S(` और ${st.nameHi || st.name} जी की पर्ची ढूँढ रहे थे—उनके पिता का नाम या वार्ड बता दीजिए।`, ` Aur ${st.nameRoman || st.name} ji ki parchi dhoondh rahe the—unke pita ka naam ya ward bata dijiye.`);
+            if (st && st.who === 'other' && st.name) t += S(` और ${st.nameHi || st.name} जी की पर्ची ढूँढ रहे थे—उनके पिता/पति का नाम या वार्ड बता दीजिए।`, ` Aur ${st.nameRoman || st.name} ji ki parchi dhoondh rahe the—unke pita/pati ka naam ya ward bata dijiye.`);
             else if (name) t += S(' बताइए, क्या मदद करूँ?', ' Bataiye, kya madad karun?');
             out.reply = { intent: 'recall_self', text: t };
             out.noSlip = true;
@@ -173,7 +173,7 @@ function clarify(user) {
     if (user && ['greeting', 'thanks', 'support'].includes(user.nluTurnIntent)) return null;
     const en = scriptEn(user);
     const st = user && user.slipTarget && !user.slipTarget.done ? user.slipTarget : null;
-    if (st && st.who === 'other' && st.name) return en ? `${st.nameRoman || st.name} ji ki parchi chahiye? Unke pita ka naam ya ward bata dijiye 🙏` : `${st.nameHi || st.name} जी की पर्ची चाहिए? उनके पिता का नाम या वार्ड बता दीजिए 🙏`;
+    if (st && st.who === 'other' && st.name) return en ? `${st.nameRoman || st.name} ji ki parchi chahiye? Unke pita/pati ka naam ya ward bata dijiye 🙏` : `${st.nameHi || st.name} जी की पर्ची चाहिए? उनके पिता/पति का नाम या वार्ड बता दीजिए 🙏`;
     if (st && st.who === 'self') return en ? 'Aapki parchi nikaal doon? Apna poora naam aur pita/pati ka naam likh dijiye 🙏' : 'आपकी पर्ची निकाल दूँ? अपना पूरा नाम और पिता/पति का नाम लिख दीजिए 🙏';
     return null;
 }

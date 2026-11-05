@@ -57,7 +57,7 @@ const COMPLAINT_RX = /(naali|nali|sadak|paani|pani|bijli|light|toot|tuti|kharab|
 const ABUSE_RX = /(kutt|kamin|harami|bsdk|bhosd|madarc|chutiy|nalayak|कुत्त|कमीन|हरामी|नालायक)/i;
 const GREET_RX = /^(ram\s*ram|raam\s*raam|राम\s*राम|namaste|namaskar|नमस्ते|नमस्कार|pranam|प्रणाम|hi+|hello|hey|jai shree ram|जय श्री राम|radhe radhe)\b/i;
 const THANKS_RX = /^(thanks?|thank you|shukriya|dhanyawad|dhanyavad|धन्यवाद|शुक्रिया)\b/i;
-const FATHER_RX = /(?:pita|pitaji|papa|father|baap|पिता|पिताजी|पापा|s\/o)\s*(?:ji|जी)?\s*(?:ka|का)?\s*(?:naam|नाम)?\s*(?:h|hai|है|:)?\s*([a-z\u0900-\u097F]+(?:\s+[a-z\u0900-\u097F]+)?)/i;
+const FATHER_RX = /(?:pita|pitaji|papa|father|baap|pati|husband|पिता|पिताजी|पापा|पति|s\/o|w\/o)\s*(?:ji|जी)?\s*(?:ka|का)?\s*(?:naam|नाम)?\s*(?:h|hai|है|:)?\s*([a-z\u0900-\u097F]+(?:\s+[a-z\u0900-\u097F]+)?)/i;
 
 function scriptOf(t) { return /[\u0900-\u097F]/.test(t) ? 'hindi' : (/[a-z]/i.test(t) ? 'roman' : null); }
 

@@ -1,3 +1,4 @@
+const { relLabel } = require('./relation_label');
 /**
  * Voter-slip (parchi) conversation state — one decision function shared by server.js and ai_assistant_service.js.
  *
@@ -131,27 +132,27 @@ function lastBot(user) {
 const fresh = (user, key) => user && user[key] && (!user.slipPendingAt || Date.now() - Date.parse(user.slipPendingAt) < PENDING_TTL_MS);
 
 function confirmText(v, en) {
-    const rel = v.rel_type === 'H' ? 'पति' : 'पिताजी';
-    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${v.rel_type === 'H' ? 'pati' : 'pitaji'} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
+    const rel = relLabel(v);
+    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${relLabel(v, true)} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
     return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या आपके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है?\n\nसही हो तो बस *'हाँ'* लिख दीजिए—पर्ची तुरंत भेज दूँगी 🙏\n*(अगर ये आप नहीं हैं, तो अपना पूरा नाम और पिता/पति का नाम लिखिए)*`;
 }
 function listText(matches, q, en) {
     if (en) {
         let e = `Voter list me *${q}* se milte ${matches.length} naam mile hain:\n\n`;
-        matches.forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'pati' : 'pita'}: ${m.rel_name_hi}) — ward ${m.ward}\n`; });
+        matches.forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m, true)}: ${m.rel_name_hi}) — ward ${m.ward}\n`; });
         return e + `\nAap inme se kaun hain? Bas number (*1*, *2*…) ya apne pita/pati ka naam bhej dijiye—aapki parchi turant bhej dungi 🙏`;
     }
     let t = `वोटर लिस्ट में *${q}* से मिलते ${matches.length} नाम मिले हैं:\n\n`;
-    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'पति' : 'पिता'}: ${m.rel_name_hi}) — वार्ड ${m.ward}\n`; });
+    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m)}: ${m.rel_name_hi}) — वार्ड ${m.ward}\n`; });
     return t + `\nआप इनमें से कौन हैं? बस नंबर (*1*, *2*…) या अपने पिता/पति का नाम भेज दीजिए—आपकी पर्ची तुरंत भेज दूँगी 🙏`;
 }
 function confirmOther(v, en) {
-    const rel = v.rel_type === 'H' || v.rel_type === 'पति' ? (en ? 'pati' : 'पति') : (en ? 'pita' : 'पिता');
+    const rel = relLabel(v, en);
     if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya unke ${rel} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai? Sahi ho to *'haan'* likh dijiye—unki parchi bhej dungi 🙏`;
     return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या उनके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है? सही हो तो *'हाँ'* लिख दीजिए—उनकी पर्ची भेज दूँगी 🙏`;
 }
 function listOther(matches, q, en) {
-    const rel = m => (m.rel_type === 'H' || m.rel_type === 'पति') ? (en ? 'pati' : 'पति') : (en ? 'pita' : 'पिता');
+    const rel = m => relLabel(m, en);
     let t = en ? `Voter list me *${q}* naam ke ${matches.length} log mile hain:\n\n` : `वोटर लिस्ट में *${q}* नाम के ${matches.length} लोग मिले हैं:\n\n`;
     matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${rel(m)}: ${m.rel_name_hi}) — ${en ? 'ward' : 'वार्ड'} ${m.ward}\n`; });
     return t + (en ? `\nInme se ${q} ji kaun se hain? Number (*1*, *2*…) ya unke pita/pati ka naam bhej dijiye 🙏` : `\nइनमें से ${q} जी कौन से हैं? नंबर (*1*, *2*…) या उनके पिता/पति का नाम भेज दीजिए 🙏`);
@@ -259,7 +260,7 @@ function decide(body, user, opts = {}) {
         if (user && user.lastFoundVoter && recall && !asked) {
             const v = user.lastFoundVoter;
             if (en) return { kind: 'recall', voter: v, text: `Ji, yaad hai 🙏 Aap *${v.name_hi}* (${v.rel_type === 'H' ? 'pati' : 'pita'}: ${v.rel_name_hi}, ward ${v.ward}) hain—aapki parchi upar isi chat me hai. Dobara chahiye to "parchi" likh dijiye, ya parivar ke kisi aur ka naam bhejiye.` };
-            return { kind: 'recall', voter: v, text: `जी, याद है 🙏 आप *${v.name_hi}* (${v.rel_type === 'H' ? 'पति' : 'पिता'}: ${v.rel_name_hi}, वार्ड ${v.ward}) हैं—आपकी पर्ची ऊपर इसी चैट में है। दोबारा चाहिए तो "पर्ची" लिख दीजिए, या परिवार के किसी और का नाम भेजिए।` };
+            return { kind: 'recall', voter: v, text: `जी, याद है 🙏 आप *${v.name_hi}* (${relLabel(v)}: ${v.rel_name_hi}, वार्ड ${v.ward}) हैं—आपकी पर्ची ऊपर इसी चैट में है। दोबारा चाहिए तो "पर्ची" लिख दीजिए, या परिवार के किसी और का नाम भेजिए।` };
         }
         if (user && user.lastFoundVoter && asked) return { kind: 'deliver', voter: user.lastFoundVoter, again: true };
         query = rememberedName(user);
@@ -271,7 +272,7 @@ function decide(body, user, opts = {}) {
     if (!matches.length) {
         if (other) {
             const again = lastBot(user).includes(`*${shown}*`) && /(नहीं मिला|nahi mila)/.test(lastBot(user));
-            if (again) return { kind: 'not_found', text: en ? `*${shown}* naam abhi bhi list me nahi dikh raha 🙏 Ho sakta hai voter card par naam thoda alag likha ho. Unke pita ka naam bata dijiye, usse dhoondh lungi.` : `*${shown}* नाम अभी भी सूची में नहीं दिख रहा 🙏 हो सकता है वोटर कार्ड पर नाम थोड़ा अलग लिखा हो। उनके पिता का नाम बता दीजिए, उससे ढूँढ लूँगी।` };
+            if (again) return { kind: 'not_found', text: en ? `*${shown}* naam abhi bhi list me nahi dikh raha 🙏 Ho sakta hai voter card par naam thoda alag likha ho. Unke pita/pati ka naam bata dijiye, usse dhoondh lungi.` : `*${shown}* नाम अभी भी सूची में नहीं दिख रहा 🙏 हो सकता है वोटर कार्ड पर नाम थोड़ा अलग लिखा हो। उनके पिता/पति का नाम बता दीजिए, उससे ढूँढ लूँगी।` };
             return { kind: 'not_found', text: NOT_FOUND_OTHER(shown, en) };
         }
         return (asked || recall || opts.nlu || (opts.slipIntent && slipPromptLast)) ? { kind: 'not_found', text: en ? NOT_FOUND_EN(shown) : NOT_FOUND(shown) } : null;
@@ -287,12 +288,12 @@ function decide(body, user, opts = {}) {
                 // the same list is already on screen: don't paste it again, ask for the pick in one line
                 user.slipListRepeat = (user.slipListRepeat || 0) + 1;
                 const lines = en
-                    ? [`Ji, ${shown} ji ki hi parchi dhoondh rahi hoon 🙏 List me is naam ke ${matches.length} log hain—upar wali list me se unka number bhej dijiye, ya unke pita ka naam ya ward bata dijiye.`,
-                       `${shown} naam ke ${matches.length} log hain, isliye pakka karna zaroori hai 🙏 Unke pita ka naam ya ward bata dijiye, turant parchi bhej dungi.`,
+                    ? [`Ji, ${shown} ji ki hi parchi dhoondh rahi hoon 🙏 List me is naam ke ${matches.length} log hain—upar wali list me se unka number bhej dijiye, ya unke pita/pati ka naam ya ward bata dijiye.`,
+                       `${shown} naam ke ${matches.length} log hain, isliye pakka karna zaroori hai 🙏 Unke pita/pati ka naam ya ward bata dijiye, turant parchi bhej dungi.`,
                        `Samajh rahi hoon, aapko ${shown} ji ki parchi chahiye 🙏 Bas ye bata dijiye ki unke pita kaun hain—${matches.map(m => m.rel_name_hi).filter(Boolean).join(', ')}? Usi se pakki parchi niklegi.`,
                        `Koi baat nahi ji 🙏 ${shown} ji kis ward ya mohalle me rehte hain? Itna bata dein to sahi parchi chhaant dungi.`]
-                    : [`जी, ${shown} जी की ही पर्ची ढूँढ रही हूँ 🙏 सूची में इस नाम के ${matches.length} लोग हैं—ऊपर वाली सूची में से उनका नंबर भेज दीजिए, या उनके पिता का नाम या वार्ड बता दीजिए।`,
-                       `${shown} नाम के ${matches.length} लोग हैं, इसलिए पक्का करना ज़रूरी है 🙏 उनके पिता का नाम या वार्ड बता दीजिए, तुरंत पर्ची भेज दूँगी।`,
+                    : [`जी, ${shown} जी की ही पर्ची ढूँढ रही हूँ 🙏 सूची में इस नाम के ${matches.length} लोग हैं—ऊपर वाली सूची में से उनका नंबर भेज दीजिए, या उनके पिता/पति का नाम या वार्ड बता दीजिए।`,
+                       `${shown} नाम के ${matches.length} लोग हैं, इसलिए पक्का करना ज़रूरी है 🙏 उनके पिता/पति का नाम या वार्ड बता दीजिए, तुरंत पर्ची भेज दूँगी।`,
                        `समझ रही हूँ, आपको ${shown} जी की पर्ची चाहिए 🙏 बस ये बता दीजिए कि उनके पिता कौन हैं—${matches.map(m => m.rel_name_hi).filter(Boolean).join(', ')}? उसी से पक्की पर्ची निकलेगी।`,
                        `कोई बात नहीं जी 🙏 ${shown} जी किस वार्ड या मोहल्ले में रहते हैं? इतना बता दें तो सही पर्ची छाँट दूँगी।`];
                 return { kind: 'choose', matches, text: lines[(user.slipListRepeat - 1) % lines.length] };

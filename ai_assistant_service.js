@@ -816,7 +816,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
                 if (!fatherGiven) {
                     // Privacy: never hand out a slip on a bare name match; confirm father/husband first
                     if (user) { user.pendingParchiCandidate = tv; userMemory.save(); }
-                    const relLabel = tv.rel_type === 'H' ? 'पति' : 'पिताजी';
+                    const relLabel = require('./relation_label').relLabel(tv);
                     console.log('[AI Assistant] Name match; asking relative confirmation before slip for:', userMessage);
                     return `वोटर लिस्ट में *${tv.name_hi || tv.name}* नाम मिला है 📋\n\nपर्ची भेजने से पहले बस पुष्टि कर दीजिए — आपके ${relLabel} का नाम क्या है? 🙏`;
                 }

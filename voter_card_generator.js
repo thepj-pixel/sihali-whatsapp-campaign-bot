@@ -93,7 +93,7 @@ async function generateVoterCard(voter) {
     const nameEn = voter.name_en || voter.ne || voter.name || '';
     const relName = voter.rel_name_hi || voter.rel_name || voter.r || '';
     const rtRaw = String(voter.rt || voter.rel_type || 'F').trim();
-    const relType = (rtRaw === 'H' || rtRaw === 'पति' || rtRaw === 'h') ? 'पति' : ((rtRaw === 'M' || rtRaw === 'माता') ? 'माता' : 'पिता');
+    const relType = require('./relation_label').relLabel(voter);
     const ward = voter.ward || voter.w || 1;
     const serial = voter.sr_no || voter.s || 1;
     const epic = voter.epic || voter.e || '--';

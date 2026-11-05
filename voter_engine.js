@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { relLabel } = require('./relation_label');
 const path = require('path');
 
 // Load the VM-safe tracked database. Older installations may still have
@@ -565,7 +566,7 @@ function getVoterByWardAndSr(ward, srNo) {
 
 function formatShortSlipResponse(voter) {
     const name = voter.name_hi || voter.name_raw || voter.n || 'मतदाता';
-    const relType = (voter.rel_type === 'H' || voter.rt === 'पति') ? 'पति' : 'पिता';
+    const relType = relLabel(voter);
     const relName = voter.rel_name_hi || voter.rn || '—';
     const ward = voter.ward || voter.w || '—';
     const srNo = voter.sr_no || voter.s || '—';
@@ -591,10 +592,10 @@ function formatShortSlipResponse(voter) {
 function formatDisambiguationPrompt(matches, queryName) {
     let text = `भैया, वोटर लिस्ट में *'${queryName}'* नाम से ${matches.length} मतदाता मिले हैं:\n\n`;
     matches.forEach((m, idx) => {
-        const relType = m.rel_type === 'H' ? 'पति' : 'पिता';
-        text += `${idx + 1}️⃣ *${m.name_hi}* (${relType}: ${m.rel_name_hi}) — *वार्ड ${m.ward}*, क्र. [ ${m.sr_no} ] (मकान नं. ${m.house_no})\n`;
+        const relType = relLabel(m);
+        text += `${idx + 1}️⃣ *${m.name_hi}* (${relType}: ${m.rel_name_hi}) — *वार्ड ${m.ward}*, क्र. [ ${m.sr_no} ]\n`;
     });
-    text += `\nआपके पिताजी का नाम क्या है भैया? सही पर्ची के लिए *'1'*, *'2'* या अपने *पिता का नाम* लिखकर भेजें! 😊🚩`;
+    text += `\nआप इनमें से कौन हैं? सही पर्ची के लिए *'1'*, *'2'* या अपने *पिता/पति का नाम* लिखकर भेजें! 😊🚩`;
     return text;
 }
 
@@ -602,7 +603,7 @@ function formatSlipResponse(voter) {
     const family = getFamilyMembers(voter);
 
     const name = voter.name_hi || voter.name_raw || voter.n || 'मतदाता';
-    const relType = (voter.rel_type === 'H' || voter.rt === 'पति') ? 'पति' : 'पिता';
+    const relType = relLabel(voter);
     const relName = voter.rel_name_hi || voter.rn || '—';
     const ward = voter.ward || voter.w || '—';
     const srNo = voter.sr_no || voter.s || '—';

@@ -4298,7 +4298,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                 return;
                             }
                             data.results.slice(0, 8).forEach(function(v) {
-                                const rel = v.rel_type === 'H' ? 'पति' : 'पिता';
+                                const rel = require('./relation_label').relLabel(v);
                                 const item = document.createElement('div');
                                 item.style.cssText = 'padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; text-align: left; background: white;';
                                 item.onmouseenter = function() { this.style.background = '#f1f5f9'; };
@@ -4332,7 +4332,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     document.getElementById('voter-search-dropdown').style.display = 'none';
 
                     const badge = document.getElementById('voter-linked-badge');
-                    const rel = v.rel_type === 'H' ? 'पति' : 'पिता';
+                    const rel = require('./relation_label').relLabel(v);
                     badge.innerHTML = '✅ <strong>' + (v.name_hi || v.name) + '</strong> (' + rel + ': ' + (v.rel_name_hi || '--') + ', वार्ड ' + v.ward + ', #' + v.sr_no + ', EPIC: ' + v.epic + ') <button type="button" onclick="clearLinkedVoter()" style="background: none; border: none; color: #dc2626; cursor: pointer; margin-left: 8px; font-weight: 700;">✕ Unlink</button>';
                     badge.style.display = 'block';
 

@@ -90,7 +90,7 @@ function buildProfile(user, deps) {
         phone: user.phone,
         name: op.name || m.name || user.name || (vr && vr.name_hi) || '',
         relName: relName || '',
-        relType: op.relType || (m.slip && m.slip.relation) || (vr && (vr.rel_type === 'H' ? 'पति' : 'पिता')) || '',
+        relType: op.relType || (m.slip && m.slip.relation) || (vr && require('./relation_label').relLabel(vr)) || '',
         ward: ward || '',
         village: m.village ? (kb.villageName ? kb.villageName(m.village, 'hi') : m.village) : '',
         booth: booth || '',
