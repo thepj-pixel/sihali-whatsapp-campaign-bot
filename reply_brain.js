@@ -1111,7 +1111,8 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
     if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
     if (/(\bmonday\b|\bsunday\b|\bvote dalna\b)/i.test(r) && l === 'hi') return 'wrong_script';
     if (/(kad़ै|कड़ै|kade)\s*(वोट|vote)/i.test(r)) return 'bad_dialect';
-    if (/(आपका ध्यान रख|aapka dhyan rakh)/i.test(r)) return 'grammar';
+    if (/(आपका[^।?!]{0,25}ध्यान रख|aapka[^.?!]{0,25}dhyan rakh|नौकरी[^।?!]{0,20}बनेगी|naukri[^.?!]{0,20}banegi)/i.test(r)) return 'grammar';
+    if (/((नौकरी|काम)[^।?!]{0,25}ज़रूर (लगेगी|मिलेगी|बनेगी|लगेगा|मिलेगा)|(naukri|kaam)[^.?!]{0,25}(zaroor|jarur|zarur) (lagegi|milegi|banegi|lagega|milega))/i.test(r)) return 'self_promise';
     if (/\b(hum|ham)\b[^.?!]{0,30}\b(samajhti|samajhta|karti|karta|rahi|raha|sunti|janti)\s+(hoon|hu|hun)\b|\bहम\b[^।?!]{0,30}(समझती|करती|रही|सुनती|जानती)\s+हूँ/i.test(r)) return 'grammar';
     if (/((prayas|koshish|vaada|wada)\s+(karti|karungi|karta)\s*(hoon|hu|hun)?|(khulwa|banwa|karwa|lagwa|dila)\w*\s+(dungi|deti hoon|deti hu|karungi)|(प्रयास|कोशिश|वादा)\s+(करती|करूँगी|करूंगी)|(खुलवा|बनवा|करवा|लगवा|दिला)\S*\s+(दूँगी|दूंगी|देती हूँ|करूँगी))/i.test(r)) return 'self_promise';
     if (user && user.dialectPref === 'haryanvi' && !/(thar[aei]|thaar[aei]|mhar[aei]|\bsai\b|\bse\b|\bib\b|kade|\bke\b|थार|म्हार|सै|इब|कड़ै|के )/i.test(r)) return 'no_dialect';
