@@ -79,7 +79,7 @@ if (fs.existsSync(FONT_PATH)) {
 async function generateVoterCard(voter) {
     const cacheKey = voter.id || voter.sr_no || voter.epic || `${voter.ward || 1}_${voter.sr_no || 1}`;
     // v3 in the name: cards rendered before 4 Nov 2026 carried a symbol and must never be served again
-    const cacheFile = path.join(CARD_CACHE_DIR, `card_v4_${cacheKey}.jpg`);
+    const cacheFile = path.join(CARD_CACHE_DIR, `card_v5_${cacheKey}.jpg`);
     if (fs.existsSync(cacheFile)) {
         try {
             return fs.readFileSync(cacheFile);
@@ -106,8 +106,9 @@ async function generateVoterCard(voter) {
         age = parseInt(house);
         house = String(temp);
     }
-    const gender = voter.gender_hi || (voter.gender === 'F' || voter.g === 'F' ? 'महिला' : 'पुरुष');
-    const booth = voter.booth || `बूथ 95 (कमरा नं 1)`;
+    const gRaw = String(voter.gender_hi || voter.gender || voter.g || '');
+    const gender = /महिला|^f/i.test(gRaw) ? 'महिला' : (/पुरुष|^m/i.test(gRaw) ? 'पुरुष' : '');
+    const booth = [voter.booth || 'बूथ 95', voter.booth_name ? 'रा.उ.मा.वि. सिहाली खुर्द' : ''].filter(Boolean).join(' • ');
 
     const fontStyleMarkup = FONT_B64 ? `
         <style>
@@ -161,10 +162,10 @@ async function generateVoterCard(voter) {
       <!-- Top Header -->
       <rect x="30" y="35" width="1020" height="85" fill="#f8fafc" rx="24"/>
       <text x="540" y="78" font-size="28" font-weight="900" fill="#0f172a" text-anchor="middle">
-        🏛️ ग्राम पंचायत सिहाली खुर्द • पंचायत आम चुनाव 2026
+        ग्राम पंचायत सिहाली खुर्द • पंचायत आम चुनाव 2026
       </text>
       <text x="540" y="108" font-size="19" font-weight="700" fill="#ea580c" text-anchor="middle" letter-spacing="1">
-        ★ अधिकृत डिजिटल मतदाता पर्ची (DIGITAL VOTER SLIP) ★
+        ★ डिजिटल मतदाता पर्ची (DIGITAL VOTER SLIP) ★
       </text>
 
       <!-- Candidate Box -->
@@ -173,7 +174,7 @@ async function generateVoterCard(voter) {
 
       <!-- Candidate Details (No Kram Sankhya 1 or 2, just Abhay Singh & Moti Angli Wale) -->
       <text x="265" y="186" font-size="21" font-weight="800" fill="#f59e0b">
-        ⭐ सरपंच पद प्रत्याशी
+        सरपंच पद प्रत्याशी
       </text>
       <text x="265" y="234" font-size="44" font-weight="900" fill="#ffffff">
         अभय सिंह
@@ -182,7 +183,7 @@ async function generateVoterCard(voter) {
         (मोटी आंगली वाले)
       </text>
       <text x="265" y="304" font-size="16" font-weight="600" fill="#94a3b8">
-        40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा
+        40 साल की सच्ची समाज सेवा • अटूट भाईचारा
       </text>
 
       <!-- Ballot serial number badge (the parcha leaves the election symbol blank: never print a symbol) -->
@@ -197,7 +198,7 @@ async function generateVoterCard(voter) {
       <rect x="55" y="348" width="970" height="730" fill="#f8fafc" rx="16" stroke="#e2e8f0" stroke-width="2"/>
       <rect x="55" y="348" width="970" height="52" fill="#e2e8f0" rx="16"/>
       <text x="80" y="383" font-size="20" font-weight="800" fill="#334155">
-        📋 मतदाता का विवरण (VOTER DETAILS)
+        मतदाता का विवरण (VOTER DETAILS)
       </text>
 
       <!-- Name Row -->
@@ -231,7 +232,7 @@ async function generateVoterCard(voter) {
 
       <!-- Age & Gender -->
       <text x="85" y="830" font-size="22" font-weight="700" fill="#64748b">आयु एवं लिंग:</text>
-      <text x="320" y="830" font-size="26" font-weight="800" fill="#1e293b">${age} वर्ष  |  ${gender}</text>
+      <text x="320" y="830" font-size="26" font-weight="800" fill="#1e293b">${age} वर्ष${gender ? '  |  ' + gender : ''}</text>
       <line x1="85" y1="855" x2="995" y2="855" stroke="#e2e8f0" stroke-width="1.5"/>
 
       <!-- Polling Station -->
@@ -241,7 +242,7 @@ async function generateVoterCard(voter) {
 
       <!-- Polling Date & Timing Box -->
       <rect x="85" y="955" width="910" height="95" fill="#f0fdf4" rx="12" stroke="#bbf7d0" stroke-width="1.5"/>
-      <text x="110" y="990" font-size="17" font-weight="700" fill="#15803d">🗓️ मतदान दिनांक व समय:</text>
+      <text x="110" y="990" font-size="17" font-weight="700" fill="#15803d">मतदान दिनांक व समय:</text>
       <text x="110" y="1025" font-size="24" font-weight="900" fill="#166534">सोमवार, 16 नवम्बर 2026  •  प्रातः 7:30 बजे से सायं 5:30 बजे तक</text>
 
       <!-- Footer Appeal: "थारी आंगली से मोटी आंगली वाले के आगे मुहर लगाओ!" -->
@@ -352,7 +353,7 @@ async function generateFamilyCard(head, members) {
       <circle cx="140" cy="210" r="60" fill="#1e293b" stroke="#f59e0b" stroke-width="4"/>
       <text x="225" y="180" font-size="20" font-weight="800" fill="#f59e0b">सरपंच पद प्रत्याशी</text>
       <text x="225" y="226" font-size="40" font-weight="900" fill="#ffffff">अभय सिंह <tspan font-size="24" fill="#fed7aa">(मोटी आंगली वाले)</tspan></text>
-      <text x="225" y="262" font-size="16" font-weight="600" fill="#94a3b8">40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा</text>
+      <text x="225" y="262" font-size="16" font-weight="600" fill="#94a3b8">40 साल की सच्ची समाज सेवा • अटूट भाईचारा</text>
       <text x="60" y="335" font-size="24" font-weight="900" fill="#334155">वार्ड नं. ${esc(head.ward)}  •  मकान नं. ${esc(head.house_no || head.h)}  •  ${list.length} मतदाता</text>
       ${rows}
       <rect x="55" y="${yEnd + 12}" width="970" height="80" fill="#f0fdf4" rx="12" stroke="#bbf7d0" stroke-width="1.5"/>
