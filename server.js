@@ -1171,7 +1171,7 @@ async function startSession(sessionObj) {
                         try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: 'voter_slip', topic: null }); } catch (e) {}
                         if (slipPlan.kind === 'family' && targetVoter) {
                             const fam = slipPlan.members || [targetVoter];
-                            replyText = `🏠 आपके परिवार की मतदाता पर्ची (${fam.length} मतदाता) 🙏`;
+                            replyText = slipFlow.familyCaption({ ...slipPlan, members: fam }, !!(user.memory && user.memory.scriptPref === 'hinglish'));
                             let famBuf = null;
                             try { famBuf = await voterCardGen.generateFamilyCard(targetVoter, fam); } catch (e) { console.error(`[${sessionObj.id}] family card error:`, e.message); }
                             if (famBuf) await sendSafeMessage(sock, replyJid, { image: famBuf, caption: replyText });
@@ -2652,7 +2652,7 @@ function selfTestPinOk(req) {
     const pin = req.headers['x-campaign-pin'] || req.query.pin || (req.body && req.body.pin) || (cookiePin && decodeURIComponent(cookiePin));
     return pin === CAMPAIGN_PIN || !!(req.dashUser && req.dashUser.role === 'admin');
 }
-// POST /api/ai-keys {nvidia_keys?:[..], groq_api_key?, gemini_api_key?} -> writes gitignored api_config.json and hot-reloads (PIN required)
+// POST /api/ai-keys {nvidia_keys?:[..], groq_api_keys?:[..], groq_api_key?, gemini_api_key?} -> writes gitignored api_config.json and hot-reloads (PIN required)
 app.post('/api/ai-keys', (req, res) => {
     try {
         const cfgPath = path.join(__dirname, 'api_config.json');
@@ -2660,6 +2660,13 @@ app.post('/api/ai-keys', (req, res) => {
         try { if (fs.existsSync(cfgPath)) cur = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) || {}; } catch (e) {}
         const b = req.body || {};
         if (Array.isArray(b.nvidia_keys)) cur.nvidia_keys = b.nvidia_keys.map(String).map(s => s.trim()).filter(Boolean);
+        if (Array.isArray(b.groq_api_keys)) {
+            const ks = [];
+            for (const k of b.groq_api_keys.map(String).map(x => x.trim()).filter(Boolean)) if (!ks.includes(k)) ks.push(k);
+            cur.groq_api_keys = ks;
+            // legacy single key would otherwise be re-added as an extra key; keep it only if it is in the new list
+            if (cur.groq_api_key && !ks.includes(cur.groq_api_key)) delete cur.groq_api_key;
+        }
         if (typeof b.groq_api_key === 'string') cur.groq_api_key = b.groq_api_key.trim();
         if (typeof b.gemini_api_key === 'string') cur.gemini_api_key = b.gemini_api_key.trim();
         fs.writeFileSync(cfgPath, JSON.stringify(cur, null, 2), { mode: 0o600 });
@@ -2763,9 +2770,9 @@ ocRoutes.install(app, { userMemory, runFollowups: () => runOperatorFollowups() }
 const crmRoutes = require('./crm_routes.js');
 const crmUi = require('./crm_ui.js');
 require('./instruction_routes.js').install(app, { userMemory, getActiveSocket, sendSafeMessage, logMessage,
-    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 9000) : null; } });
+    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || (C.groq_api_keys && C.groq_api_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 9000) : null; } });
 crmRoutes.install(app, { userMemory, getActiveSocket, sendSafeMessage, sendMultiContactCard, engagementPolicy, contactCard, logMessage, samasyaStore, mulaqatStore, voterEngine, voterCardGen, slipFlow, replyBrain,
-    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 7000) : null; } });
+    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || (C.groq_api_keys && C.groq_api_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 7000) : null; } });
 // Vision probe: does an NVIDIA vision model answer with the VM's keys? (uses an approved Media Bank poster)
 app.get('/api/vision/probe', async (req, res) => {
     try {

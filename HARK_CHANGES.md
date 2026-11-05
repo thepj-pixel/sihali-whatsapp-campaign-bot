@@ -1,3 +1,18 @@
+# HARK_CHANGES — v9 (6 Nov 2026, 03:00 IST: LLM providers + mixed-language slip fixes)
+
+| Problem | Fix | Files |
+|---|---|---|
+| Groq `llama-3.1-8b-instant` retired (HTTP 404) | `openai/gpt-oss-20b`, `reasoning_effort: "low"`, `max_tokens: 700` (reasoning tokens count). qwen3 not used (leaks Urdu script) | `ai_assistant_service.js` |
+| One Groq key only | `groq_api_keys: []` (+ legacy `groq_api_key`, env `GROQ_API_KEYS`/`GROQ_API_KEY`); HTTP 429/5xx/network → next key; 4xx stops. `POST /api/ai-keys` takes `groq_api_keys` (array); `/api/ai-status` shows counts (`groq: N`), the probe tests every key (`{ok,count,okCount,keys:[{key:1,ok}]}`, never key values) | `api_keys.js`, `ai_assistant_service.js`, `server.js` |
+| Gemini probe HTTP 503 | key in `x-goog-api-key` header (works for "AQ." keys), models `gemini-2.5-flash` (thinking off) → `gemini-flash-latest`, one retry on 503 | `ai_assistant_service.js` |
+| Live 02:45 "vooterr slip rajeshh devi kie" → "…वो किस वार्ड में रहते हैं?" for a woman | ward question / list use the roll's gender: all matches female (or a देवी/कुमारी name) → "रहती" / "कौन सी" | `slip_flow.js` |
+| Live 02:45 "parivaar" after Rajesh Devi's slip → "*राजेश देवी* नाम से … पक्का नाम नहीं मिला" | typo normaliser (vooter/parchii/slipp/parivaar/famly/kie/"rajeshh") at the entry of slip_flow + NLU; any short family ask with no new name ("uske ghar walo ki bhi", "unke parivar ki bhi", "send family slips") after a slip = THAT voter's family card (same ward + house, no EPIC); caption "उनके परिवार" for a relative | `text_normalize.js`, `slip_flow.js`, `nlu.js`, `server.js` |
+| "mere papa ki slip chahiye" took "ki slip" as the father's name → self flow | filler never counts as a father's name; "papa ki slip" = other person → asks पिताजी's name | `nlu.js` |
+| "voter slip for rajesh devi" searched "for राजेश देवी" | English filler (for/of/the/his/her/send/all…) is never a name | `slip_flow.js`, `nlu.js` |
+| "ward 3 nahi ward 6" / "ward 3 ni ward 6" / "3 nahi 6" picked 3 | the corrected ward wins (slip flow + NLU) | `slip_flow.js`, `nlu.js` |
+
+Tests: new `test:slipmixed` (78 checks: owner's live convo, 10 family wordings, 7 relation asks, English/mixed, corrections, typos; Devanagari / no ballot serial / no EPIC on every reply) and `test:llm` (mocked fetch: model, key rotation, Gemini header/models/503). Both in `test:all`.
+
 # HARK_CHANGES — brain v7.4 (5 Nov 2026 night: round 4 live battery + feature QA before the first real bulk)
 
 Live: 31 conversations on the VM (10 new: replies to a bulk intro, family cards, booth/time, mixed Hindi/English; 3 targeted; 18 round-1 re-runs incl. Haryanvi c26 and STOP c24).

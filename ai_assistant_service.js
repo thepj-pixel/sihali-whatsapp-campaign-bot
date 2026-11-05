@@ -38,7 +38,7 @@ let CONFIG = {
     }
 };
 CONFIG = { ...CONFIG, ...loadApiConfig() };
-if (!CONFIG.nvidia_keys.length && !CONFIG.groq_api_key && !CONFIG.gemini_api_key) {
+if (!CONFIG.nvidia_keys.length && !groqKeys().length && !CONFIG.gemini_api_key) {
     console.warn('[AI Assistant] No LLM API keys configured (NVIDIA_API_KEYS / GROQ_API_KEY / GEMINI_API_KEY env or api_config.json). Local engine only.');
 }
 
@@ -649,11 +649,23 @@ async function callNvidia(messages, key) {
     }
 }
 
-// 2. Call Groq Endpoint (Ultra-fast Secondary Fallback)
-async function callGroq(messages, key) {
+// 2. Call Groq Endpoint (fast secondary fallback).
+// llama-3.1-8b-instant was retired (HTTP 404). openai/gpt-oss-20b is a reasoning model: reasoning tokens
+// count against max_tokens, so keep reasoning_effort low and leave ~700 tokens. (qwen3 leaks Urdu script: not used.)
+const GROQ_MODEL = 'openai/gpt-oss-20b';
+function groqKeys() {
+    const out = [];
+    const add = k => { const t = String(k || '').trim(); if (t && !out.includes(t)) out.push(t); };
+    (Array.isArray(CONFIG.groq_api_keys) ? CONFIG.groq_api_keys : []).forEach(add);
+    add(CONFIG.groq_api_key);
+    String(process.env.GROQ_API_KEYS || '').split(',').forEach(add);
+    add(process.env.GROQ_API_KEY);
+    return out;
+}
+async function callGroq(messages, key, timeoutMs = 8500) {
     if (!key) throw new Error('No Groq key configured');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8500);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -663,14 +675,15 @@ async function callGroq(messages, key) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: 'llama-3.1-8b-instant',
+                model: GROQ_MODEL,
                 messages: messages,
-                max_tokens: 280,
+                max_tokens: 700,
+                reasoning_effort: 'low',
                 temperature: 0.6
             })
         });
         clearTimeout(timeout);
-        if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
+        if (!res.ok) { const err = new Error(`Groq HTTP ${res.status}`); err.status = res.status; throw err; }
         const data = await res.json();
         return data.choices?.[0]?.message?.content?.trim();
     } catch (e) {
@@ -678,44 +691,77 @@ async function callGroq(messages, key) {
         throw e;
     }
 }
-
-// 3. Call Gemini REST Endpoint (High-volume Tertiary Fallback)
-async function callGemini(systemPrompt, conversationHistory, userMessage, key) {
-    if (!key) throw new Error('No Gemini key configured');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
-    try {
-        const contents = [];
-        for (const msg of conversationHistory) {
-            contents.push({
-                role: msg.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: msg.content }]
-            });
+/** Try each Groq key in turn; move to the next key only on HTTP 429 or 5xx (or a network/timeout error). */
+async function callGroqKeys(messages, keys = groqKeys()) {
+    let lastErr = new Error('No Groq key configured');
+    for (let i = 0; i < keys.length; i++) {
+        try {
+            return await callGroq(messages, keys[i]);
+        } catch (e) {
+            lastErr = e;
+            const st = e.status || 0;
+            const retryable = st === 429 || st >= 500 || !st;
+            if (!retryable) throw e;
+            if (i < keys.length - 1) console.warn(`[AI Assistant] groq key #${i + 1} failed (${e.message}); trying key #${i + 2}`);
         }
-        contents.push({
-            role: 'user',
-            parts: [{ text: userMessage }]
-        });
+    }
+    throw lastErr;
+}
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${key}`;
+// 3. Call Gemini REST Endpoint (tertiary fallback). Key goes in the x-goog-api-key header (never the URL);
+// works for classic "AIza" keys and the newer "AQ." keys. Models: gemini-2.5-flash, then gemini-flash-latest;
+// one retry on HTTP 503.
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+async function callGeminiModel(model, body, key, timeoutMs) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
         const res = await fetch(url, {
             method: 'POST',
             signal: controller.signal,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: systemPrompt }] },
-                contents: contents,
-                generationConfig: { maxOutputTokens: 280, temperature: 0.6 }
-            })
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+            body: JSON.stringify(body)
         });
         clearTimeout(timeout);
-        if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+        if (!res.ok) { const err = new Error(`Gemini ${model} HTTP ${res.status}`); err.status = res.status; throw err; }
         const data = await res.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
     } catch (e) {
         clearTimeout(timeout);
         throw e;
     }
+}
+async function callGemini(systemPrompt, conversationHistory, userMessage, key, timeoutMs = 4500) {
+    if (!key) throw new Error('No Gemini key configured');
+    const contents = [];
+    for (const msg of conversationHistory || []) {
+        contents.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: msg.content }] });
+    }
+    contents.push({ role: 'user', parts: [{ text: userMessage }] });
+    const body = {
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: 400, temperature: 0.6 }
+    };
+    let lastErr = null;
+    for (const model of GEMINI_MODELS) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                // 2.5-flash thinks by default (eats output tokens + time); turn it off there only.
+                const b = model === 'gemini-2.5-flash' ? { ...body, generationConfig: { ...body.generationConfig, thinkingConfig: { thinkingBudget: 0 } } } : body;
+                const out = await callGeminiModel(model, b, key, timeoutMs);
+                if (out) return out;
+                lastErr = new Error(`Gemini ${model} empty`);
+                break;
+            } catch (e) {
+                lastErr = e;
+                if (e.status === 503 && attempt === 0) { await new Promise(r => setTimeout(r, 400)); continue; }
+                break;
+            }
+        }
+    }
+    throw lastErr || new Error('Gemini failed');
 }
 
 function isCannedRejection(reply) {
@@ -882,7 +928,7 @@ function recordReplyStat(result, msg, llmConfigured) {
 }
 
 function hasAnyLLM(apiKey) {
-    return Boolean(apiKey || CONFIG.nvidia_keys[0] || CONFIG.nvidia_keys[1] || CONFIG.groq_api_key || CONFIG.gemini_api_key);
+    return Boolean(apiKey || CONFIG.nvidia_keys[0] || CONFIG.nvidia_keys[1] || groqKeys().length || CONFIG.gemini_api_key || process.env.GEMINI_API_KEY);
 }
 
 /**
@@ -897,8 +943,8 @@ async function callLLMCascade(systemPrompt, history = [], userMessage = '', apiK
     if (k1) tiers.push(['nvidia1', () => callNvidia(messages, k1)]);
     const k2 = CONFIG.nvidia_keys[1];
     if (k2 && k2 !== k1) tiers.push(['nvidia2', () => callNvidia(messages, k2)]);
-    const gq = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
-    if (gq) tiers.push(['groq', () => callGroq(messages, gq)]);
+    const gks = groqKeys();
+    if (gks.length) tiers.push(['groq', () => callGroqKeys(messages, gks)]);
     const gm = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
     if (gm) tiers.push(['gemini', () => callGemini(systemPrompt, history, userMessage, gm)]);
     for (const [name, fn] of tiers) {
@@ -924,7 +970,9 @@ function getLastBrainResult() { return lastBrainResult; }
 function aiStatus() {
     return {
         replyBrain: process.env.REPLY_BRAIN === 'off' ? 'off' : 'v3',
-        providers: { nvidia: CONFIG.nvidia_keys.length, groq: !!(CONFIG.groq_api_key || process.env.GROQ_API_KEY), gemini: !!(CONFIG.gemini_api_key || process.env.GEMINI_API_KEY) },
+        providers: { nvidia: CONFIG.nvidia_keys.length, groq: groqKeys().length, gemini: (CONFIG.gemini_api_key || process.env.GEMINI_API_KEY) ? 1 : 0 },
+        groqModel: GROQ_MODEL,
+        geminiModels: GEMINI_MODELS,
         anyLLM: hasAnyLLM(null),
         nvidiaModel: 'nvidia/nemotron-3.5-bolt-e4b',
         mode: hasAnyLLM(null) ? 'llm_with_template_fallback' : 'templates_only (no LLM key configured)',
@@ -941,8 +989,14 @@ async function probeProviders() {
     if (k1) { try { out.nvidia1 = { ok: !!(await callNvidia(messages, k1)) }; } catch (e) { out.nvidia1 = { ok: false, error: String(e.message).slice(0, 120) }; } }
     const k2 = CONFIG.nvidia_keys[1];
     if (k2) { try { out.nvidia2 = { ok: !!(await callNvidia(messages, k2)) }; } catch (e) { out.nvidia2 = { ok: false, error: String(e.message).slice(0, 120) }; } }
-    const gq = CONFIG.groq_api_key || process.env.GROQ_API_KEY;
-    if (gq) { try { out.groq = { ok: !!(await callGroq(messages, gq)) }; } catch (e) { out.groq = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    const gks = groqKeys();
+    if (gks.length) {
+        const keys = [];
+        for (let i = 0; i < gks.length; i++) {
+            try { keys.push({ key: i + 1, ok: !!(await callGroq(messages, gks[i])) }); } catch (e) { keys.push({ key: i + 1, ok: false, error: String(e.message).slice(0, 120) }); }
+        }
+        out.groq = { ok: keys.some(k => k.ok), model: GROQ_MODEL, count: gks.length, okCount: keys.filter(k => k.ok).length, keys };
+    }
     const gm = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
     if (gm) { try { out.gemini = { ok: !!(await callGemini('Reply with the single word: ok', [], 'ping', gm)) }; } catch (e) { out.gemini = { ok: false, error: String(e.message).slice(0, 120) }; } }
     if (!Object.keys(out).length) out.none = 'No LLM API key configured on this machine (NVIDIA_API_KEY(S) / GROQ_API_KEY / GEMINI_API_KEY env or api_config.json).';
@@ -952,9 +1006,10 @@ async function probeProviders() {
 function reloadKeys() {
     const fresh = loadApiConfig();
     CONFIG.nvidia_keys = fresh.nvidia_keys || [];
+    CONFIG.groq_api_keys = fresh.groq_api_keys || [];
     CONFIG.groq_api_key = fresh.groq_api_key || '';
     CONFIG.gemini_api_key = fresh.gemini_api_key || '';
-    return { nvidia: CONFIG.nvidia_keys.length, groq: !!CONFIG.groq_api_key, gemini: !!CONFIG.gemini_api_key };
+    return { nvidia: CONFIG.nvidia_keys.length, groq: groqKeys().length, gemini: CONFIG.gemini_api_key ? 1 : 0 };
 }
 
 module.exports = {
@@ -964,6 +1019,10 @@ module.exports = {
     aiStatus,
     probeProviders,
     callLLMCascade,
+    callGroq,
+    callGroqKeys,
+    callGemini,
+    groqKeys,
     getFastLocalAnswer,
     getSafeFallback,
     sanitizeLegacy,

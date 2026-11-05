@@ -1,3 +1,4 @@
+const { normalizeMsg } = require('./text_normalize.js');
 /**
  * NLU v5 (5 Nov 2026, production day) — understand the message BEFORE routing.
  *
@@ -31,7 +32,7 @@ const FILLER = new Set(('acha accha achha are arey arre aree bhai bhaiya yaar yr
     'number nambar no ab jaldi la lao mil mila milegi milega gaya gayi aaya aayi tak abhi ok okay sahi theek thik ' +
     'dhanyavad dhanyawad dhanyavaad dhanywad dhanyabad shukriya sukriya thanks thank thankyou thanku thnx thx tq ty badhiya shabash mast good nice ' +
     'jayegi jaegi jayega jaega jaayegi jaayega jaye jaaye jayengi sakti sakta sakte skti skta hogi hoga ho kab kaise kya kyaa kyu ' +
-    'karya kaarya kary karyo kaam kaaj works').split(/\s+/));
+    'karya kaarya kary karyo kaam kaaj works for of the his her their my send give please all member members family parivar pariwar').split(/\s+/));
 const FILLER_HI = new Set(('अरे भाई जी हाँ हां नहीं ना की का के को भी पर्ची वोटर लिस्ट आईडी कार्ड नाम है हैं हूँ उसका उसकी उसके उनका उनकी ' +
     'उनके मेरा मेरी मेरे मुझे दे दो दीजिए भेजो भेज चाहिए थी था वाला वाली बताया बताओ अभी तो में मैं से पर और ये वो बस सिर्फ़ सिर्फ ' +
     'निकालो दिखाओ कौन वार्ड यही वही एक आप तुम नंबर तक आया मिला धन्यवाद शुक्रिया बढ़िया ठीक मिल मिलेगी मिलेगा जाएगी जायेगी जाएगा सकती सकता होगी होगा क्या कब कैसे कार्य काम').split(/\s+/));
@@ -53,12 +54,13 @@ const CONTACT_RX = /((contact|kontact|cantact|संपर्क|कॉन्ट
 const CARD_ISSUE_RX = /((voter|वोटर)\s*(id|card|kard|आईडी|कार्ड)|pehchan patra|पहचान पत्र|epic).{0,30}(nahi|nhi|nahin|नहीं|na)\s*(aaya|aya|aayi|mila|mili|bana|bani|पहुँचा|पहुंचा|आया|मिला|बना)|(kho gaya|kho gya|gum|lost|खो गया|गुम)/i;
 const RECALL_SELF_RX = /(ko+i+n|kaun|kon|कौन)\s*(hu|hoon|hun|हूँ|हूं)\s*(m|main|mai|मैं)?|(main|mai|मैं)\s*(ko+i+n|kaun|kon|कौन)\s*(hu|hoon|हूँ)|(mera|मेरा)\s*(naam|नाम)\s*(yaad|याद|pata|पता|kya|क्या)/i;
 const SLIP_RX = /(parchi|parchee|parchii|pqrchi|slip|voter\s*(list|id|card|slip)|वोटर\s*(लिस्ट|आईडी|कार्ड|पर्ची)|पर्ची|epic|list\s*(me|mein)\s*naam|naam\s*(dekh|check))/i;
-const OTHER_PERSON_RX = /((uski|uska|uske|unki|unka|unke|iski|iska|उसकी|उसका|उनकी|उनका)\b)|(\b[a-z\u0900-\u097F]{3,}\s+(kie|ki|ka|ke|की|का|के)\s+(bhi\s+)?(parchi|voter|पर्ची|वोटर|naam|नाम|id))|(\b(bhai|bhaiya|papa|pitaji|mummy|maa|mata|chacha|tau|beta|beti|bahu|wife|patni|pati|dost|friend|बेटे|बेटी|भाई|पिताजी|माँ|पत्नी|दोस्त)\b.{0,12}(ki|ka|ke|की|का|के)\s+(bhi\s+)?(parchi|पर्ची|voter|वोटर))/i;
+const OTHER_PERSON_RX = /((uski|uska|uske|unki|unka|unke|iski|iska|उसकी|उसका|उनकी|उनका)\b)|(\b[a-z\u0900-\u097F]{3,}\s+(kie|ki|ka|ke|की|का|के)\s+(bhi\s+)?(parchi|voter|slip|पर्ची|वोटर|स्लिप|naam|नाम|id))|(\b(bhai|bhaiya|papa|pitaji|mummy|maa|mata|chacha|tau|beta|beti|bahu|wife|patni|pati|dost|friend|husband|mother|father|brother|sister|mom|dad|बेटे|बेटी|भाई|पिताजी|माँ|पत्नी|दोस्त)\b.{0,12}(ki|ka|ke|की|का|के|'s)\s+(bhi\s+)?(parchi|पर्ची|voter|वोटर|slip|स्लिप))/i;
 const POLITICAL_RX = /(\d+\s*(vote|vot|वोट)|vote\s*(kam|jyada|zyada|kat|denge|nahi|milenge|pakke)|(vote|वोट).{0,15}(kam|कम|ज़्यादा|ज्यादा)|jeet|jitenge|jeetenge|haar|harenge|support|saath|sath|समर्थन|साथ|जीत|हार|chunav|चुनाव|virodh|विरोध|takkar|टक्कर|mahaul|mahol|माहौल)/i;
 const COMPLAINT_RX = /(naali|nali|sadak|paani|pani|bijli|light|toot|tuti|kharab|band\s+(h|hai|pada)|kichad|keechad|gandagi|safai|नाली|सड़क|पानी|बिजली|टूट|खराब|ख़राब|कीचड़|गंदगी|सफाई)/i;
 const ABUSE_RX = /(kutt|kamin|harami|bsdk|bhosd|madarc|chutiy|nalayak|कुत्त|कमीन|हरामी|नालायक)/i;
 const GREET_RX = /^(ram\s*ram|raam\s*raam|राम\s*राम|namaste|namaskar|नमस्ते|नमस्कार|pranam|प्रणाम|hi+|hello|hey|jai shree ram|जय श्री राम|radhe radhe)\b/i;
 const THANKS_RX = /^(thanks?|thank you|shukriya|dhanyawad|dhanyavad|धन्यवाद|शुक्रिया)\b/i;
+const WARD_CORR_RX = /(?:ward|वार्ड)?\s*(\d{1,2})\s*(?:wala|वाला|me|में)?\s*(?:nahi|nhi|nahin|ni|na|नहीं|ना)\b\s*[,।.]?\s*(?:balki|बल्कि|,)?\s*(?:ward|वार्ड)?\s*(\d{1,2})\b/i;
 const FATHER_RX = /(?:pita|pitaji|papa|papaji|father|baap|bapu|bapuji|babuji|dad|daddy|abba|pati|husband|gharwala|पिता|पिताजी|पापा|बापू|बाबूजी|पति|s\/o|w\/o|f\/o)\s*(?:ji|जी)?\s*(?:ka|का)?\s*(?:naam|नाम)?\s*(?:h|hai|है|:)?\s*([a-z\u0900-\u097F]+(?:\s+[a-z\u0900-\u097F]+)?)/i;
 
 function scriptOf(t) { return /[\u0900-\u097F]/.test(t) ? 'hindi' : (/[a-z]/i.test(t) ? 'roman' : null); }
@@ -120,8 +122,13 @@ function rules(text, user) {
         sentiment: 'neutral', refers_to: null, wants_slip: false, wants_contact: false, complaint: null, script: scriptOf(t), short_summary: '', confidence: 0.5, source: 'rules' };
     const wm = t.match(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?|number|nambar|नंबर)?\s*(\d{1,2})\b/i);
     if (wm && Number(wm[1]) >= 1 && Number(wm[1]) <= 11) out.ward = Number(wm[1]);
+    // v9: "ward 3 nahi ward 6" / "ward 3 ni 6" -> the corrected ward
+    const wc = t.match(WARD_CORR_RX);
+    if (wc && Number(wc[2]) >= 1 && Number(wc[2]) <= 11) out.ward = Number(wc[2]);
     const fm = t.match(FATHER_RX);
-    if (fm && !CANDIDATE_RX.test(fm[1])) out.father_name = fm[1];
+    // v9: "mere papa ki slip chahiye" is a relative, not "father = ki slip": filler never counts as a father's name
+    const fName = fm ? fm[1].split(/\s+/).filter(w => !FILLER.has(w.toLowerCase()) && !FILLER_HI.has(w)).join(' ') : '';
+    if (fName && !CANDIDATE_RX.test(fName)) out.father_name = fName;
     const words = nameWords(t);
     const slipWord = SLIP_RX.test(t);
     const st = user && user.slipTarget && user.slipTarget.at && (Date.now() - Date.parse(user.slipTarget.at) < 3 * 3600 * 1000) ? user.slipTarget : null;
@@ -330,6 +337,7 @@ function merge(r, l, text, user) {
  * @param {object} opts  { callLLM: async (system, prompt, budgetMs) => string|null }  — omit/null = rules only
  */
 async function understand(text, user, opts = {}) {
+    text = normalizeMsg(text); // v9: "vooterr"/"parchii"/"parivaar"/"rajeshh" -> one spelling
     const r = rules(text, user);
     if (r.vikas) return r; // the vikas menu is decided by rules (fast, never a name)
     if (process.env.NLU_LLM === 'off' || !opts.callLLM) return r;
@@ -345,4 +353,4 @@ function searchTextOf(n) {
     return [name, n.father_name ? `pita ${n.father_name}` : '', n.ward ? `ward ${n.ward}` : ''].filter(Boolean).join(' ').trim();
 }
 
-module.exports = { grounded, understand, rules, nameWords, toDevanagari, parseJson, clean, merge, searchTextOf, NAME_TRANSLIT, CANDIDATE_RX, SYSTEM, INTENTS };
+module.exports = { WARD_CORR_RX, grounded, understand, rules, nameWords, toDevanagari, parseJson, clean, merge, searchTextOf, NAME_TRANSLIT, CANDIDATE_RX, SYSTEM, INTENTS };

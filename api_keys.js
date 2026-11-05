@@ -63,10 +63,19 @@ function loadApiConfig(opts = {}) {
         if (k && !nvidia.includes(k)) nvidia.push(k);
     }
 
+    // Groq: several keys (api_config.json "groq_api_keys" array + legacy "groq_api_key" + env GROQ_API_KEYS/GROQ_API_KEY).
+    const fileGroq = Array.isArray(fileConfig.groq_api_keys) ? fileConfig.groq_api_keys : splitKeys(fileConfig.groq_api_keys);
+    const groq = [];
+    for (const k of [...fileGroq.map(String), ...splitKeys(fileConfig.groq_api_key), ...splitKeys(env.GROQ_API_KEYS), ...splitKeys(env.GROQ_API_KEY)]) {
+        const t = String(k || '').trim();
+        if (t && !groq.includes(t)) groq.push(t);
+    }
+
     return {
         ...fileConfig,
         nvidia_keys: nvidia,
-        groq_api_key: fileConfig.groq_api_key || env.GROQ_API_KEY || '',
+        groq_api_keys: groq,
+        groq_api_key: groq[0] || '',
         gemini_api_key: fileConfig.gemini_api_key || fileConfig.geminiApiKey || env.GEMINI_API_KEY || ''
     };
 }
