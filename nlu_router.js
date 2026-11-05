@@ -61,6 +61,8 @@ function plan(n, user, ctx = {}) {
     const out = { nlu: n };
     if (!n) return out;
     if (user) user.nluTurnIntent = n.intent; // read by reply_brain: no slip clarifier on campaign talk / complaints
+    // v6: "mere baare me kya pata hai?" / "kisne bataya?" is a privacy probe for the brain (never recall_self / a name recital)
+    try { if (require('./operator_control.js').isPrivacyProbe(ctx.text || '')) { if (user) user.nluTurnIntent = 'privacy_probe'; return { nlu: n, noSlip: true }; } } catch (e) {}
     const en = scriptEn(user);
     const name = ownName(user);
     const S = (hi, ro) => (en ? ro : hi);

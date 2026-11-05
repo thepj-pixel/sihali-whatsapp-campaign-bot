@@ -215,6 +215,7 @@ function buildExtractionPrompt(text, user) {
 
 const TOPICS = new Set(Object.keys(kb.TOPIC_SYNONYMS));
 const RELS = new Set(RELATIONS.map(r => r[0]));
+const CANDIDATE_NAME = /(abhay|abhai|अभय|\bbaba\b|बाबा)/i; // the candidate's name is never the voter's
 function parseExtraction(raw) {
     if (!raw) return null;
     let s = String(raw).trim();
@@ -224,7 +225,7 @@ function parseExtraction(raw) {
     try { o = JSON.parse(s.slice(a, b + 1)); } catch (e) { return null; }
     const p = {};
     const str = (v, n = 80) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
-    if (str(o.name, 30) && !/\d/.test(o.name)) p.name = str(o.name, 30);
+    if (str(o.name, 30) && !/\d/.test(o.name) && !CANDIDATE_NAME.test(o.name)) p.name = str(o.name, 30);
     if (o.gender === 'M' || o.gender === 'F') p.gender = o.gender;
     if (['young', 'middle', 'elder'].includes(o.ageGroup)) p.ageGroup = o.ageGroup;
     if (Number(o.age) >= 18 && Number(o.age) <= 105) p.age = Number(o.age);
@@ -248,7 +249,7 @@ function merge(user, patch, source = 'rules') {
     const m = ensure(user);
     if (!patch) return m;
     const at = nowIso();
-    if (patch.name && !m.name) m.name = patch.name;
+    if (patch.name && !m.name && !CANDIDATE_NAME.test(patch.name)) m.name = patch.name;
     if (patch.gender && (!m.gender || m.genderSource !== 'voter_record')) { m.gender = patch.gender; m.genderSource = source === 'llm' ? 'llm' : 'message'; }
     if (patch.age) m.age = patch.age;
     if (patch.ageGroup) m.ageGroup = patch.ageGroup;

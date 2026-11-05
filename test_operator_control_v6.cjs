@@ -172,6 +172,15 @@ const VOTE_ASK = /(साथ देंगे ना\?|वोट देंगे 
     const plan2 = router.plan({ intent: 'voter_card_issue', target_person: 'self' }, cu, { text: 'card abhi tak nahi aaya', line: 'sim_636', test: true });
     ok(!plan2.samasyaId, 'voter-card samasya not duplicated within 24h');
 
+    const pu = mk({ memory: { name: 'कृष्ण' } });
+    const pp = router.plan({ intent: 'recall_self' }, pu, { text: 'mere baare me kya pata hai tumhe?' });
+    ok(!pp.reply && pp.noSlip, 'privacy probe is not answered by the recall_self template (brain handles it)');
+    const vmx = require('./voter_memory.js');
+    ok(!(vmx.parseExtraction('{"name":"Abhay Singh"}') || {}).name, 'the candidate\'s name is never stored as the voter\'s name');
+    const ef = brain.classify('haan beta naukri dhoond raha hai abhi', mk({ memory: {} }));
+    ok(ef.intent === 'daily_life' && ef.kind === 'effort', 'a son\'s job hunt is life talk, not a jobs pitch: ' + ef.intent);
+    const efr = await talk(mk({ memory: { op: { mode: 'aggressive' } } }), 'haan beta naukri dhoond raha hai abhi');
+    ok(!VOTE_ASK.test(efr.text) && !/संकल्प/.test(efr.text), 'family update gets warmth, no pitch even in aggressive mode: ' + efr.text);
     try { fs.unlinkSync(process.env.OPERATOR_CONTROL_FILE); } catch (e) {}
     console.log(`\ntest:v6 — ${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

@@ -205,7 +205,10 @@ function mentionsOpponent(t) {
     return opponentNames().some(n => low.includes(n.toLowerCase()));
 }
 
+// a family update about a son/daughter's studies or job hunt (not a question about works): life talk, not a jobs pitch
+const DL_FAMILY_EFFORT = /(beta|beti|bete|bachch?[ae]|ladka|ladki|bhai|बेटा|बेटी|बेटे|बच्च|लड़का|लड़की|भाई)[^?]{0,40}(naukri|job|kaam|padh|exam|taiyari|tayari|bharti|नौकरी|काम|पढ़|परीक्षा|तैयारी|भर्ती)[^?]{0,30}(dhoond|dhund|talash|kar raha|kar rahi|kar rahe|raha|rahi|rahe|ढूंढ|ढूँढ|तलाश|कर रहा|कर रही|रहा|रही)/i;
 function dailyKind(t) {
+    if (!/\?/.test(t) && DL_FAMILY_EFFORT.test(t) && !/(kya kiya|kya karenge|क्या किया|क्या करेंगे|kab|कब)/i.test(t)) return 'effort';
     if (RX.dlFestival.test(t)) return 'festival';
     if (RX.dlFamily.test(t)) return 'family';
     if (RX.dlHealth.test(t)) return 'health';
@@ -915,6 +918,8 @@ function compose(cls, ctx) {
                 body = S(`भगवान करे इस बार फ़सल बढ़िया हो${H} 🌾`, `Bhagwan kare is baar fasal badhiya ho${H} 🌾`) + f;
             } else if (k === 'family') {
                 body = vary(user, [S(`वाह, बहुत-बहुत बधाई${H}! 🎉 भगवान परिवार को ख़ूब ख़ुशियाँ दें।`, `Waah, bahut-bahut badhai${H}! 🎉 Bhagwan parivar ko khoob khushiyan dein.`), S(`ये तो बड़ी ख़ुशी की बात है${H}! 🎉 हमारी तरफ़ से ढेरों शुभकामनाएँ।`, `Ye to badi khushi ki baat hai${H}! 🎉 Hamari taraf se dheron shubhkamnayein.`)]);
+            } else if (k === 'effort') {
+                body = vary(user, [S(`भगवान करे जल्दी अच्छी जगह बात बने${H} 🙏 मेहनत करने वालों को देर-सवेर फल ज़रूर मिलता है।`, `Bhagwan kare jaldi achhi jagah baat bane${H} 🙏 Mehnat karne walon ko der-saver phal zaroor milta hai.`), S(`मेहनत रंग लाएगी${H}, हमारी शुभकामनाएँ साथ हैं 🙏`, `Mehnat rang laayegi${H}, hamari shubhkamnayein saath hain 🙏`)]);
             } else if (k === 'festival') {
                 body = S(`आपको और पूरे परिवार को त्योहार की राम-राम और ढेरों शुभकामनाएँ${H} 🪔🙏`, `Aapko aur poore parivar ko tyohar ki Ram-Ram aur dheron shubhkamnayein${H} 🪔🙏`);
                 if (stage !== 'committed' && stage !== 'opposed') { body += S(' इस बार 16 नवंबर का दिन भी गाँव के लिए त्योहार जैसा है—अभय सिंह जी का साथ देंगे ना?', ' Is baar 16 November ka din bhi gaon ke liye tyohar jaisa hai—Abhay Singh ji ka saath denge na?'); }
@@ -1078,7 +1083,7 @@ function buildLLMPrompt(cls, ctx, draft) {
 // reviewed templates; the LLM rewrites the conversational ones.
 // Short, exact replies (greeting, thanks, intro with booth, commitment/family votes, who-are-you) also stay on templates:
 // live runs showed the model appending broken sentences to them.
-const AGGR_OK = new Set(['positive', 'thanks', 'short_reply', 'works', 'topic_mention', 'future', 'about_baba', 'undecided', 'daily_life', 'wellbeing_reply', 'family_votes', 'greeting']);
+const AGGR_OK = new Set(['positive', 'thanks', 'short_reply', 'works', 'topic_mention', 'future', 'about_baba', 'undecided', 'wellbeing_reply', 'family_votes', 'greeting']);
 // voters with an operator brief/style or a non-normal mode: the LLM also writes the small-talk turns so the brief can shape them
 const LLM_INTENTS_BRIEF = new Set(['short_reply', 'thanks', 'positive', 'wellbeing_reply', 'greeting', 'commit', 'family_votes']);
 const LLM_INTENTS = new Set(['grievance', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'daily_life']);
