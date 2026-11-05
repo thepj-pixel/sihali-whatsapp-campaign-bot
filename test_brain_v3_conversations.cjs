@@ -859,6 +859,22 @@ function unitChecks() {
         const thanks = [outs[1], outs[3], outs[5]].map(x => replyQuality.normalize(x).slice(0, 18));
         check('[variety] thanks lines rotate across days', new Set(thanks).size >= 2);
     }
+    // Parcha 2 final sheet (5 Nov 2026): structured facts follow the new wording; hard rules still hold in replies
+    {
+        const it = id => kb.getItem(id) || {};
+        check('[parcha2] sub-health centre: opened + built on his own donated land (no "पुश्तैनी")', /खुलवाया/.test(it('D-H1').hi) && /निजी भूमि दान/.test(it('D-H1').hi) && !/पुश्तैनी/.test(it('D-H1').hi));
+        check('[parcha2] open gym / boundary / sewer reworded to the final sheet', /ओपन जिम लगवाई/.test(it('D-K4').hi) && !/आधुनिक/.test(it('D-K4').hi) && /लगभग 75% चारदीवारी/.test(it('D-K1').hi) && !/चारों तरफ़|पक्की/.test(it('D-K1').hi) && !/भूमिगत/.test(it('D-N1').hiFull + it('D-N2').hiFull));
+        check('[parcha2] Amrit Sarovar still चालू, mini stadium still a प्रयास', /चालू/.test(it('D-A3').hi) && /प्रयास/.test(it('F1').hi));
+        const sheet = fs.readFileSync(path.join(__dirname, 'rag_vault', 'PARCHA_2_CATEGORY_WISE.md'), 'utf8');
+        check('[parcha2] stored sheet is the final version', /उप स्वास्थ्य\s+केंद्र सिहली खुर्द मे खुलवाना/.test(sheet) && /ओपन जिम लगवाई गई/.test(sheet));
+        const outs = [];
+        for (const m of ['abhay singh ne kya kaam kiye hain', 'अभय सिंह जी कौन हैं', 'aspatal ke liye kya kiya', 'khel maidan me kya bana', 'kya abhay singh pehle sarpanch the']) {
+            const u = freshUser(); const r = await brain.respond(m, u, {}); outs.push(r.text);
+        }
+        const all = outs.join('\n');
+        check('[parcha2] replies carry no rupee/budget figure, no "100% प्रमाणित", no work count', !/(₹|रुपये|रुपए|लाख|करोड़|बजट|budget|lakh|crore)/i.test(all) && !/100%\s*(प्रमाणित|sachche|सच्चे)/.test(all) && !/\b\d+\s*(काम|kaam|कार्य)\b/.test(all));
+        check('[parcha2] replies never say he was sarpanch', !/(पहले सरपंच (थे|रहे)|सरपंच रह चुके|pehle sarpanch (the|rahe)|sarpanch reh chuke)/i.test(all.replace(/खुद पहले सरपंच नहीं रहे|pehle sarpanch nahi rahe/gi, '')));
+    }
     // owner rule: with default settings, the 15-min proactive timer path sends nothing
     {
         const sent = [];

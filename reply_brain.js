@@ -785,13 +785,13 @@ function compose(cls, ctx) {
         case 'about_baba':
             if (cls.special) {
                 body = S(`${jiOnly ? 'जी' : hon}, अभय सिंह जी की सबसे बड़ी पहचान है 40 साल की सच्ची, निष्कलंक समाज सेवा—गाँव के हर सुख-दुख में साथ।`, `${jiOnly ? 'Ji' : hon}, Abhay Singh ji ki sabse badi pehchaan hai 40 saal ki sachchi, nishkalank samaj seva—gaon ke har sukh-dukh me saath.`);
-                if (!mem.toldItems.includes('D-H1')) { body += S(' अपनी निजी पुश्तैनी ज़मीन दान देकर उन्होंने गाँव का उप-स्वास्थ्य केंद्र बनवाया।', ' Apni niji pushtaini zameen daan dekar unhone gaon ka up-swasthya kendra banwaya.'); used.push('D-H1'); }
+                if (!mem.toldItems.includes('D-H1')) { body += S(' अपनी निजी भूमि दान देकर उन्होंने गाँव में उप-स्वास्थ्य केंद्र खुलवाया और उसका भवन बनवाया।', ' Apni niji bhoomi daan dekar unhone gaon me up-swasthya kendra khulwaya aur uska bhawan banwaya.'); used.push('D-H1'); }
                 const key = ['M2', 'M8', 'M1'].map(id => kb.getItem(id)).find(i => i && !mem.toldItems.includes(i.id));
                 if (key) { body += S(' पिछले कार्यकाल में उनके प्रयास से: ', ' Pichhle karyakal me unke prayas se: ') + kb.render(key, l); used.push(key.id); }
                 break;
             }
             body = S(`अभय सिंह जी (मोटी आंगली वाले) ग्राम पंचायत सिहाली खुर्द से सरपंच पद प्रत्याशी हैं—40 साल की निष्कलंक समाज सेवा और अटूट भाईचारे के लिए जाने जाते हैं।`, `Abhay Singh ji (Moti Aangli wale) Gram Panchayat Sihali Khurd se sarpanch pad pratyashi hain—40 saal ki nishkalank samaj seva aur atoot bhaichare ke liye jaane jaate hain.`);
-            if (!mem.toldItems.includes('D-H1')) { body += S(' उन्होंने अपनी निजी पुश्तैनी ज़मीन दान देकर गाँव का उप-स्वास्थ्य केंद्र भवन बनवाया।', ' Unhone apni niji pushtaini zameen daan dekar gaon ka up-swasthya kendra bhawan banwaya.'); used.push('D-H1'); }
+            if (!mem.toldItems.includes('D-H1')) { body += S(' उन्होंने अपनी निजी भूमि दान देकर गाँव में उप-स्वास्थ्य केंद्र खुलवाया और उसका भवन बनवाया।', ' Unhone apni niji bhoomi daan dekar gaon me up-swasthya kendra khulwaya aur uska bhawan banwaya.'); used.push('D-H1'); }
             else if (!mem.told.quote) { body += S(` उनका कहना है: "हार-जीत अपनी जगह है, पर प्रयास में कभी कमी नहीं छोड़ी।"`, ` Unka kehna hai: "Haar-jeet apni jagah hai, par prayas me kabhi kami nahi chhodi."`); mem.told.quote = true; }
             break;
         case 'was_sarpanch':

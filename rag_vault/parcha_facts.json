@@ -3,7 +3,7 @@
   "rag_vault/PARCHA_1_2PAGE.md",
   "rag_vault/PARCHA_2_CATEGORY_WISE.md"
  ],
- "note": "The ONLY source of claims about the candidate, works, sankalp and polling. Structured by hand from the two parchas (owner, 4 Nov 2026). 'hi'/'roman' are the public renderings (no private individuals' names); 'hiFull'/'romanFull' keep the parcha's landmark wording and are used only when the voter asks about that lane/place. Done works are framed as 'पिछले कार्यकाल में 5 वर्षों में पंचायत में करवाए गए कार्य' — never as 'he was sarpanch'.",
+ "note": "The ONLY source of claims about the candidate, works, sankalp and polling. Structured by hand from the two parchas (owner, 4 Nov 2026; Parcha 2 final sheet applied 5 Nov 2026). 'hi'/'roman' are the public renderings (no private individuals' names); 'hiFull'/'romanFull' keep the parcha's landmark wording and are used only when the voter asks about that lane/place. Done works are framed as 'पिछले कार्यकाल में 5 वर्षों में पंचायत में करवाए गए कार्य' — never as 'he was sarpanch'.",
  "candidate": {
   "name_hi": "अभय सिंह (मोटी आंगली वाले)",
   "name_en": "Abhay Singh (Moti Aangli wale)",
@@ -422,8 +422,8 @@
    "villages": [
     "sihali_khurd"
    ],
-   "hi": "अभय सिंह जी ने अपनी निजी पुश्तैनी ज़मीन दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र का नया भवन बनवाया।",
-   "roman": "Abhay Singh ji ne apni niji pushtaini zameen daan dekar Sihali Khurd me up-swasthya kendra ka naya bhawan banwaya."
+   "hi": "अभय सिंह जी ने अपनी निजी भूमि दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र खुलवाया और उसका भवन निर्माण करवाया।",
+   "roman": "Abhay Singh ji ne apni niji bhoomi daan dekar Sihali Khurd me up-swasthya kendra khulwaya aur uska bhawan nirmaan karwaya."
   },
   {
    "id": "D-H2",
@@ -558,8 +558,8 @@
    "villages": [
     "hadahedi"
    ],
-   "hi": "राजकीय उच्च प्राथमिक विद्यालय, हाड़ाहेड़ी में एक कमरे की छत और फ़र्श का पूरा जीर्णोद्धार करवाया गया।",
-   "roman": "Rajkiya Uchch Prathmik Vidyalaya, Hadahedi me ek kamre ki chhat aur farsh ka poora jeernoddhar karwaya gaya."
+   "hi": "राजकीय उच्च प्राथमिक विद्यालय, हाड़ाहेड़ी में कमरे की छत और फ़र्श का जीर्णोद्धार करवाया गया।",
+   "roman": "Rajkiya Uchch Prathmik Vidyalaya, Hadahedi me kamre ki chhat aur farsh ka jeernoddhar karwaya gaya."
   },
   {
    "id": "D-S4",
@@ -586,8 +586,8 @@
     "sihali_khurd",
     "sihali_kalan"
    ],
-   "hi": "सिहाली खुर्द और सिहाली कलां के सरकारी स्कूलों के प्रांगण में इंटरलॉकिंग टाइल्स लगवाई गईं।",
-   "roman": "Sihali Khurd aur Sihali Kalan ke sarkari schoolon ke prangan me interlocking tiles lagwayi gayi."
+   "hi": "राजकीय उच्च माध्यमिक विद्यालय सिहाली खुर्द और सिहाली कलां के प्रांगण में इंटरलॉकिंग टाइल्स लगवाई गईं।",
+   "roman": "Rajkiya Uchch Madhyamik Vidyalaya Sihali Khurd aur Sihali Kalan ke prangan me interlocking tiles lagwayi gayi."
   },
   {
    "id": "D-K1",
@@ -597,8 +597,8 @@
     "youth"
    ],
    "villages": [],
-   "hi": "खेल मैदान के चारों तरफ़ पक्की चारदीवारी का ज़्यादातर (लगभग 75%) हिस्सा बनवाया गया।",
-   "roman": "Khel maidan ke chaaron taraf pakki chaardiwari ka zyadatar (lagbhag 75%) hissa banwaya gaya."
+   "hi": "खेल मैदान में लगभग 75% चारदीवारी का निर्माण करवाया गया।",
+   "roman": "Khel maidan me lagbhag 75% chaardiwari ka nirmaan karwaya gaya."
   },
   {
    "id": "D-K2",
@@ -631,8 +631,8 @@
     "youth"
    ],
    "villages": [],
-   "hi": "युवाओं की सेहत के लिए खेल मैदान में आधुनिक ओपन जिम के उपकरण लगवाए गए।",
-   "roman": "Yuvaon ki sehat ke liye khel maidan me aadhunik open gym ke upkaran lagwaye gaye."
+   "hi": "युवाओं की सेहत के लिए खेल मैदान में ओपन जिम लगवाई गई।",
+   "roman": "Yuvaon ki sehat ke liye khel maidan me open gym lagwayi gayi."
   },
   {
    "id": "D-K5",
@@ -816,10 +816,10 @@
    "villages": [
     "hadahedi"
    ],
-   "hi": "हाड़ाहेड़ी में जोहड़ की ओर भूमिगत सीवरेज लाइन डाली गई।",
-   "roman": "Hadahedi me johad ki or bhumigat sewerage line daali gayi.",
-   "hiFull": "हाड़ाहेड़ी में महिपाल तंवर (मण्डल अध्यक्ष) के घर से जोहड़ तक भूमिगत सीवरेज लाइन डाली गई।",
-   "romanFull": "Hadahedi me Mahipal Tanwar (Mandal Adhyaksh) ke ghar se johad tak bhumigat sewerage line daali gayi.",
+   "hi": "हाड़ाहेड़ी में जोहड़ तक सीवरेज लाइन बनवाई गई।",
+   "roman": "Hadahedi me johad tak sewerage line banwayi gayi.",
+   "hiFull": "हाड़ाहेड़ी में महिपाल तंवर (मण्डल अध्यक्ष) के घर से जोहड़ तक सीवरेज लाइन बनवाई गई।",
+   "romanFull": "Hadahedi me Mahipal Tanwar (Mandal Adhyaksh) ke ghar se johad tak sewerage line banwayi gayi.",
    "landmarks": [
     "महिपाल",
     "mahipal",
@@ -837,10 +837,10 @@
    "villages": [
     "sihali_khurd"
    ],
-   "hi": "सिहाली खुर्द में मुख्य सड़क से गंदे पानी की निकासी के लिए भूमिगत सीवरेज लाइन डाली गई।",
-   "roman": "Sihali Khurd me main road se gande paani ki nikasi ke liye bhumigat sewerage line daali gayi.",
-   "hiFull": "सिहाली खुर्द में मुख्य सड़क से राजेश मास्टर के घर की तरफ़ गंदे पानी की निकासी के लिए भूमिगत सीवरेज लाइन डाली गई।",
-   "romanFull": "Sihali Khurd me main road se Rajesh Master ke ghar ki taraf gande paani ki nikasi ke liye bhumigat sewerage line daali gayi.",
+   "hi": "सिहाली खुर्द में मुख्य सड़क से गंदे पानी की निकासी के लिए सीवरेज लाइन बनवाई गई।",
+   "roman": "Sihali Khurd me main road se gande paani ki nikasi ke liye sewerage line banwayi gayi.",
+   "hiFull": "सिहाली खुर्द में मुख्य सड़क से राजेश मास्टर के घर की तरफ़ गंदे पानी की निकासी के लिए सीवरेज लाइन बनवाई गई।",
+   "romanFull": "Sihali Khurd me main road se Rajesh Master ke ghar ki taraf gande paani ki nikasi ke liye sewerage line banwayi gayi.",
    "landmarks": [
     "राजेश मास्टर",
     "rajesh master"

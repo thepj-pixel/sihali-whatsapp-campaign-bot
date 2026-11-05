@@ -219,16 +219,16 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 🏥\n` +
                 `Chikitsa kshetra me Baba Abhay Singh ka yogdan aitihasik hai:\n` +
-                `• Swayam apni niji zameen daan dekar Sihali Khurd me up-swasthya kendra bhavan banwaya!\n` +
-                `• Sihali Kalan me Surjan parivar se bhoomi-daan karwake pashu aspatal banwaya.\n` +
+                `• Swayam apni niji zameen daan dekar Sihali Khurd me up-swasthya kendra khulwaya aur bhavan banwaya!\n` +
+                `• Sihali Kalan me Surjan parivar se bhoomi-daan karwake pashu up-swasthya kendra bhawan banwaya.\n` +
                 `• Aage ka sankalp: Regular doctor deployment va 24hr ambulance! 🚩`
             );
         }
         return (
             `राम राम ${honorific}! 🏥\n` +
             `चिकित्सा क्षेत्र में बाबा अभय सिंह का योगदान ऐतिहासिक है:\n` +
-            `• स्वयं अपनी निजी भूमि दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र भवन बनवाया!\n` +
-            `• सिहाली कलां में सुरजन परिवार से भूमिदान करवाकर राजकीय पशु चिकित्सालय भवन बनवाया।\n` +
+            `• स्वयं अपनी निजी भूमि दान देकर सिहाली खुर्द में उप-स्वास्थ्य केंद्र खुलवाया व भवन बनवाया!\n` +
+            `• सिहाली कलां में सुरजन परिवार से भूमिदान करवाकर पशु उप-स्वास्थ्य केंद्र भवन बनवाया।\n` +
             `• आगे का संकल्प: नियमित डॉक्टर की तैनाती व 24 घंटे एम्बुलेंस सेवा! 🚩`
         );
     }
@@ -239,14 +239,14 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 🏃‍♂️\n` +
                 `Youth aur athletes ke liye Baba Abhay Singh ne aitihasik kaam kiya hai:\n` +
-                `• Sihali Khurd khel maidan me 75% pakki boundary, running track, basketball court aur modern open gym ka nirman!\n` +
+                `• Khel maidan me lagbhag 75% chaardiwari, running track, basketball/badminton/kho-kho court aur open gym!\n` +
                 `• Aage ka sankalp: Hadahedi va Sihali Kalan me bhi naye khel maidan va running track ka vistar! 🏆🚩`
             );
         }
         return (
             `राम राम ${honorific}! 🏃‍♂️\n` +
             `युवाओं व खिलाड़ियों के लिए बाबा अभय सिंह ने ऐतिहासिक कार्य किया है:\n` +
-            `• सिहाली खुर्द खेल मैदान में 75% पक्की चारदीवारी, रनिंग ट्रैक, बास्केटबॉल कोर्ट और आधुनिक ओपन जिम (Open Gym) का निर्माण!\n` +
+            `• खेल मैदान में लगभग 75% चारदीवारी, रनिंग ट्रैक, बास्केटबॉल/बैडमिंटन/खो-खो कोर्ट और ओपन जिम!\n` +
             `• आगे का संकल्प: हाड़ाहेड़ी व सिहाली कलां में भी नए खेल मैदान व रनिंग ट्रैक का पूर्ण विस्तार! 🏆🚩`
         );
     }
@@ -257,7 +257,7 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 📚\n` +
                 `Education aur students ke liye Baba Abhay Singh ke mukhya kaam:\n` +
-                `• Sihali Khurd me students ke liye modern digital library ka nirman!\n` +
+                `• Sihali Khurd me students ke liye modular library ka nirman!\n` +
                 `• Aage Hadahedi va Sihali Kalan me bhi modern library ka vistar hoga. 🎓🚩`
             );
         }
@@ -265,9 +265,9 @@ function getFastLocalAnswerCore(query, phone = null) {
             `राम राम ${honorific}! 📚\n` +
             `शिक्षा व छात्र-छात्राओं के लिए बाबा अभय सिंह के मुख्य कार्य:
 ` +
-            `• सिहाली खुर्द में छात्र-छात्राओं हेतु आधुनिक मॉड्यूलर / डिजिटल लाइब्रेरी का निर्माण!
+            `• सिहाली खुर्द में छात्र-छात्राओं हेतु मॉड्यूलर लाइब्रेरी का निर्माण!
 ` +
-            `• आगे हाड़ाहेड़ी व सिहाली कलां में भी आधुनिक लाइब्रेरी का विस्तार होगा। 🎓🚩`
+            `• आगे का संकल्प: हाड़ाहेड़ी व सिहाली कलां में भी मॉड्यूलर लाइब्रेरी। 🎓🚩`
         );
     }
 
@@ -349,10 +349,10 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 🙏\n` +
                 `Baba Abhay Singh dwara karwaye gaye pramanit mukhya kaam:\n` +
-                `• Up-swasthya kendra hetu swayam niji zameen daan va Sihali Kalan me pashu aspatal nirman\n` +
+                `• Up-swasthya kendra hetu swayam niji zameen daan va Sihali Kalan me pashu up-swasthya kendra\n` +
                 `• JJM ghar-ghar meetha peyejal va naye borewell\n` +
                 `• Pakki damar roads aur satyapit underground drainage lines\n` +
-                `• Modern digital library va open gym khel maidan!\n\n` +
+                `• Modular library va open gym wala khel maidan!\n\n` +
                 `Agar kisi specific kaam ke bare me janna ho to batayein ${honorific}! 😊🚩`
             );
         }
@@ -361,13 +361,13 @@ function getFastLocalAnswerCore(query, phone = null) {
 ` +
             `बाबा अभय सिंह द्वारा करवाए गए प्रमाणित मुख्य कार्य (Locked Facts):
 ` +
-            `• उप-स्वास्थ्य केंद्र हेतु स्वयं निजी भूमिदान व सिहाली कलां में पशु चिकित्सालय निर्माण
+            `• उप-स्वास्थ्य केंद्र हेतु स्वयं निजी भूमिदान व सिहाली कलां में पशु उप-स्वास्थ्य केंद्र
 ` +
             `• JJM घर-घर मीठा पेयजल व नए बोरवेल
 ` +
-            `• पक्की डामर सड़कें और सत्यापित भूमिगत जलनिकासी लाइनें
+            `• पक्की डामर सड़कें और गंदे पानी की निकासी हेतु सीवरेज लाइनें
 ` +
-            `• अत्याधुनिक डिजिटल लाइब्रेरी व ओपन जिम युक्त खेल मैदान!
+            `• मॉड्यूलर लाइब्रेरी व ओपन जिम युक्त खेल मैदान!
 
 ` +
             `अगर किसी खास काम या योजना के बारे में विस्तार से जानना हो तो बताइए ${honorific}! 😊🚩`
