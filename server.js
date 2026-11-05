@@ -257,8 +257,35 @@ if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
-// In-memory message store for Baileys retry requests & decrypt healing
+// Message store for Baileys retry requests & decrypt healing.
+// Every message WE send is kept (all send paths, via the sock.sendMessage wrapper below) and persisted to
+// msg_store.json (gitignored) so a phone that shows "Waiting for this message" can still get it re-sent
+// after a restart/auto-deploy. Without this, retries for bulk/self-test/card sends failed forever.
+const MSG_STORE_FILE = path.join(__dirname, 'msg_store.json');
+const MSG_STORE_MAX = 5000;
 const MSG_STORE = new Map();
+try {
+    const { BufferJSON: BJ } = require('@whiskeysockets/baileys');
+    const raw = JSON.parse(fs.readFileSync(MSG_STORE_FILE, 'utf8'), BJ.reviver);
+    for (const [k, v] of raw) MSG_STORE.set(k, v);
+} catch (_) { /* first run */ }
+const _msgStoreSet = MSG_STORE.set.bind(MSG_STORE);
+let _msgStoreTimer = null;
+MSG_STORE.set = (k, v) => {
+    _msgStoreSet(k, v);
+    while (MSG_STORE.size > MSG_STORE_MAX) MSG_STORE.delete(MSG_STORE.keys().next().value);
+    if (!_msgStoreTimer) _msgStoreTimer = setTimeout(() => {
+        _msgStoreTimer = null;
+        try {
+            const { BufferJSON: BJ } = require('@whiskeysockets/baileys');
+            fs.writeFileSync(MSG_STORE_FILE + '.tmp', JSON.stringify([...MSG_STORE.entries()], BJ.replacer));
+            fs.renameSync(MSG_STORE_FILE + '.tmp', MSG_STORE_FILE);
+        } catch (e) { console.error('[MsgStore] save failed', e.message); }
+    }, 3000);
+    return MSG_STORE;
+};
+const MSG_RETRY_COUNTER = new Map();
+const msgRetryCounterCache = { get: k => MSG_RETRY_COUNTER.get(k), set: (k, v) => { MSG_RETRY_COUNTER.set(k, v); if (MSG_RETRY_COUNTER.size > 5000) MSG_RETRY_COUNTER.delete(MSG_RETRY_COUNTER.keys().next().value); return true; }, del: k => MSG_RETRY_COUNTER.delete(k), flushAll: () => MSG_RETRY_COUNTER.clear() };
 
 function extractMessageText(message) {
     if (!message) return '';
@@ -376,7 +403,7 @@ async function sendSafeMessage(sock, jid, content, options = {}) {
         const sent = await sock.sendMessage(jid, content, options);
         if (sent?.key?.id && sent?.message) {
             MSG_STORE.set(sent.key.id, sent.message);
-            if (MSG_STORE.size > 1000) {
+            if (MSG_STORE.size > MSG_STORE_MAX) {
                 const firstKey = MSG_STORE.keys().next().value;
                 MSG_STORE.delete(firstKey);
             }
@@ -506,6 +533,7 @@ async function startSession(sessionObj) {
         keepAliveIntervalMs: 25000,
         syncFullHistory: false,
         defaultQueryTimeoutMs: 60000,
+        msgRetryCounterCache,
         getMessage: async (key) => {
             if (key?.id && MSG_STORE.has(key.id)) {
                 return MSG_STORE.get(key.id);
@@ -513,6 +541,14 @@ async function startSession(sessionObj) {
             return undefined;
         }
     });
+
+    // keep every outgoing message for retry receipts (bulk, scheduled, self-test, cards, status — all paths)
+    const _rawSend = sock.sendMessage.bind(sock);
+    sock.sendMessage = async (jid, content, options) => {
+        const sent = await _rawSend(jid, content, options);
+        try { if (sent && sent.key && sent.key.id && sent.message) MSG_STORE.set(sent.key.id, sent.message); } catch (_) {}
+        return sent;
+    };
 
     sessionObj.sock = sock;
 
@@ -563,7 +599,7 @@ async function startSession(sessionObj) {
             for (const msg of m.messages) {
                 if (msg.key?.id && msg.message) {
                     MSG_STORE.set(msg.key.id, msg.message);
-                    if (MSG_STORE.size > 1000) {
+                    if (MSG_STORE.size > MSG_STORE_MAX) {
                         const firstKey = MSG_STORE.keys().next().value;
                         MSG_STORE.delete(firstKey);
                     }
