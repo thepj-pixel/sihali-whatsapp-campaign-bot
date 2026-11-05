@@ -1085,6 +1085,7 @@ function buildLLMPrompt(cls, ctx, draft) {
 // reviewed templates; the LLM rewrites the conversational ones.
 // Short, exact replies (greeting, thanks, intro with booth, commitment/family votes, who-are-you) also stay on templates:
 // live runs showed the model appending broken sentences to them.
+const STEER_SKIP = new Set(['abuse', 'condolence', 'wrong_number', 'corruption', 'grievance', 'opposed', 'privacy_probe', 'bribe', 'bribe_others', 'emoji', 'script_pref', 'stop', 'insult', 'taunt', 'health_concern', 'memory_check']);
 const AGGR_OK = new Set(['positive', 'thanks', 'short_reply', 'works', 'topic_mention', 'future', 'about_baba', 'undecided', 'wellbeing_reply', 'family_votes', 'greeting']);
 // voters with an operator brief/style or a non-normal mode: the LLM also writes the small-talk turns so the brief can shape them
 const LLM_INTENTS_BRIEF = new Set(['short_reply', 'thanks', 'positive', 'wellbeing_reply', 'greeting', 'commit', 'family_votes']);
@@ -1237,8 +1238,14 @@ function think(message, user, opts = {}, memoryDone = false) {
             // chill: no extra push
         }
     }
+    // v6 daily lock: the operator's line for today, once per voter, on a calm turn that asks nothing else (kept verbatim)
+    let steered = false;
+    if (!fr && !mourning && !pendingQ && !/\?/.test(text) && text.length < 230 && !STEER_SKIP.has(cls.intent)) {
+        const st = opCtl.steerCloser(user, l);
+        if (st) { text += ' ' + st; opCtl.markSteer(user); markLine(user, st); steered = true; }
+    }
     if (require('./contact_tags.js').isVirodhiUser(user)) text = require('./contact_tags.js').gentle(text, l); // विरोधी: gentle mode, no vote asks
-    return { text, pendingQ, cls, stage, previousStage, ctx, c, flowResult: fr, l, person, hon };
+    return { text, steered, pendingQ, cls, stage, previousStage, ctx, c, flowResult: fr, l, person, hon };
 }
 
 /**
@@ -1258,7 +1265,7 @@ async function respond(message, user = {}, opts = {}) {
     let source = t.flowResult ? 'flow' : 'template';
     let rejected = null;
     const briefed = opCtl.hasBrief(user) || opCtl.effectiveMode(user) !== 'normal' || !!opCtl.lockedToday();
-    if (!t.flowResult && opts.llm && (LLM_INTENTS.has(cls.intent) || (briefed && LLM_INTENTS_BRIEF.has(cls.intent) && !(cls.intent === 'greeting' && !(user.history || []).some(h => h.role === 'bot')))) && !cls.all && !cls.person && !cls.news && !cls.insult && !cls.gibberish && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
+    if (!t.flowResult && !t.steered && opts.llm && (LLM_INTENTS.has(cls.intent) || (briefed && LLM_INTENTS_BRIEF.has(cls.intent) && !(cls.intent === 'greeting' && !(user.history || []).some(h => h.role === 'bot')))) && !cls.all && !cls.person && !cls.news && !cls.insult && !cls.gibberish && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));

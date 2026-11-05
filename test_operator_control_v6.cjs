@@ -123,6 +123,12 @@ const VOTE_ASK = /(साथ देंगे ना\?|वोट देंगे 
     let steered = 0;
     for (const m of ['ram ram', 'abhay singh ne kya kaam karwaye', 'achha', 'library ke baare me batao', 'aur kuch']) { const r = await talk(su, m); if (r.text.includes('वोटर पर्ची पहुँच गई')) steered++; }
     ok(steered === 1, `the locked bot line is used exactly once per voter per day (${steered})`);
+    const su2 = mk({ memory: {} });
+    await talk(su2, 'abhay singh ji ke baare me batao');
+    const st2 = await talk(su2, 'achha', { llm: async () => 'जी, कोई और जानकारी चाहिए तो बेझिझक पूछती हूँ।' });
+    ok(st2.text.includes('वोटर पर्ची पहुँच गई') || su2.history.some(h => h.role === 'bot' && h.text.includes('वोटर पर्ची पहुँच गई')), 'a calm "achha" turn steers to the locked goal with the operator line: ' + st2.text);
+    ok(!/पूछती हूँ/.test(st2.text) || st2.source !== 'llm', 'a steered turn keeps the operator text (no LLM rewrite)');
+    ok(require('./nlu.js').rules('meri parchi mil jayegi kya?', {}).person_name_roman === null, '"meri parchi mil jayegi kya" has no name (was searched as "jayegi")');
     oc.setDay(today, { locked: false });
     ok(!oc.lockedToday() && oc.dayMediaFor(mk({ memory: {} }), { intent: 'positive', userTurns: 3 }) === null, 'unlocked day: no steer, no media');
     oc.setDay(today, { locked: true });

@@ -27,10 +27,11 @@ const FILLER = new Set(('acha accha achha are arey arre aree bhai bhaiya yaar yr
     'dijie bhejo bhej bhejdo bhejna bhejiye chahiye chaiye chahie chaahiye chiye thi tha the wala wali wale vala bata bataya batao ' +
     'btaya bola likha diya abhi to toh tha me mein mai main m se par pe aur or ye yeh wo woh vo bas sirf plz please sir nikalo ' +
     'nikal nikaal dikhao dekho check karo kardo kar koi kon koin kaun konsa ward wahi yahi phir fir ek aap tum tumhara tumhare ' +
-    'number nambar no ab jaldi la lao mil mila milegi milega gaya gayi aaya aayi tak abhi ok okay sahi theek thik').split(/\s+/));
+    'number nambar no ab jaldi la lao mil mila milegi milega gaya gayi aaya aayi tak abhi ok okay sahi theek thik ' +
+    'jayegi jaegi jayega jaega jaayegi jaayega jaye jaaye jayengi sakti sakta sakte skti skta hogi hoga ho kab kaise kya kyaa kyu').split(/\s+/));
 const FILLER_HI = new Set(('अरे भाई जी हाँ हां नहीं ना की का के को भी पर्ची वोटर लिस्ट आईडी कार्ड नाम है हैं हूँ उसका उसकी उसके उनका उनकी ' +
     'उनके मेरा मेरी मेरे मुझे दे दो दीजिए भेजो भेज चाहिए थी था वाला वाली बताया बताओ अभी तो में मैं से पर और ये वो बस सिर्फ़ सिर्फ ' +
-    'निकालो दिखाओ कौन वार्ड यही वही एक आप तुम नंबर तक आया मिला').split(/\s+/));
+    'निकालो दिखाओ कौन वार्ड यही वही एक आप तुम नंबर तक आया मिला मिल मिलेगी मिलेगा जाएगी जायेगी जाएगा सकती सकता होगी होगा क्या कब कैसे').split(/\s+/));
 
 // Roman -> Devanagari for names the roll actually has (spelling variants included). First entry = best guess.
 const NAME_TRANSLIT = {
