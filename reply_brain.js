@@ -1070,6 +1070,8 @@ function buildLLMPrompt(cls, ctx, draft) {
         'WHAT THIS VOTER TOLD US BEFORE (use naturally, never recite):', card || '(new voter)',
         summary ? 'OLDER CONVERSATION SUMMARY: ' + summary : '',
         'NEVER repeat an opener, greeting, fact or question already used in the history; never ask again for something the memory already has (name, ward, family, father).',
+        (user.history || []).some(h => h.role === 'bot') ? 'Do NOT introduce yourself again ("मैं अभय सिंह जी की टीम से हूँ / आपकी सहायता करती हूँ") — talk like someone they already know.' : '',
+        opCtl.hasBrief(user) ? 'If the operator\'s "how to talk" asks you to bring up something (e.g. ask about a family member), do it in a light chat turn like this one, naturally and only once in the conversation — never as if you read it somewhere.' : '',
         'HOW TO TALK: answer exactly what they said first. Listen; if they talk about life (health, crops, family, weather, festivals) respond like a human first. At most ONE question in the whole reply. Never preachy, no speeches, no lists, never repeat a pitch or work from the history. Ask for the vote only when it fits; if committed, thank and talk family votes / booth / slip instead.',
         `HARD RULES: use ONLY the facts below — no other works, numbers, dates, names or promises. Works were "पिछले कार्यकाल में पंचायत में करवाए गए" / "उनके प्रयास से" — NEVER say Abhay Singh was sarpanch (he was not) and never call him "सरपंच प्रतिनिधि". Say "अभय सिंह जी", never just "बाबा जी". No budgets/rupees, no counts of works, never mention an election symbol (ballot: name at serial no. 1). Never promise a date or that something will surely be fixed. Never attack or mock opponents. No caste/religion, no money/liquor/gifts, no threats. Never claim a voter slip was sent. Bribe/liquor asks: politely refuse with "${C.selfRespect_hi || ''}".`,
         'FACTS (from the parchas):', ...factLinesTxt,
@@ -1101,7 +1103,8 @@ function validateAgainstDraft(out, draft, { used = [], l, person = {}, user = {}
             if (hit / factToks.length < 0.35) return 'dropped_facts';
         }
     }
-    if ((!intent || ['grievance', 'taunt', 'undecided'].includes(intent)) && /\?/.test(draft) && !/\?/.test(r)) return 'dropped_question'; // the draft's one question (e.g. "aapke yahan kya dikkat hai?") is the point of the turn
+    if ((!intent || ['grievance', 'taunt', 'undecided'].includes(intent)) && /\?/.test(draft) && !/\?/.test(r)) return 'dropped_question';
+    if (opCtl.effectiveMode(user) === 'aggressive' && VOTE_ASK_RX.test(draft) && !/(साथ देंगे|वोट देंगे|वादा|पक्का|saath denge|vote denge|vaada|pakka|सोच रहे|शंका|soch rahe|shanka)/i.test(r)) return 'dropped_vote_ask'; // the draft's one question (e.g. "aapke yahan kya dikkat hai?") is the point of the turn
     if (!ASKED_VOTE.test(draft) && /(साथ देंगे ना|वोट देंगे ना|saath denge na|vote denge na|vote denge\b|वोट देंगे\b|(मतदान|वोट)[^।?]{0,40}(आएंगी|आएँगी|आएंगे|आएँगे|देंगे|डालेंगे|देंगी)\s*\?|(vote|matdan|matdaan)[^.?]{0,40}(aayenge|aayengi|aaoge|denge|dalenge|dengi)\s*\?)/i.test(r)) return 'unasked_vote_push';
     if (person.gender !== 'F' && /(chahti hain|chahti ho|sakti hain|rahi hain|karti hain|aayi hain|bolti hain|चाहती हैं|सकती हैं|रही हैं|करती हैं|आई हैं|बहन जी|behan ji|mata ji|माता जी)/i.test(r) && !/(behan ji|mata ji|बहन जी|माता जी|tai ji|ताई जी)/i.test(draft)) return 'gender_guess';
     if (person.gender !== 'M' && /(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(r) && !/(bhai sahab|भाई साहब|dada ji|दादा जी|tau ji|ताऊ जी)/i.test(draft)) return 'gender_guess';
