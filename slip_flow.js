@@ -88,7 +88,7 @@ function fatherGiven(text, v) {
 function search(q, user, text, strict = false) {
     const ward = wardIn(text);
     const query = q + (ward ? ` ward ${ward}` : '');
-    let found = voterEngine.searchVoters(query, 8, ward || null);
+    let found = voterEngine.searchVoters(query, 40, ward || null);
     if (!found.length) return [];
     const toks = q.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
     const tr = w => (voterEngine.translit ? voterEngine.translit(w) : w);
@@ -113,9 +113,20 @@ function search(q, user, text, strict = false) {
         });
         if (!found.length) return [];
     }
+    // Keep only people whose OWN name carries the typed first name (relatives' names matched too, which inflated counts).
+    {
+        const sk2 = x => String(x || '').toLowerCase().replace(/[aeiouy]/g, '').replace(/w/g, 'v').replace(/(.)\1+/g, '$1');
+        const f0 = toks[0];
+        const own = f0 ? found.filter(v => {
+            if (nameHas(v, f0)) return true;
+            const words = `${lowerOf(v.name_hi)} ${lowerOf(v.name_en || v.ne || '')}`.split(/\s+/);
+            return /^[a-z]+$/.test(f0) && sk2(f0).length >= 3 && words.some(w => /^[a-z]+$/.test(w) && w[0] === f0[0] && sk2(w) === sk2(f0));
+        }) : found;
+        if (own.length) found = own;
+    }
     const pref = !ward && user ? (Number(user.ward) || (user.memory && Number(user.memory.ward)) || null) : null;
     if (pref) found = found.slice().sort((a, b) => (Number(b.ward) === pref) - (Number(a.ward) === pref));
-    return found.slice(0, 5);
+    return found.slice(0, 40);
 }
 
 function rememberedName(user) {
@@ -136,14 +147,15 @@ function confirmText(v, en) {
     if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${relLabel(v, true)} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
     return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या आपके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है?\n\nसही हो तो बस *'हाँ'* लिख दीजिए—पर्ची तुरंत भेज दूँगी 🙏\n*(अगर ये आप नहीं हैं, तो अपना पूरा नाम और पिता/पति का नाम लिखिए)*`;
 }
+const SHOW = 5;
 function listText(matches, q, en) {
     if (en) {
-        let e = `Voter list me *${q}* se milte ${matches.length} naam mile hain:\n\n`;
-        matches.forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m, true)}: ${m.rel_name_hi}) — ward ${m.ward}\n`; });
+        let e = `Voter list me *${q}* se milte ${matches.length} naam mile hain${matches.length > SHOW ? ` (pehle ${SHOW}; ward bata denge to turant mil jayega)` : ''}:\n\n`;
+        matches.slice(0, SHOW).forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m, true)}: ${m.rel_name_hi}) — ward ${m.ward}\n`; });
         return e + `\nAap inme se kaun hain? Bas number (*1*, *2*…) ya apne pita/pati ka naam bhej dijiye—aapki parchi turant bhej dungi 🙏`;
     }
-    let t = `वोटर लिस्ट में *${q}* से मिलते ${matches.length} नाम मिले हैं:\n\n`;
-    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m)}: ${m.rel_name_hi}) — वार्ड ${m.ward}\n`; });
+    let t = `वोटर लिस्ट में *${q}* से मिलते ${matches.length} नाम मिले हैं${matches.length > SHOW ? ` (पहले ${SHOW}; वार्ड बता दें तो तुरंत मिल जाएगा)` : ''}:\n\n`;
+    matches.slice(0, SHOW).forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${relLabel(m)}: ${m.rel_name_hi}) — वार्ड ${m.ward}\n`; });
     return t + `\nआप इनमें से कौन हैं? बस नंबर (*1*, *2*…) या अपने पिता/पति का नाम भेज दीजिए—आपकी पर्ची तुरंत भेज दूँगी 🙏`;
 }
 function confirmOther(v, en) {
@@ -153,8 +165,9 @@ function confirmOther(v, en) {
 }
 function listOther(matches, q, en) {
     const rel = m => relLabel(m, en);
-    let t = en ? `Voter list me *${q}* naam ke ${matches.length} log mile hain:\n\n` : `वोटर लिस्ट में *${q}* नाम के ${matches.length} लोग मिले हैं:\n\n`;
-    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${rel(m)}: ${m.rel_name_hi}) — ${en ? 'ward' : 'वार्ड'} ${m.ward}\n`; });
+    const more = matches.length > SHOW;
+    let t = en ? `Voter list me *${q}* naam ke ${matches.length} log mile hain${more ? ` (pehle ${SHOW}; ward bata denge to turant mil jayega)` : ''}:\n\n` : `वोटर लिस्ट में *${q}* नाम के ${matches.length} लोग मिले हैं${more ? ` (पहले ${SHOW}; वार्ड बता दें तो तुरंत मिल जाएगा)` : ''}:\n\n`;
+    matches.slice(0, SHOW).forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${rel(m)}: ${m.rel_name_hi}) — ${en ? 'ward' : 'वार्ड'} ${m.ward}\n`; });
     return t + (en ? `\nInme se ${q} ji kaun se hain? Number (*1*, *2*…) ya unke pita/pati ka naam bhej dijiye 🙏` : `\nइनमें से ${q} जी कौन से हैं? नंबर (*1*, *2*…) या उनके पिता/पति का नाम भेज दीजिए 🙏`);
 }
 const NOT_FOUND_OTHER = (q, en) => en ? `*${q}* naam se voter list me pakka naam nahi mila 🙏 Unke pita/pati ka naam ya ward bata dijiye, ya naam waise likhiye jaise voter card par hai—phir se dekh leti hoon.` : `*${q}* नाम से वोटर लिस्ट में पक्का नाम नहीं मिला 🙏 उनके पिता/पति का नाम या वार्ड बता दीजिए, या नाम वैसे लिखिए जैसे वोटर कार्ड पर है—फिर से देख लेती हूँ।`;
