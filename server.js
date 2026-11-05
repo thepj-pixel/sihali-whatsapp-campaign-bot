@@ -293,6 +293,15 @@ const DISAPPEAR_ALLOWED = [0, 86400, 604800, 7776000];
 let DISAPPEAR = { seconds: 0, applied: {} };
 try { DISAPPEAR = Object.assign(DISAPPEAR, JSON.parse(fs.readFileSync(DISAPPEAR_FILE, 'utf8'))); } catch (_) {}
 function saveDisappear() { try { fs.writeFileSync(DISAPPEAR_FILE, JSON.stringify(DISAPPEAR)); } catch (e) { console.error('[Disappear] save', e.message); } }
+// Short-lived device list cache (30 s instead of Baileys' 5 min): we always encrypt for the person's and our
+// own CURRENT devices, so a newly linked phone/web never gets a copy it can't open ("Waiting for this message").
+const USER_DEVICES = new Map();
+const userDevicesCache = {
+    get: k => { const e = USER_DEVICES.get(k); if (!e) return undefined; if (Date.now() > e.t) { USER_DEVICES.delete(k); return undefined; } return e.v; },
+    set: (k, v) => { USER_DEVICES.set(k, { v, t: Date.now() + 30e3 }); if (USER_DEVICES.size > 5000) USER_DEVICES.delete(USER_DEVICES.keys().next().value); return true; },
+    del: k => USER_DEVICES.delete(k), flushAll: () => USER_DEVICES.clear(),
+    mget: ks => Object.fromEntries(ks.map(k => [k, userDevicesCache.get(k)]).filter(([, v]) => v !== undefined)),
+};
 const MSG_RETRY_COUNTER = new Map();
 const msgRetryCounterCache = { get: k => MSG_RETRY_COUNTER.get(k), set: (k, v) => { MSG_RETRY_COUNTER.set(k, v); if (MSG_RETRY_COUNTER.size > 5000) MSG_RETRY_COUNTER.delete(MSG_RETRY_COUNTER.keys().next().value); return true; }, del: k => MSG_RETRY_COUNTER.delete(k), flushAll: () => MSG_RETRY_COUNTER.clear() };
 
@@ -543,6 +552,7 @@ async function startSession(sessionObj) {
         syncFullHistory: false,
         defaultQueryTimeoutMs: 60000,
         msgRetryCounterCache,
+        userDevicesCache,
         getMessage: async (key) => {
             if (key?.id && MSG_STORE.has(key.id)) {
                 MSG_HEALTH.retryServed++;
@@ -558,6 +568,7 @@ async function startSession(sessionObj) {
     sock.sendMessage = async (jid, content, options) => {
         const secs = Number(DISAPPEAR.seconds) || 0;
         const personal = typeof jid === 'string' && jid.endsWith('@s.whatsapp.net');
+        try { noteTraffic(); } catch (_) {}
         if (secs && personal && content && !('disappearingMessagesInChat' in content) && !content.delete && !content.react) {
             const tag = sessionObj.id + '|' + jid;
             if (DISAPPEAR.applied[tag] !== secs) {
@@ -1241,6 +1252,7 @@ async function startSession(sessionObj) {
     // global concurrency limit, duplicate-id suppression). See chat_queue.js.
     sock.ev.on('messages.upsert', (m) => {
         if (!m || !Array.isArray(m.messages) || !m.messages.length) return;
+        try { noteTraffic(); } catch (_) {}
         for (const one of m.messages) {
             // decrypt failure on our side (Baileys asks the sender's phone to re-send automatically); counted in /api/msg-health
             if (one.messageStubType === 2 && !one.message) { MSG_HEALTH.incomingUndecrypted = (MSG_HEALTH.incomingUndecrypted || 0) + 1; MSG_HEALTH.lastUndecryptedAt = new Date().toISOString(); }
@@ -1466,7 +1478,14 @@ app.post('/api/admin/pin', (req, res) => {
 });
 
 // API: message delivery health (retry receipts served from our store vs missing)
-app.get('/api/msg-health', (req, res) => res.json({ success: true, ...MSG_HEALTH, storeSize: MSG_STORE.size, disappearingSeconds: DISAPPEAR.seconds || 0, chatsWithTimer: Object.keys(DISAPPEAR.applied || {}).length }));
+app.get('/api/msg-health', (req, res) => res.json({ success: true, ...MSG_HEALTH, deployHold: deployHoldReason(), storeSize: MSG_STORE.size, disappearingSeconds: DISAPPEAR.seconds || 0, chatsWithTimer: Object.keys(DISAPPEAR.applied || {}).length }));
+// API: let an urgent update through the deploy hold for N minutes (admin). POST {minutes}
+app.post('/api/admin/deploy-force', (req, res) => {
+    if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
+    const m = Math.max(0, Math.min(30, Number((req.body || {}).minutes) || 10));
+    try { fs.writeFileSync(path.join(__dirname, 'deploy_force.json'), JSON.stringify({ until: Date.now() + m * 60e3 })); } catch (e) { return res.status(500).json({ success: false, error: e.message }); }
+    res.json({ success: true, minutes: m });
+});
 // API: disappearing messages for all our chats (admin). POST {seconds: 0|86400|604800|7776000}
 app.get('/api/admin/disappearing', (req, res) => res.json({ success: true, seconds: DISAPPEAR.seconds || 0, allowed: DISAPPEAR_ALLOWED }));
 app.post('/api/admin/disappearing', async (req, res) => {
@@ -6333,6 +6352,35 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Deploy hold (5 Nov): a restart mid-conversation can leave half-written signal sessions ("Bad MAC") and
+// "Waiting for this message" bubbles. So auto-update waits while: a scheduled bulk is running inside its window,
+// the IST time is inside the bulk windows (09:00–11:30, 17:30–20:00), or a message moved in the last 45 s.
+// Override: deploy_force.json (gitignored) with {"until": <epoch ms>} lets an urgent fix through.
+let LAST_TRAFFIC_AT = 0;
+function noteTraffic() { LAST_TRAFFIC_AT = Date.now(); }
+function deployHoldReason(now = Date.now()) {
+    try { const f = JSON.parse(fs.readFileSync(path.join(__dirname, 'deploy_force.json'), 'utf8')); if (f && Number(f.until) > now) return null; } catch (_) {}
+    const ist = new Date(now + 5.5 * 3600e3); const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    if ((mins >= 9 * 60 && mins < 11 * 60 + 30) || (mins >= 17 * 60 + 30 && mins < 20 * 60)) return 'bulk window (IST 09:00–11:30 / 17:30–20:00)';
+    try {
+        const st = JSON.parse(fs.readFileSync(path.join(__dirname, 'scheduled_campaigns.json'), 'utf8'));
+        const live = Object.values(st.campaigns || {}).find(c => c && !c.test && ['running', 'scheduled'].includes(c.status) && Number(c.windowStart) <= now + 10 * 60e3 && Number(c.windowEnd) + 60 * 60e3 >= now);
+        if (live) return 'scheduled bulk running: ' + (live.name || live.id);
+    } catch (_) {}
+    if (now - LAST_TRAFFIC_AT < 45e3) return 'chat traffic in the last 45 s';
+    return null;
+}
+
+// Graceful stop: save the retry store + let pending auth-key writes finish before pm2 kills us
+let __stopping = false;
+function gracefulStop(sig) {
+    if (__stopping) return; __stopping = true;
+    console.log(`[Shutdown] ${sig}: flushing message store and auth keys...`);
+    try { const { BufferJSON: BJ } = require('@whiskeysockets/baileys'); fs.writeFileSync(MSG_STORE_FILE, JSON.stringify([...MSG_STORE.entries()], BJ.replacer)); } catch (e) { console.error('[Shutdown] store', e.message); }
+    setTimeout(() => process.exit(0), 1200);
+}
+if (!DASHBOARD_ONLY) { process.on('SIGINT', () => gracefulStop('SIGINT')); process.on('SIGTERM', () => gracefulStop('SIGTERM')); }
+
 // Background Auto-Sync Watchdog (Checks GitHub every 35s, resets cleanly, installs fonts, reloads PM2)
 if (process.platform === 'linux') {
     console.log('[AutoSync] 🛡️ Continuous GitHub Auto-Update Watchdog Active (every 35s)');
@@ -6344,6 +6392,9 @@ if (process.platform === 'linux') {
                 const hashes = stdout2.trim().split(/\s+/);
                 const remoteAheadCount = Number(hashes[2] || 0);
                 if (hashes.length >= 3 && remoteAheadCount > 0) {
+                    const hold = deployHoldReason();
+                    if (hold) { if (!global.__lastHoldLog || Date.now() - global.__lastHoldLog > 10 * 60e3) { console.log(`[AutoSync] ⏸ update waiting: ${hold}`); global.__lastHoldLog = Date.now(); } global.__deployHold = hold; return; }
+                    global.__deployHold = null;
                     console.log(`[AutoSync] 🚀 New GitHub commit detected (${hashes[0].slice(0,7)} -> ${hashes[1].slice(0,7)})! Auto-updating...`);
                     const updateCmd = [
                         `git merge --ff-only origin/${DEPLOY_BRANCH}`,
