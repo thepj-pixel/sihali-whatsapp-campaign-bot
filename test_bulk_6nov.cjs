@@ -390,6 +390,21 @@ function fakeSock(log, opts = {}) {
         assert.strictEqual((await h2.p.tick()).length, 2, 'daily schedules repeat next day');
     });
 
+    await t('status route: canada test status → only our CONNECTED own numbers (never the offline baba_aux)', async () => {
+        const express = require('express');
+        const app = express(); app.use(express.json());
+        process.env.STATUS_POSTS_PATH = path.join(TMP, 'sr.json');
+        const log = [];
+        const SESSIONS = [{ id: 'sim_636', status: 'CONNECTED', sock: fakeSock(log) }, { id: 'baba_aux', status: 'DISCONNECTED', sock: null }, { id: 'canada', status: 'CONNECTED', sock: fakeSock(log, { self: '14502790497' }) }];
+        contactsManager.contacts = [{ phone: '919100000000', line: 'sim_636', tags: [] }];
+        const { poster } = require('./status_routes.js').install(app, { SESSIONS, contactsManager, isOptedOut: () => false });
+        poster.stop(); poster.mediaDir = mediaDir;
+        const r = await poster.post({ lineId: 'canada', mediaFile: 'poster.jpg', caption: 'test' });
+        assert.ok(r.ok, r.error);
+        assert.deepStrictEqual(log[0].o.statusJidList.sort(), ['14502790497@s.whatsapp.net', '916367810227@s.whatsapp.net']);
+        contactsManager.contacts = [];
+    });
+
     console.log('— ④ agenda slot → bulk (route)');
     await t('POST /api/scheduled/from-agenda: morning slot → 09:00–11:30 window, slot hook, day-lock poster; retired lock media dropped', async () => {
         const express = require('express');

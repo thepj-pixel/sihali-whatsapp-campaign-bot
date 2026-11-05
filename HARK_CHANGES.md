@@ -13,6 +13,8 @@ New: `contact_import.js`, `status_posts.js`, `status_routes.js`, `test_bulk_6nov
 
 Runbook for the operators: `/workspace/work/live/BULK_RUNBOOK_6NOV.md` (short version below).
 
+**Runbook (short).** 0) Primary Line 🟢; 🔒 Today's goal → goal/points/media → lock → Save. 1) 🗓️ Scheduled Bulk → "🚀 Bulk in 3 steps": choose the file (.xlsx/.csv/.vcf or paste) → 👁 Check → 📥 Import (tag `📥 Bulk 6 Nov`). 2) Audience: tag + **max people ~110**, 3–4 Hindi variants with `{name}` (separated by `---`), tick 1–3 real posters, window **morning 09:00–11:30** (evening 17:30–20:00 with the same tag takes the rest), lines: **Primary only** (never Canada). 3) 👁 Preview (count, skipped by reason, warnings) → 🗓️ Schedule. Monitor in the list (details / ⬇️ results CSV); pause / resume / cancel per campaign. Red "⏸ auto: …" = the bot stopped itself: errors/disconnect → reconnect, wait 2 min, resume; "possible ban / rate-limit" → stop all bulk from that number for 24 h. 📢 Status posts: line → poster/text → caption → Post now or Schedule (09:30 / 13:00 / 17:30 / 20:00, max 4/day). Safe volume for one number: ~100–110 new people per window, ~200–220 per day, gaps 20–90 s.
+
 ---
 
 # HARK_CHANGES — dashboard login per person (5 Nov 2026: family members log in with their own username/password)

@@ -19,7 +19,8 @@ function install(app, d) {
         stateFile: process.env.STATUS_POSTS_PATH || path.join(__dirname, 'status_posts.json'),
         mediaDir: path.join(__dirname, 'media'),
         getSessions: () => SESSIONS,
-        ownNumbers: () => SESSIONS.map(s => numberOf(s.id)).filter(Boolean),
+        // own numbers = our CONNECTED lines only (test statuses never go to a line that isn't live)
+        ownNumbers: () => SESSIONS.filter(s => s.status === 'CONNECTED' && s.sock).map(s => numberOf(s.id)).filter(Boolean),
         ownNumberOf: numberOf,
         testLines: (process.env.STATUS_TEST_LINES || 'canada').split(',').map(s => s.trim()).filter(Boolean),
         audienceFor: (lineId, { tag }) => {
