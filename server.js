@@ -2476,7 +2476,7 @@ app.get('/api/self-test/status', (req, res) => {
 app.post('/api/self-test/start', (req, res) => {
     if (!selfTestPinOk(req)) return res.status(401).json({ error: 'PIN required' });
     try {
-        const st = liveSelfTest.start({ testerLine: req.body.testerLine, targetLine: req.body.targetLine, script: req.body.script && String(req.body.script).trim() ? req.body.script : null, freshContact: req.body.freshContact === true, op: req.body.op && typeof req.body.op === 'object' ? req.body.op : null });
+        const st = liveSelfTest.start({ testerLine: req.body.testerLine, targetLine: req.body.targetLine, script: req.body.script && String(req.body.script).trim() ? req.body.script : null, freshContact: req.body.freshContact === true, keepRecord: req.body.keepRecord === true, op: req.body.op && typeof req.body.op === 'object' ? req.body.op : null });
         operationsTracker.record('self_test', 'started', { lineId: req.body.targetLine });
         res.json({ success: true, ...st });
     } catch (e) {
