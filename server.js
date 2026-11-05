@@ -1255,7 +1255,7 @@ async function startSession(sessionObj) {
         try { noteTraffic(); } catch (_) {}
         for (const one of m.messages) {
             // decrypt failure on our side (Baileys asks the sender's phone to re-send automatically); counted in /api/msg-health
-            if (one.messageStubType === 2 && !one.message) { MSG_HEALTH.incomingUndecrypted = (MSG_HEALTH.incomingUndecrypted || 0) + 1; MSG_HEALTH.lastUndecryptedAt = new Date().toISOString(); }
+            if (one.messageStubType === 2 && !one.message) { MSG_HEALTH.incomingUndecrypted = (MSG_HEALTH.incomingUndecrypted || 0) + 1; MSG_HEALTH.lastUndecryptedAt = new Date().toISOString(); (MSG_HEALTH.undecryptedFrom = MSG_HEALTH.undecryptedFrom || []).push({ line: sessionObj.id, chat: String(one.key?.remoteJid || '').replace(/^(\d{4})\d+/, '$1…'), fromMe: !!one.key?.fromMe, participant: one.key?.participant ? 1 : 0, at: new Date().toISOString().slice(11, 19), err: one.messageStubParameters && String(one.messageStubParameters[0]).slice(0, 40) }); if (MSG_HEALTH.undecryptedFrom.length > 20) MSG_HEALTH.undecryptedFrom.shift(); }
             const chatKey = one.key?.remoteJid || 'unknown';
             const dedupeId = one.key?.id ? `${sessionObj.id}:${chatKey}:${one.key.id}:${one.key.fromMe ? 1 : 0}` : null;
             incomingQueue.enqueue(chatKey, () => handleIncomingUpsert({ ...m, messages: [one] }), dedupeId);
