@@ -293,6 +293,39 @@ const DISAPPEAR_ALLOWED = [0, 86400, 604800, 7776000];
 let DISAPPEAR = { seconds: 0, applied: {} };
 try { DISAPPEAR = Object.assign(DISAPPEAR, JSON.parse(fs.readFileSync(DISAPPEAR_FILE, 'utf8'))); } catch (_) {}
 function saveDisappear() { try { fs.writeFileSync(DISAPPEAR_FILE, JSON.stringify(DISAPPEAR)); } catch (e) { console.error('[Disappear] save', e.message); } }
+// Per-chat timer state {exp, ts, forced} keyed "line|digits". WhatsApp phones show "This message won't disappear —
+// timer conflict" when a message's expiration / ephemeralSettingTimestamp don't match the chat's setting, so we
+// mirror the chat's real setting (learned from the other side's messages and setting changes) and always send the
+// setting timestamp with it (Baileys 6.7 leaves ephemeralSettingTimestamp out).
+DISAPPEAR.state = DISAPPEAR.state || {};
+const _digits = (j) => String(j || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+function ephKeys(line, ...jids) { return [...new Set(jids.map(_digits).filter(Boolean))].map(d => line + '|' + d); }
+function ephGet(line, ...jids) { for (const k of ephKeys(line, ...jids)) if (DISAPPEAR.state[k]) return DISAPPEAR.state[k]; return null; }
+function ephSet(line, jids, st) { for (const k of ephKeys(line, ...jids)) DISAPPEAR.state[k] = Object.assign({}, DISAPPEAR.state[k] || {}, st); saveDisappear(); }
+function ephLearnFromMessage(line, one) {
+    try {
+        const k = one && one.key; const msg = one && one.message; if (!k || !msg) return;
+        const jid = k.remoteJid || ''; if (!/@(s\.whatsapp\.net|lid)$/.test(jid)) return;
+        const jids = [jid, k.remoteJidAlt, k.senderPn, k.participantAlt].filter(Boolean);
+        const inner = msg.ephemeralMessage?.message || msg;
+        const pm = inner.protocolMessage;
+        const toN = (v) => (v == null ? null : Number(typeof v === 'object' && v.toNumber ? v.toNumber() : v));
+        if (pm && Number(pm.type) === 3) { // EPHEMERAL_SETTING: someone changed the chat timer
+            ephSet(line, jids, { exp: toN(pm.ephemeralExpiration) || 0, ts: toN(one.messageTimestamp) || Math.floor(Date.now() / 1000), forced: true });
+            return;
+        }
+        if (k.fromMe) return;
+        for (const t of Object.keys(inner)) {
+            const ci = inner[t] && inner[t].contextInfo;
+            if (ci && (ci.expiration != null || ci.ephemeralSettingTimestamp != null)) {
+                const exp = toN(ci.expiration) || 0, ts = toN(ci.ephemeralSettingTimestamp);
+                const cur = ephGet(line, ...jids);
+                if (!cur || cur.exp !== exp || (ts && cur.ts !== ts)) ephSet(line, jids, { exp, ts: ts || (cur && cur.ts) || 0 });
+                return;
+            }
+        }
+    } catch (_) {}
+}
 // Short-lived device list cache (30 s instead of Baileys' 5 min): we always encrypt for the person's and our
 // own CURRENT devices, so a newly linked phone/web never gets a copy it can't open ("Waiting for this message").
 const USER_DEVICES = new Map();
@@ -569,12 +602,22 @@ async function startSession(sessionObj) {
         const secs = Number(DISAPPEAR.seconds) || 0;
         const personal = typeof jid === 'string' && jid.endsWith('@s.whatsapp.net');
         try { noteTraffic(); } catch (_) {}
-        if (secs && personal && content && !('disappearingMessagesInChat' in content) && !content.delete && !content.react) {
-            const tag = sessionObj.id + '|' + jid;
-            if (DISAPPEAR.applied[tag] !== secs) {
-                try { await _rawSend(jid, { disappearingMessagesInChat: secs }); DISAPPEAR.applied[tag] = secs; saveDisappear(); } catch (e) { console.warn('[Disappear]', e.message); }
+        if (personal && content && !('disappearingMessagesInChat' in content) && !content.delete && !content.react && !content.edit) {
+            let st = ephGet(sessionObj.id, jid);
+            // turn the chat's timer to our setting once; after that, if the voter changes it, we follow theirs (no fight)
+            if (secs && (!st || (st.exp !== secs && !st.forced))) {
+                try {
+                    await _rawSend(jid, { disappearingMessagesInChat: secs });
+                    st = { exp: secs, ts: Math.floor(Date.now() / 1000), forced: true };
+                    ephSet(sessionObj.id, [jid], st);
+                } catch (e) { console.warn('[Disappear]', e.message); }
             }
-            options = Object.assign({}, options || {}, { ephemeralExpiration: secs });
+            if (st && st.exp > 0) {
+                const ci = Object.assign({}, content.contextInfo || {}, { expiration: st.exp });
+                if (st.ts) ci.ephemeralSettingTimestamp = st.ts;
+                content = Object.assign({}, content, { contextInfo: ci });
+            }
+            if (options && options.ephemeralExpiration) { options = Object.assign({}, options); delete options.ephemeralExpiration; }
         }
         const sent = await _rawSend(jid, content, options);
         try { if (sent && sent.key && sent.key.id && sent.message) { MSG_STORE.set(sent.key.id, sent.message); MSG_HEALTH.stored++; } } catch (_) {}
@@ -1259,6 +1302,7 @@ async function startSession(sessionObj) {
         if (!m || !Array.isArray(m.messages) || !m.messages.length) return;
         try { noteTraffic(); } catch (_) {}
         for (const one of m.messages) {
+            ephLearnFromMessage(sessionObj.id, one);
             // decrypt failure on our side (Baileys asks the sender's phone to re-send automatically); counted in /api/msg-health
             if (one.messageStubType === 2 && !one.message) { MSG_HEALTH.incomingUndecrypted = (MSG_HEALTH.incomingUndecrypted || 0) + 1; MSG_HEALTH.lastUndecryptedAt = new Date().toISOString(); (MSG_HEALTH.undecryptedFrom = MSG_HEALTH.undecryptedFrom || []).push({ line: sessionObj.id, chat: String(one.key?.remoteJid || '').replace(/^(\d{4})\d+/, '$1…'), fromMe: !!one.key?.fromMe, participant: one.key?.participant ? 1 : 0, at: new Date().toISOString().slice(11, 19), err: one.messageStubParameters && String(one.messageStubParameters[0]).slice(0, 40) }); if (MSG_HEALTH.undecryptedFrom.length > 20) MSG_HEALTH.undecryptedFrom.shift(); }
             const chatKey = one.key?.remoteJid || 'unknown';
@@ -1489,7 +1533,7 @@ app.post('/api/admin/pin', (req, res) => {
 });
 
 // API: message delivery health (retry receipts served from our store vs missing)
-app.get('/api/msg-health', (req, res) => res.json({ success: true, ...MSG_HEALTH, deployHold: deployHoldReason(), storeSize: MSG_STORE.size, disappearingSeconds: DISAPPEAR.seconds || 0, chatsWithTimer: Object.keys(DISAPPEAR.applied || {}).length }));
+app.get('/api/msg-health', (req, res) => res.json({ success: true, ...MSG_HEALTH, deployHold: deployHoldReason(), storeSize: MSG_STORE.size, disappearingSeconds: DISAPPEAR.seconds || 0, chatsWithTimer: Object.keys(DISAPPEAR.state || {}).length }));
 // API: let an urgent update through the deploy hold for N minutes (admin). POST {minutes}
 app.post('/api/admin/deploy-force', (req, res) => {
     if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
@@ -1503,7 +1547,7 @@ app.post('/api/admin/disappearing', async (req, res) => {
     if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
     const secs = Number((req.body || {}).seconds);
     if (!DISAPPEAR_ALLOWED.includes(secs)) return res.status(400).json({ success: false, error: 'WhatsApp allows only 0 (off), 86400 (24h), 604800 (7 days), 7776000 (90 days)' });
-    DISAPPEAR.seconds = secs; saveDisappear();
+    DISAPPEAR.seconds = secs; for (const k of Object.keys(DISAPPEAR.state || {})) DISAPPEAR.state[k].forced = false; saveDisappear();
     const out = [];
     for (const s of SESSIONS) { if (s.sock && s.status === 'CONNECTED' && s.sock.updateDefaultDisappearingMode) { try { await s.sock.updateDefaultDisappearingMode(secs); out.push(s.id); } catch (e) { out.push(s.id + ': ' + e.message); } } }
     res.json({ success: true, seconds: secs, defaultSetOn: out, note: 'Existing chats get the timer on our next message to them; new chats get it by default.' });
