@@ -371,3 +371,13 @@ If an LLM key is set, the LLM only *rephrases* the reply. Its output is rejected
   is SameSite=Lax + HttpOnly and only `Secure` when the request is https → works on http://IP and behind Cloudflare.
   Real https without SSH: Cloudflare DNS `dash.abhaysinghsihali.in` A → 136.80.218.29 (proxied, orange cloud), SSL/TLS mode
   **Flexible** (origin stays on port 80). Full/Strict would need port 443 + a cert on the VM (needs SSH/Nginx change).
+
+## Instruction mode (2026-11-05)
+- **CRM / Live chat → 🧭 Instruction box** (under the AI co-pilot). The operator types a short Hinglish instruction about this voter.
+  - **✍️ Draft & send now**: safety filter → the LLM writes 1–2 warm Hindi sentences using only `rag_vault/parcha_facts.json` → preview (editable) → **📤 Send** from the voter's assigned line (default sim_636). If the parcha has no fact for it, the preview says so and nothing is invented. Without an LLM the parcha line itself is used.
+  - **⏭️ Use in next reply**: stores a one-time pending point (`user.memory.op.pendingInstr`, pre-written as a safe Hindi line); `reply_brain.respond` weaves it into the bot's next reply (LLM edit, else appended), then clears it. Sensitive turns (STOP, grief, abuse, complaint…) defer it. UI shows "⏳ Pending" with ✖ Cancel.
+  - **🔇 Mute bot for this voter** (undoable): bot stays silent (`user.botMuted` + `autoPilot=false`), no follow-ups; manual sends still work.
+- **Safety filter** (`instruction_mode.js`, rules + LLM screen) refuses harassing/pestering, spam, threats, insults, bribes/money/liquor/gifts, caste/religion, attacking opponents, lies/promised dates/guarantees, private data, symbol/sarpanch/budget/ballot-number asks. English refusal line, e.g. "Can't do that: the bot won't pester or harass anyone. Options: switch this voter to Gentle mode, or Mute the bot for this voter." with one-click Gentle / Mute buttons.
+- **Output checks** on every draft/edited text: `LEAK_RX` + `leakCheck` (private brief) + instruction-leak phrases (मुझे कहा गया, टीम ने कहा, निर्देश…), `validateLLM` hard rules (sarpanch claim, money, work counts, promised dates, symbol, ballot number), Amrit Sarovar must be "चालू", stadium only "प्रयास"/"संकल्प", no EPIC/voter-roll detail unless the voter's slip was delivered. STOP/declined voters: refused (409).
+- **API** (admin + member): `GET /api/voter/:phone/instruction`, `POST …/instruction/draft {instruction}`, `POST …/instruction/send {text, instruction?}`, `POST …/instruction/pending {instruction|null}`, `POST /api/voter/:phone/mute {on}`. All audit-logged (Diagnostics "किसने": who, when, voter, instruction/text, refused+reason) and logged to the messages feed.
+- Tests: `npm run test:instruct` (in test:all).

@@ -1463,6 +1463,15 @@ async function respond(message, user = {}, opts = {}) {
         text = alt || text;
         source += '+redirect';
     }
+    // instruction mode: the operator's one-time pending point is woven into this reply, then cleared
+    let instrUsed = null;
+    if (!t.flowResult && user && user.memory && user.memory.op && user.memory.op.pendingInstr) {
+        try {
+            const im = require('./instruction_mode.js');
+            const w = await im.weavePending(text, user, { llm: opts.llm || null, intent: cls.intent, message, allowedText: t.ctx.facts });
+            if (w.used) { text = w.text; source += '+instruction(' + w.how + ')'; instrUsed = w.how; }
+        } catch (e) {}
+    }
     if (t.pendingQ) text += ' ' + t.pendingQ;
     if (!t.flowResult) text = capVoteAsk(text, user, t.stage);
     if (BALLOT_NUMBER.test(text)) text = text.split(/(?<=[।?!.])\s+/).filter(x => !BALLOT_NUMBER.test(x)).join(' ').trim() || 'मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए 🙏';
@@ -1471,7 +1480,7 @@ async function respond(message, user = {}, opts = {}) {
     text = text.charAt(0).toUpperCase() + text.slice(1);
     if (user) voterMemory.markTold(user, t.c.used || []);
     if (t.c.needsAdmin && user) user.needsAdmin = { at: new Date().toISOString(), text: String(message).slice(0, 200), intent: cls.intent };
-    return { text, intent: cls.intent, topic: cls.topic, stage: t.stage, previousStage: t.previousStage, needsAdmin: !!t.c.needsAdmin, source, rejected, honorific: t.hon, gender: t.person.gender, facts: t.ctx.items.map(i => i.id), used: t.c.used || [], samasyaId: t.flowResult && t.flowResult.samasyaId, mulaqatId: t.flowResult && t.flowResult.mulaqatId };
+    return { text, intent: cls.intent, topic: cls.topic, stage: t.stage, previousStage: t.previousStage, needsAdmin: !!t.c.needsAdmin, source, rejected, honorific: t.hon, gender: t.person.gender, facts: t.ctx.items.map(i => i.id), used: t.c.used || [], samasyaId: t.flowResult && t.flowResult.samasyaId, mulaqatId: t.flowResult && t.flowResult.mulaqatId, instructionUsed: instrUsed };
 }
 
 /** One-time, early "Hindi or Hinglish?" question (1st or 2nd bot reply). Ignored -> stays Hindi, never asked again. */

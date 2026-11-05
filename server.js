@@ -2762,6 +2762,8 @@ const ocRoutes = require('./operator_control_routes.js');
 ocRoutes.install(app, { userMemory, runFollowups: () => runOperatorFollowups() });
 const crmRoutes = require('./crm_routes.js');
 const crmUi = require('./crm_ui.js');
+require('./instruction_routes.js').install(app, { userMemory, getActiveSocket, sendSafeMessage, logMessage,
+    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 9000) : null; } });
 crmRoutes.install(app, { userMemory, getActiveSocket, sendSafeMessage, sendMultiContactCard, engagementPolicy, contactCard, logMessage, samasyaStore, mulaqatStore, voterEngine, voterCardGen, slipFlow, replyBrain,
     getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 7000) : null; } });
 // Vision probe: does an NVIDIA vision model answer with the VM's keys? (uses an approved Media Bank poster)
@@ -4030,6 +4032,23 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                 </div>
                             </div>
 
+                            <!-- Instruction mode: operator's short Hinglish instruction -> natural Hindi message (safety-filtered, parcha facts only) -->
+                            <div id="wa-instr-container" class="crm-copilot" style="background:#fff7ed;border-top:1px solid #fed7aa;">
+                                <div class="crm-copilot-row">
+                                    <span style="font-size: 12px; font-weight: 700; color: #c2410c; white-space: nowrap;">🧭 Instruction</span>
+                                    <input type="text" id="crm-instr-input" maxlength="400" placeholder="e.g. isko paani ki tanki ke baare me bata do" style="border-color:#fdba74;" onkeydown="if(event.key==='Enter') crmInstrDraft()">
+                                    <button type="button" class="crm-btn" id="crm-instr-draft" style="background:#ea580c;" onclick="crmInstrDraft()">✍️ Draft &amp; send now</button>
+                                    <button type="button" class="crm-btn alt" id="crm-instr-pending" style="color:#c2410c;border-color:#fdba74;" onclick="crmInstrPending()">⏭️ Use in next reply</button>
+                                </div>
+                                <div id="crm-instr-info" style="font-size: 11.5px; color: #9a3412;"></div>
+                                <textarea id="crm-instr-draft-box" style="display:none;width:100%;box-sizing:border-box;min-height:58px;padding:8px 10px;border-radius:10px;border:1px solid #fdba74;font-size:13px;background:#fff;color:#0f172a;resize:vertical;"></textarea>
+                                <div class="crm-copilot-row" id="crm-instr-actions" style="display:none;">
+                                    <button type="button" class="crm-btn go" id="crm-instr-send" onclick="crmInstrSend()">📤 Send</button>
+                                    <span style="font-size:11px;color:#64748b;">You can edit the text before sending. Sent from this voter's line.</span>
+                                </div>
+                                <div class="crm-copilot-row" id="crm-instr-status" style="font-size:11.5px;color:#334155;"></div>
+                            </div>
+
                             <!-- Chat Direct Input Bar -->
                             <div class="wa-input-container" id="wa-input-container" style="display: none;">
                                 <input type="text" id="wa-direct-input" class="wa-input-field" placeholder="Type a direct WhatsApp message (press Enter or click Send)..." onkeydown="if(event.key==='Enter') sendManualWhatsAppReply()">
@@ -5228,7 +5247,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         document.getElementById('intel-mahool').value = v.mahoolNotes || '';
                         document.getElementById('intel-baba').value = v.babaNotes || '';
                         document.getElementById('intel-goal').value = v.campaignGoal || '';
-                        document.getElementById('wa-copilot-container').style.display = 'flex';
+                        document.getElementById('wa-copilot-container').style.display = 'flex'; var _ic = document.getElementById('wa-instr-container'); if (_ic) _ic.style.display = 'flex';
                         renderActiveTags(v.tags || []);
 
                         // Render messages

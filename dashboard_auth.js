@@ -323,6 +323,10 @@ function create(opts = {}) {
         [/^\/api\/broadcast\/(pause|resume|cancel)$/, 'bulk_control', 'Bulk send paused/resumed'],
         [/^\/api\/scheduled\/(create|from-agenda)$/, 'scheduled_create', 'Scheduled bulk created'],
         [/^\/api\/scheduled\/[^/]+\/(pause|resume|cancel)$/, 'scheduled_control', 'Scheduled bulk paused/resumed'],
+        [/^\/api\/voter\/[^/]+\/instruction\/draft$/, 'instruction_draft', 'Instruction drafted'],
+        [/^\/api\/voter\/[^/]+\/instruction\/send$/, 'instruction_send', 'Instruction message sent'],
+        [/^\/api\/voter\/[^/]+\/instruction\/pending$/, 'instruction_pending', 'Instruction for next reply'],
+        [/^\/api\/voter\/[^/]+\/mute$/, 'bot_mute', 'Bot muted/unmuted for voter'],
         [/^\/api\/crm\/profile\//, 'brief_edit', 'Voter profile/brief changed'],
         [/^\/api\/control\/voter\//, 'mode_edit', 'Voter mode/brief changed'],
         [/^\/api\/control\/day$/, 'daily_lock', 'Today goal/lock'],
@@ -356,7 +360,8 @@ function create(opts = {}) {
         const text = b.message || b.text || b.goal || b.about || '';
         if (typeof text === 'string' && text) d.text = text.slice(0, 80);
         if (req.params && Object.keys(req.params).length) d.params = req.params;
-        const m = req.path.match(/^\/api\/(crm\/profile|control\/voter|dashboard-users)\/([^/]+)/);
+        if (req.auditExtra && typeof req.auditExtra === 'object') for (const k of Object.keys(req.auditExtra)) if (req.auditExtra[k] !== undefined) d[k] = String(req.auditExtra[k]).slice(0, 140);
+        const m = req.path.match(/^\/api\/(crm\/profile|control\/voter|voter|dashboard-users)\/([^/]+)/);
         if (m) d.target = decodeURIComponent(m[2]).slice(0, 40);
         return d;
     }

@@ -253,6 +253,67 @@ function script() {
         }).catch(function () {});
     }
 
+    // ---------- Instruction mode ----------
+    var INS = { lastInstr: '' };
+    function insEl(id) { return document.getElementById(id); }
+    function insUrl(tail) { return '/api/voter/' + encodeURIComponent(CRM.phone) + tail; }
+    function insRefused(d) {
+        var info = insEl('crm-instr-info');
+        var opts = (d.options || []);
+        var h = '⛔ ' + esc(d.reason || 'Refused');
+        if (opts.some(function (o) { return /Gentle/.test(o); })) h += ' <button type="button" class="crm-btn alt" style="padding:3px 8px;font-size:11px;" onclick="crmInstrGentle()">🕊️ Gentle mode</button>';
+        if (opts.some(function (o) { return /Mute/.test(o); })) h += ' <button type="button" class="crm-btn alt" style="padding:3px 8px;font-size:11px;" onclick="crmInstrMute(true)">🔇 Mute bot for this voter</button>';
+        info.innerHTML = h;
+        insEl('crm-instr-draft-box').style.display = 'none'; insEl('crm-instr-actions').style.display = 'none';
+    }
+    function insRenderStatus(d) {
+        var el = insEl('crm-instr-status'); if (!el || !d) return;
+        var h = [];
+        if (d.optedOut) h.push('<span style="color:#b91c1c;font-weight:700;">⛔ Voter said STOP — nothing will be sent.</span>');
+        if (d.pending) h.push('<span style="background:#ffedd5;color:#9a3412;padding:2px 8px;border-radius:9px;font-weight:700;">⏳ Pending for next reply:</span> ' + esc(d.pending.text) + ' <button type="button" class="crm-btn alt" style="padding:3px 8px;font-size:11px;" onclick="crmInstrCancel()">✖ Cancel</button>');
+        else if (d.lastPendingUsed) h.push('✅ Last instruction used in a reply: ' + esc(d.lastPendingUsed.text));
+        h.push(d.muted ? '<span style="color:#b91c1c;font-weight:700;">🔇 Bot muted for this voter</span> (you can still send manually) <button type="button" class="crm-btn alt" style="padding:3px 8px;font-size:11px;" onclick="crmInstrMute(false)">🔊 Unmute</button>'
+                       : '<button type="button" class="crm-btn alt" style="padding:3px 8px;font-size:11px;" onclick="crmInstrMute(true)">🔇 Mute bot for this voter</button>');
+        el.innerHTML = h.join(' &nbsp;•&nbsp; ');
+    }
+    function insLoad() { if (!CRM.phone) return; api(insUrl('/instruction')).then(function (d) { if (d.ok) insRenderStatus(d); }).catch(function () {}); }
+    function insBusy(on) { ['crm-instr-draft', 'crm-instr-pending', 'crm-instr-send'].forEach(function (id) { var b = insEl(id); if (b) b.disabled = !!on; }); }
+    window.crmInstrDraft = function () {
+        if (!CRM.phone) return toast('Open a chat first', false);
+        var instr = insEl('crm-instr-input').value.trim(); if (!instr) return toast('Write an instruction', false);
+        INS.lastInstr = instr; insBusy(true); insEl('crm-instr-info').textContent = '⏳ Checking and drafting…';
+        api(insUrl('/instruction/draft'), { instruction: instr }).then(function (d) {
+            if (d.refused) return insRefused(d);
+            if (!d._ok && d.error) { insEl('crm-instr-info').textContent = '❌ ' + d.error; return; }
+            var box = insEl('crm-instr-draft-box'); box.value = d.draft || ''; box.style.display = 'block';
+            insEl('crm-instr-actions').style.display = 'flex';
+            insEl('crm-instr-info').textContent = d.missingFact ? '⚠️ ' + d.note : ('Draft ready — edit if needed, then press Send.' + (d.note ? ' (' + d.note + ')' : ''));
+        }).catch(function (e) { insEl('crm-instr-info').textContent = '❌ ' + e.message; }).then(function () { insBusy(false); });
+    };
+    window.crmInstrSend = function () {
+        var box = insEl('crm-instr-draft-box'); var text = box.value.trim(); if (!text) return toast('Nothing to send', false);
+        insBusy(true);
+        api(insUrl('/instruction/send'), { text: text, instruction: INS.lastInstr }).then(function (d) {
+            if (d._ok && d.ok) { toast('✅ Sent', true); box.value = ''; box.style.display = 'none'; insEl('crm-instr-actions').style.display = 'none'; insEl('crm-instr-info').textContent = ''; insEl('crm-instr-input').value = ''; setTimeout(function () { loadChat(CRM.phone, false); }, 700); }
+            else if (d.refused) { insEl('crm-instr-info').textContent = '⛔ ' + d.reason; }
+            else toast('❌ ' + (d.error || 'Send failed'), false);
+        }).catch(function (e) { toast('❌ ' + e.message, false); }).then(function () { insBusy(false); });
+    };
+    window.crmInstrPending = function () {
+        if (!CRM.phone) return toast('Open a chat first', false);
+        var instr = insEl('crm-instr-input').value.trim(); if (!instr) return toast('Write an instruction', false);
+        insBusy(true); insEl('crm-instr-info').textContent = '⏳ Checking…';
+        api(insUrl('/instruction/pending'), { instruction: instr }).then(function (d) {
+            if (d.refused) return insRefused(d);
+            if (!d.ok) { insEl('crm-instr-info').textContent = '⚠️ ' + (d.reason || d.error || 'Not saved'); return; }
+            insEl('crm-instr-info').textContent = '✅ Saved — the bot will weave this into its next reply to this voter (once).';
+            insEl('crm-instr-input').value = ''; insRenderStatus(d);
+        }).catch(function (e) { insEl('crm-instr-info').textContent = '❌ ' + e.message; }).then(function () { insBusy(false); });
+    };
+    window.crmInstrCancel = function () { api(insUrl('/instruction/pending'), { instruction: null }).then(function (d) { if (d.ok) { toast('Pending instruction cancelled', true); insRenderStatus(d); } }); };
+    window.crmInstrMute = function (on) { api(insUrl('/mute'), { on: !!on }).then(function (d) { if (d.ok) { toast(on ? '🔇 Bot muted for this voter' : '🔊 Bot unmuted', true); insRenderStatus(d); } }); };
+    window.crmInstrGentle = function () { api('/api/control/voter/' + encodeURIComponent(CRM.phone), { mode: 'gentle' }).then(function (d) { if (d.success) { toast('🕊️ Gentle mode on for this voter', true); insEl('crm-instr-info').textContent = 'Gentle mode on.'; } }); };
+
     // ---------- open a chat ----------
     var orig = window.selectVoter;
     window.selectVoter = function (phone) {
@@ -263,10 +324,15 @@ function script() {
             var sb = document.getElementById('crm-suggestion'); if (sb) { sb.value = ''; sb.style.display = 'none'; }
             var ca = document.getElementById('crm-cp-actions'); if (ca) ca.style.display = 'none';
             var ci = document.getElementById('crm-cp-info'); if (ci) ci.textContent = '';
+            var ib = document.getElementById('crm-instr-draft-box'); if (ib) { ib.value = ''; ib.style.display = 'none'; }
+            var ia = document.getElementById('crm-instr-actions'); if (ia) ia.style.display = 'none';
+            var ii = document.getElementById('crm-instr-info'); if (ii) ii.textContent = '';
         }
         var p = typeof orig === 'function' ? orig(phone) : null;
         return Promise.resolve(p).then(function () {
             var cp = document.getElementById('wa-copilot-container'); if (cp) cp.style.display = 'flex';
+            var ic = document.getElementById('wa-instr-container'); if (ic) ic.style.display = 'flex';
+            insLoad();
             loadChat(phone, false);
             loadProfile(phone);
             if (!CRM.actions) refreshActions();

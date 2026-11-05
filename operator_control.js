@@ -254,6 +254,7 @@ function followupDue(user, now = new Date()) {
     if (op.followup === 'off') return { due: false, why: 'off' };
     if (user.broadcastOptOut || user.consentStatus === 'REJECTED' || user.optedOut) return { due: false, why: 'stop' };
     if (user.selfTest) return { due: false, why: 'self_test' };
+    if (user.botMuted) return { due: false, why: 'muted' };
     const hist = Array.isArray(user.history) ? user.history : [];
     const userMsgs = hist.filter(h => h.role === 'user');
     if (!userMsgs.length) return { due: false, why: 'never_replied' };
