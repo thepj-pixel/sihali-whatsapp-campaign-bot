@@ -154,6 +154,9 @@ function checkText(text, user, { allowedText = '', strictBrain = true } = {}) {
     if (/(सरोवर|sarovar)/i.test(r) && !/(चालू|जारी|chalu|jaari)/i.test(r)) return 'sarovar_not_chalu';
     if (/(स्टेडियम|stadium)/i.test(r) && !/(प्रयास|prayas|संकल्प|sankalp)/i.test(r)) return 'stadium_claim';
     if (/(₹|रुपय|रुपए|रुपये|करोड़|लाख|बजट|rupay|crore|lakh|budget)/i.test(r)) return 'money';
+    const g = voterGender(user);
+    if (g !== 'F' && /(देंगी|लेंगी|चाहेंगी|करेंगी|आएंगी|आएँगी|जाएंगी|सकेंगी|रहेंगी|सकती हैं|चाहती हैं|बहन जी|माता जी|dengi|chahengi|karengi|aayengi)/i.test(r)) return 'gender_guess';
+    if (!g && /(भाई साहब|दादा जी|ताऊ जी|bhai sahab)/i.test(r)) return 'gender_guess';
     const cat = rulesCheck(r.replace(/(अभय सिंह जी|पंचायत)/g, ''));
     if (cat && OUT_CATS.has(cat)) return 'unsafe:' + cat;
     if (strictBrain) {
@@ -166,6 +169,12 @@ function checkText(text, user, { allowedText = '', strictBrain = true } = {}) {
     return null;
 }
 
+function voterGender(user) {
+    if (!user) return null;
+    const m = user.memory || {};
+    const g = m.gender || user.genderDetected || null;
+    return g === 'F' || g === 'M' ? g : null;
+}
 function honOf(user) {
     try {
         const brain = require('./reply_brain.js');
@@ -188,6 +197,7 @@ function draftPrompt(user, instruction, items, { pendingStyle = false } = {}) {
         'USE ONLY THESE FACTS (from the parchas), no other works, numbers, dates, names or promises:',
         ...items.map(factLine),
         `- ${C.service_hi || '40 वर्षों की निष्कलंक समाज सेवा'}`,
+        voterGender(user) ? `The voter is ${voterGender(user) === 'F' ? 'a woman' : 'a man'}.` : 'The voter\'s gender is unknown: never use gendered verbs or titles for them (say "आप ... चाहेंगे", not चाहेंगी). Do not ask for the vote unless the point asks for it.',
         'HARD RULES: never say Abhay Singh ji was sarpanch before; say "अभय सिंह जी", never "बाबा जी". No budgets, rupees or counts of works, no ballot serial number, no election symbol. Amrit Sarovar is "चालू"; the mini stadium is only a "प्रयास"; sankalp items are "आगे का संकल्प". No promised dates or guarantees, no threats, no bribes, no caste or religion, never attack opponents. At most one question. Output only the message.',
         oc.promptBlock(user || {})
     ].filter(Boolean).join('\n');

@@ -66,6 +66,8 @@ const SAFE_LLM = (draftText) => async (sys, hist, msg) => {
         ok(s.ok || t.includes('tareekh'), 'benign instruction allowed: ' + t + ' ' + JSON.stringify(s));
     }
 
+    ok(im.checkText('राम राम जी, अभय सिंह जी को अपना समर्थन देंगी क्या?', mk()) === 'gender_guess', 'no gendered verb for a voter of unknown gender');
+    ok(im.checkText('राम राम बहन जी, अभय सिंह जी को अपना समर्थन देंगी क्या?', mk({ memory: { gender: 'F' } })) === null, 'woman voter: feminine verb ok');
     // ---------- 3. leak guard ----------
     ok(im.checkText('राम राम जी, मुझे बताया गया है कि आपके यहाँ पानी की दिक्कत है।', mk()) === 'leak_phrase', 'LEAK_RX: मुझे बताया गया');
     ok(/^leak/.test(im.checkText('राम राम जी, टीम ने कहा कि आपको टंकी के बारे में बताऊँ।', mk()) || ''), 'टीम ने कहा blocked');
