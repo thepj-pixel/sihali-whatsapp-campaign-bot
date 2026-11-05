@@ -16,6 +16,7 @@
  */
 const voterEngine = require('./voter_engine.js');
 
+const vikasMenu = require('./vikas_menu.js');
 const INTENTS = ['slip_request', 'slip_answer', 'voter_card_issue', 'contact_request', 'political_talk', 'support', 'opposition',
     'complaint', 'question', 'greeting', 'chitchat', 'abuse', 'recall_self', 'thanks', 'other', 'unclear'];
 const lowerOf = s => String(s || '').toLowerCase().trim();
@@ -29,10 +30,11 @@ const FILLER = new Set(('acha accha achha are arey arre aree bhai bhaiya yaar yr
     'nikal nikaal dikhao dekho check karo kardo kar koi kon koin kaun konsa ward wahi yahi phir fir ek aap tum tumhara tumhare ' +
     'number nambar no ab jaldi la lao mil mila milegi milega gaya gayi aaya aayi tak abhi ok okay sahi theek thik ' +
     'dhanyavad dhanyawad dhanyavaad dhanywad dhanyabad shukriya sukriya thanks thank thankyou thanku thnx thx tq ty badhiya shabash mast good nice ' +
-    'jayegi jaegi jayega jaega jaayegi jaayega jaye jaaye jayengi sakti sakta sakte skti skta hogi hoga ho kab kaise kya kyaa kyu').split(/\s+/));
+    'jayegi jaegi jayega jaega jaayegi jaayega jaye jaaye jayengi sakti sakta sakte skti skta hogi hoga ho kab kaise kya kyaa kyu ' +
+    'karya kaarya kary karyo kaam kaaj works').split(/\s+/));
 const FILLER_HI = new Set(('अरे भाई जी हाँ हां नहीं ना की का के को भी पर्ची वोटर लिस्ट आईडी कार्ड नाम है हैं हूँ उसका उसकी उसके उनका उनकी ' +
     'उनके मेरा मेरी मेरे मुझे दे दो दीजिए भेजो भेज चाहिए थी था वाला वाली बताया बताओ अभी तो में मैं से पर और ये वो बस सिर्फ़ सिर्फ ' +
-    'निकालो दिखाओ कौन वार्ड यही वही एक आप तुम नंबर तक आया मिला धन्यवाद शुक्रिया बढ़िया ठीक मिल मिलेगी मिलेगा जाएगी जायेगी जाएगा सकती सकता होगी होगा क्या कब कैसे').split(/\s+/));
+    'निकालो दिखाओ कौन वार्ड यही वही एक आप तुम नंबर तक आया मिला धन्यवाद शुक्रिया बढ़िया ठीक मिल मिलेगी मिलेगा जाएगी जायेगी जाएगा सकती सकता होगी होगा क्या कब कैसे कार्य काम').split(/\s+/));
 
 // Roman -> Devanagari for names the roll actually has (spelling variants included). First entry = best guess.
 const NAME_TRANSLIT = {
@@ -66,6 +68,10 @@ function tokens(text) { return String(text || '').split(/[^a-zA-Z\u0900-\u097F]+
 /** Strip Hinglish filler -> the name words ("babal yadav kie bhi parchi de do" -> "babal yadav"). */
 function nameWords(text) {
     let t = String(text || '');
+    // v8 (6 Nov live): "gram vikas karya" is never a person's name ("vikas kumar" still is)
+    t = t.replace(/(?:gram|graam|gaon|gaav|panchayat|ग्राम|गाँव|गांव|पंचायत)\s*(?:ka|ke|ki|का|के|की)?\s*(?:vikas|vikaas|vikash|विकास)/ig, ' ')
+        .replace(/(?:vikas|vikaas|vikash|विकास)\s*(?:ka|ke|ki|का|के|की)?\s*(?:karya|kary|kaarya|karyo|kaam|kaj|works?|कार्य|कार्यों|काम)/ig, ' ')
+        .replace(/(?:karya|kaarya|kaam|works?|कार्य|काम)\s*(?:ka|ke|ki|का|के|की)?\s*(?:vikas|vikaas|विकास)/ig, ' ');
     // v7: corrections keep their tail, the father/husband segment and voice-typing filler go, an explicit "naam X" wins
     try { const sf = require('./slip_flow.js'); t = sf.nameQuery(t); } catch (e) {}
     t = t.replace(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?)?\s*\d{1,2}/ig, ' ');
@@ -120,10 +126,13 @@ function rules(text, user) {
     const slipWord = SLIP_RX.test(t);
     const st = user && user.slipTarget && user.slipTarget.at && (Date.now() - Date.parse(user.slipTarget.at) < 3 * 3600 * 1000) ? user.slipTarget : null;
     const pendingList = user && ((Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length) || user.pendingParchiCandidate);
-    const lastBot = (((user && user.history) || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '';
+    const lastBot = (((user && user.history) || []).filter(h => h.role === 'bot' && !vikasMenu.isVikasText(h.text)).slice(-1)[0] || {}).text || '';
     const botAskedName = /(नाम|naam).{0,40}(बता|लिख|bata|likh)|पिता.{0,10}नाम|pita.{0,10}naam/i.test(lastBot);
 
     if (ABUSE_RX.test(t)) { out.intent = 'abuse'; out.sentiment = 'angry'; return out; }
+    // v8 (6 Nov live): works questions are a category menu — before contact / candidate / slip / name lookup
+    const vk = vikasMenu.detect(t, user);
+    if (vk) { out.intent = vk.kind === 'menu' ? 'vikas_menu' : 'vikas_category'; out.vikas = vk; out.confidence = 0.95; return out; }
     if (CONTACT_RX.test(t) && !slipWord) { out.intent = 'contact_request'; out.wants_contact = true; out.confidence = 0.9; return out; }
     if (CARD_ISSUE_RX.test(t)) {
         out.intent = 'voter_card_issue'; out.target_person = OTHER_PERSON_RX.test(t) ? 'other' : 'self'; out.confidence = 0.85;
@@ -322,6 +331,7 @@ function merge(r, l, text, user) {
  */
 async function understand(text, user, opts = {}) {
     const r = rules(text, user);
+    if (r.vikas) return r; // the vikas menu is decided by rules (fast, never a name)
     if (process.env.NLU_LLM === 'off' || !opts.callLLM) return r;
     const raw = await llm(text, user, opts);
     if (!raw) return { ...r, llm_failed: true };

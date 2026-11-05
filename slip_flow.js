@@ -180,7 +180,9 @@ function rememberedName(user) {
 }
 
 function lastBot(user) {
-    const h = (user && Array.isArray(user.history) ? user.history : []).filter(x => x.role === 'bot');
+    // v8 (6 Nov): the vikas menu / category replies are not slip questions — look past them to the open slip step
+    let vm = null; try { vm = require('./vikas_menu.js'); } catch (e) {}
+    const h = (user && Array.isArray(user.history) ? user.history : []).filter(x => x.role === 'bot' && !(vm && vm.isVikasText(x.text)));
     return h.length ? String(h[h.length - 1].text || '') : '';
 }
 const fresh = (user, key) => user && user[key] && (!user.slipPendingAt || Date.now() - Date.parse(user.slipPendingAt) < PENDING_TTL_MS);
@@ -379,6 +381,8 @@ function openSlipQuestion(user) {
 function preempt(text, user) {
     if (!user || !text) return null;
     const t = String(text).trim();
+    // v8 (6 Nov live): "Gram Vikas karya batao" / a menu choice belongs to the vikas menu (NLU -> router), slip state kept
+    try { if (require('./vikas_menu.js').detect(t, user)) return null; } catch (e) {}
     const lb = lastBot(user);
     const enP = user.memory && user.memory.scriptPref === 'hinglish';
     // (Prince, 5 Nov) "slip nahi aayi" / "phir se bhejo" after a slip: send the same card again — never a name search

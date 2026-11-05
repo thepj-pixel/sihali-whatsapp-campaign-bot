@@ -7,7 +7,7 @@
  */
 const nlu = require('./nlu.js');
 
-const NO_SLIP_INTENTS = new Set(['political_talk', 'support', 'opposition', 'contact_request', 'voter_card_issue', 'recall_self', 'complaint', 'abuse', 'question', 'thanks']);
+const NO_SLIP_INTENTS = new Set(['vikas_menu', 'vikas_category', 'political_talk', 'support', 'opposition', 'contact_request', 'voter_card_issue', 'recall_self', 'complaint', 'abuse', 'question', 'thanks']);
 
 function scriptEn(user) {
     const m = user && user.memory;
@@ -66,6 +66,13 @@ function plan(n, user, ctx = {}) {
     const en = scriptEn(user);
     const name = ownName(user);
     const S = (hi, ro) => (en ? ro : hi);
+
+    // v8 (6 Nov live): a works question -> category menu / category works; any other turn closes the menu
+    if (n.intent === 'vikas_menu' || n.intent === 'vikas_category') {
+        const vm = require('./vikas_menu.js');
+        const r = vm.reply(n.vikas || vm.detect(ctx.text || '', user), user);
+        if (r) { out.reply = { intent: r.intent, text: r.text, cat: r.cat }; out.noSlip = true; return out; }
+    } else { try { require('./vikas_menu.js').clear(user); } catch (e) {} }
 
     switch (n.intent) {
         case 'contact_request': {
