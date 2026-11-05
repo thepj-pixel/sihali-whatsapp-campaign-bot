@@ -22,7 +22,10 @@ Live: 31 conversations on the VM (10 new: replies to a bulk intro, family cards,
 | "kya le ke jana padega" → generic; script question stacked on "अपना वार्ड बताइए" | ID line from the parcha (आधार या वोटर आईडी); script ask treats "अपना … बताइए" as a question; "kya" re-asks it | `reply_brain.js` |
 | Bulk `{name}` with no real name rendered "राम राम ग्रामवासी जी" / gendered "भाई जी" | placeholder names dropped; "{name} जी" → "जी"; neutral fallback | `broadcast_engine.js` |
 
-Tests: `test_brain_live_fixes.cjs` +28 checks (99), `test_broadcast_engine.cjs` +2.
+| Prince 18:54: slip ask "gets in a loop" — "ram ram" mid-slip got the greeting; a ward typed after the father-confirm went to the brain (vote ask), then "haan" became a vote commit; "pata nahi ward" before a name repeated the ask; "slip nahi aayi" searched *tula*, "phir se bhejo" → generic | `preempt`: greeting while a slip question is open re-asks that question ("राम राम जी 🙏 पर्ची वाली बात पूरी कर लेते हैं—…"); a ward after the confirm keeps the confirm; "pata nahi ward"/bare ward before a name = "वार्ड ज़रूरी नहीं" / ward noted; resend phrases resend the last card | `slip_flow.js` (`openSlipQuestion`, `RESEND_RX`) |
+| LLM "मैं आपको अपडेट करती हूँ" | rejected (the bot never starts a message) | `reply_brain.js` |
+
+Tests: `test_brain_live_fixes.cjs` +52 checks (123, incl. Prince's 5 loop scripts), `test_broadcast_engine.cjs` +2.
 
 # HARK_CHANGES — brain v7 (5 Nov 2026 evening: 35 messy live conversations on the VM)
 

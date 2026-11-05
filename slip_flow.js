@@ -352,11 +352,51 @@ function villageWards(text) {
     return null;
 }
 const ACK_AFTER_SLIP = /^(ha+n?|haa+|han|hn|ji+|jee|ha ji|haan ji|ji haan|yes|ok+|okay|theek|thik|theek hai|thik hai|thik h|theek h|sahi|sahi hai|sahi h|yahi|yahi hai|yahi h|ha yahi|haan sahi|ha sahi|bilkul|mil gayi|mil gai|mil gaya|aa gayi|aa gai|dhanyavad|dhanyawad|shukriya|thanks|thank you|thanku|👍|🙏|✅|हाँ|हां|जी|ठीक है|सही|सही है|यही|यही है|मिल गई|मिल गयी|धन्यवाद|शुक्रिया)[\s!.,🙏👍]*((ji|जी|bhai|sahi|hai|h|yahi|thanks|dhanyavad|धन्यवाद|है|सही|a lot|alot|so much|very much|bahut|बहुत)[\s!.,🙏👍]*){0,3}$/i;
+const RESEND_RX = /((slip|parchi|parchee|पर्ची|card|कार्ड|photo|फोटो)?\s*(nahi|nhi|nahin|नहीं|ni)\s*(aayi|aai|ayi|aaya|aya|aa?i|mili|mila|khuli|khul|dikh|dikhi|आई|आया|मिली|मिला|खुली|दिखी)|(phir|fir|dobara|dubara|dobaara|ek baar aur|firse|phirse|फिर|दोबारा|दुबारा)\s*(se\s*)?(bhejo|bhej do|bhejiye|send|भेजो|भेज दो|भेजिए)|\bresend\b|send again)/i;
+const GREET_ONLY = /^(r+a+m+\s*r+a+m+|राम\s*राम|jai\s*shree\s*ram|jai\s*shri\s*ram|namaste|namastey|namaskar|नमस्ते|नमस्कार|pranam|प्रणाम|hello|hii*|hey)(\s*(ji|जी|bhai|bhaiya|sa|सा|भाई))*[\s!.,🙏]*$/i;
+/** The open slip question in one short line (to re-ask after a greeting), or null when no slip question is open. */
+function openSlipQuestion(user) {
+    if (!user) return null;
+    const en = user.memory && user.memory.scriptPref === 'hinglish';
+    if (user.pendingParchiCandidate && fresh(user, 'pendingParchiCandidate')) { const c = user.pendingParchiCandidate; return en ? `Parchi wali baat poori kar lete hain—${relLabel(c, true)} ka naam *${c.rel_name_hi || '—'}* hi hai? Sahi ho to *'haan'* likh dijiye.` : `पर्ची वाली बात पूरी कर लेते हैं—${relLabel(c)} का नाम *${c.rel_name_hi || '—'}* ही है? सही हो तो *'हाँ'* लिख दीजिए।`; }
+    if (Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length && fresh(user, 'disambiguationMatches')) {
+        const nm = user.disambiguationMatches[0].name_hi || '';
+        if (user.slipAwaitWard) return en ? `Parchi wali baat poori kar lete hain—*${nm}* kis ward se hain? Bas number likh dijiye (na pata ho to pita/pati ka naam).` : `पर्ची वाली बात पूरी कर लेते हैं—*${nm}* किस वार्ड से हैं? बस नंबर लिख दीजिए (न पता हो तो पिता/पति का नाम)।`;
+        return en ? 'Parchi wali baat poori kar lete hain—upar ki list me se number bhej dijiye, ya pita/pati ka naam.' : 'पर्ची वाली बात पूरी कर लेते हैं—ऊपर की सूची में से नंबर भेज दीजिए, या पिता/पति का नाम।';
+    }
+    if (user.slipAskedAt && Date.now() - Date.parse(user.slipAskedAt) < 30 * 60e3 && !(user.slipDeliveredAt && Date.parse(user.slipDeliveredAt) > Date.parse(user.slipAskedAt)))
+        return en ? 'Parchi ke liye apna poora naam aur pita/pati ka naam likh dijiye.' : 'पर्ची के लिए अपना पूरा नाम और पिता/पति का नाम लिख दीजिए।';
+    return null;
+}
 /** Runs BEFORE the NLU: answers to our own slip questions (ward asked, family offered) never go elsewhere. */
 function preempt(text, user) {
     if (!user || !text) return null;
     const t = String(text).trim();
     const lb = lastBot(user);
+    const enP = user.memory && user.memory.scriptPref === 'hinglish';
+    // (Prince, 5 Nov) "slip nahi aayi" / "phir se bhejo" after a slip: send the same card again — never a name search
+    const ls = user.lastSlipDelivered && Date.now() - Date.parse(user.lastSlipDelivered.at) < 12 * 3600e3 ? user.lastSlipDelivered : null;
+    if (ls && RESEND_RX.test(t) && t.split(/\s+/).length <= 8 && !relationAsked(t)) {
+        const all0 = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
+        const dv0 = all0.find(x => Number(x.ward) === ls.ward && Number(x.sr_no) === ls.sr);
+        if (dv0) return { kind: 'deliver', voter: dv0, other: !!ls.other, again: true };
+    }
+    // a greeting or a bare ward while a slip question is open continues the slip — never the greeting, never a new topic
+    const open = openSlipQuestion(user);
+    if (open && GREET_ONLY.test(t)) return { kind: 'ack', text: (enP ? 'Ram Ram ji 🙏 ' : 'राम राम जी 🙏 ') + open };
+    if (open && user.pendingParchiCandidate && fresh(user, 'pendingParchiCandidate') && /^(?:ward|वार्ड)?\s*\d{1,2}\s*[।.!🙏]*$/i.test(t)) {
+        const c = user.pendingParchiCandidate;
+        return { kind: 'ack', text: enP ? `Ji, ward ${wardAnswer(t)} 🙏 Parchi ke liye bas confirm kar dijiye—${relLabel(c, true)} ka naam *${c.rel_name_hi || '—'}* hi hai? Sahi ho to *'haan'* likh dijiye.`
+            : `जी, वार्ड ${wardAnswer(t)} 🙏 पर्ची के लिए बस पक्का कर दीजिए—${relLabel(c)} का नाम *${c.rel_name_hi || '—'}* ही है? सही हो तो *'हाँ'* लिख दीजिए।` };
+    }
+    const askOpen = user.slipAskedAt && Date.now() - Date.parse(user.slipAskedAt) < 30 * 60e3 && !(user.slipDeliveredAt && Date.parse(user.slipDeliveredAt) > Date.parse(user.slipAskedAt)) && !/(डिजिटल मतदाता पर्ची|परिवार की मतदाता पर्ची)/.test(lb) && !(user.disambiguationMatches && fresh(user, 'disambiguationMatches')) && !(user.pendingParchiCandidate && fresh(user, 'pendingParchiCandidate')) && /(पूरा नाम|poora naam|किसकी पर्ची|kiski parchi|नाम और पिता|naam aur pita|का पूरा नाम)/i.test(lb);
+    if (askOpen && (DONT_KNOW_WARD.test(t) || /^(?:ward|वार्ड)?\s*\d{1,2}\s*[।.!🙏]*$/i.test(t))) {
+        const w = wardAnswer(t);
+        if (w) { const m = require('./voter_memory.js').ensure(user); m.ward = w; if (!user.ward) user.ward = w; }
+        const who = user.slipPendingWho === 'other' ? (enP ? 'unka' : 'उनका') : (enP ? 'apna' : 'अपना');
+        return { kind: 'ack', text: w ? (enP ? `Ji, ward ${w} note kar liya 🙏 Ab ${who} poora naam likh dijiye—ward ${w} ki list me turant dhoondh dungi.` : `जी, वार्ड ${w} नोट कर लिया 🙏 अब ${who} पूरा नाम लिख दीजिए—वार्ड ${w} की सूची में तुरंत ढूँढ दूँगी।`)
+            : (enP ? `Koi baat nahi, ward zaroori nahi 🙏 Bas ${who} poora naam aur pita/pati ka naam likh dijiye.` : `कोई बात नहीं, वार्ड ज़रूरी नहीं 🙏 बस ${who} पूरा नाम और पिता/पति का नाम लिख दीजिए।`) };
+    }
     // v7: right after a delivered slip, "ha" / "sahi hai" / "ok" / "dhanyavad" is an acknowledgement — never a new search
     // (live: "ha yahi" re-listed 14 सुनील कुमार), and repeating the same father/name gets "already sent", not a second card
     const deliveredLast = user.slipDeliveredAt && Date.now() - Date.parse(user.slipDeliveredAt) < 2 * 3600e3 && /(डिजिटल मतदाता पर्ची|परिवार की मतदाता पर्ची|parchi upar)/i.test(lb);

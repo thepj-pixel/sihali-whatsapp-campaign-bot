@@ -273,6 +273,20 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
         check(/अलग से कोई काम दर्ज नहीं/.test(ww.out[0].reply) && (ww.out[0].reply.match(/\?/g) || []).length === 0, 'women question: honest (no women-only item in the parcha) + one real work', ww.out[0].reply);
         const nf = await convo('notFound4', ['meri parchi chaiye', 'naam ramesh yadav', 'pita hari ram', 'ward 2', 'fir kya karu']);
         check(/EPIC/.test(nf.out[4].reply) && !/karu/.test(nf.out[4].reply), '"fir kya karu" after a miss = what to do next (no name search)', nf.out[4].reply);
+        check(brain.validateAgainstDraft('अमृत सरोवर का निर्माण कार्य अभी चालू है, मैं आपको अपडेट करती हूँ।', 'x', { l: 'hi' }) === 'self_promise', 'LLM "मैं आपको अपडेट करती हूँ" rejected (bot never starts a message)');
+        // Prince (5 Nov 18:54): slip asks must never loop back to the greeting or repeat the previous reply
+        const noLoop = (out, label) => { for (let i = 1; i < out.length; i++) check(out[i].reply !== out[i - 1].reply && !/कुशल-मंगल/.test(out[i].reply) || out[i].kind === 'brain' && i === 0, label + ' t' + (i + 1) + ' no repeat / no greeting', out[i].reply); };
+        const L1 = await convo('loop1', ['raam raam', 'parchi chahiye', 'rajesh devi', '3', 'haan', 'parivar']);
+        noLoop(L1.out, 'loop1'); check(L1.out[4].kind === 'slip_deliver' && L1.out[5].kind === 'slip_family', 'loop1 delivers then family card', L1.out.map(o => o.kind).join(','));
+        const L2 = await convo('loop2', ['ram ram ji', 'meri parchi bhejo', 'tula ram', '4', 'haan']);
+        noLoop(L2.out, 'loop2'); check(L2.out[4].kind === 'slip_deliver', 'loop2: ward after the confirm keeps the confirm; "haan" delivers', L2.out.map(o => o.kind + ':' + o.reply.slice(0, 40)).join(' | '));
+        const L3 = await convo('loop3', ['raam raam', 'raam raam', 'voter slip', 'pata nahi ward', 'rajesh devi', 'pata nahi ward', '1']);
+        noLoop(L3.out.slice(2), 'loop3'); check(/वार्ड ज़रूरी नहीं/.test(L3.out[3].reply), 'loop3: "pata nahi ward" before a name = ward not needed', L3.out[3].reply);
+        check(L3.out[6].kind === 'slip_confirm' || L3.out[6].kind === 'slip_deliver', 'loop3: pick from list -> confirm', L3.out[6].kind + ' ' + L3.out[6].reply);
+        const L4 = await convo('loop4', ['parchi', 'pooja', 'ram ram']);
+        check(L4.out[2].kind === 'slip_ack' && /पर्ची वाली बात/.test(L4.out[2].reply) && !/कुशल-मंगल/.test(L4.out[2].reply), 'loop4: greeting mid-slip continues the slip', L4.out[2].reply);
+        const L5 = await convo('loop5', ['parchi', 'tula ram pita nabal singh', 'slip nahi aayi', 'phir se bhejo']);
+        check(L5.out[2].kind === 'slip_deliver' && L5.out[3].kind === 'slip_deliver', '"slip nahi aayi" / "phir se bhejo" resend the same card', L5.out.map(o => o.kind).join(','));
         // vote-ask frequency: a model-written ask ("…समर्थन देंगे ना?") counts; no second ask in the next replies
         const { u, phone } = freshUser();
         u.history.push({ role: 'user', text: 'ye sab to sarkar ka kaam hai' }, { role: 'bot', text: 'जी, यह बात सही है। आप 16 नवंबर को अभय सिंह जी को अपना वोट देकर समर्थन देंगे ना?' });
