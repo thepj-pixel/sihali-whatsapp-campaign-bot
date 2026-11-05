@@ -1326,7 +1326,87 @@ function resolveBroadcastAudience(body = {}) {
     return { phones: body.phones || '', csvText: body.csvText || '', contacts };
 }
 
+// ==================== ONE IDENTITY ACROSS TABS ====================
+// Every tab API returns the same phone format and the same name for a voter (identity.js).
+const identity = require('./identity.js');
+const identityResolver = identity.makeResolver({ contactsManager, userMemory, voterMemory: require('./voter_memory.js') });
+const IDENTITY_ROUTES = /^\/api\/(messages|voters|contacts|samasya|mulaqat|voter-plan|overview|scheduled|virodhi|voter\/[^/]+|daily-goal\/progress|broadcast\/status)(\/|$)/;
+app.use((req, res, next) => {
+    if (req.method !== 'GET' || !IDENTITY_ROUTES.test(req.path)) return next();
+    const json = res.json.bind(res);
+    res.json = (body) => {
+        try { return json(identityResolver.harmonize(body, { addName: req.path === '/api/messages' })); } catch (e) { return json(body); }
+    };
+    next();
+});
+
 // ==================== REST APIS ====================
+
+// API: Mobile "➕ Add contact & send now" (operator-triggered). Saves the contact on the chosen line, sends the
+// message (+ optional Media Bank poster) and then the line's contact card. Respects STOP / declined consent.
+const QUICK_INTRO = (name) => `राम राम ${name ? name + ' जी' : 'जी'} 🙏\nमैं बाबा अभय सिंह (मोटी आंगली वाले) की टीम से — ग्राम पंचायत सिहाली खुर्द। ये हमारा नंबर है, कृपया सेव कर लीजिए। गाँव की कोई भी बात या समस्या हो तो यहीं लिखिए। 🚩`;
+app.post('/api/quick-add-send', async (req, res) => {
+    const b = req.body || {};
+    try {
+        const phone = identity.normalizePhone(b.phone);
+        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'सही मोबाइल नंबर डालें (10 अंक या +देश कोड)' });
+        const lineId = String(b.lineId || 'sim_636');
+        const sess = SESSIONS.find(x => x.id === lineId);
+        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'चुनी गई लाइन (' + lineId + ') कनेक्ट नहीं है' });
+        const u = userMemory.getUser(phone);
+        if (isBroadcastOptedOut(phone) || (u && (u.broadcastOptOut || u.consentStatus === 'REJECTED'))) {
+            operationsTracker.record('quick_add_send', 'blocked_stop', { lineId });
+            return res.status(409).json({ success: false, error: 'इस नंबर ने STOP/मना किया है — मैसेज नहीं भेजा गया', optedOut: true });
+        }
+        const name = String(b.name || '').trim().slice(0, 60);
+        const ward = parseInt(b.ward) || null;
+        // 1) save contact on the line (one name source of truth: Contacts book)
+        const existing = contactsManager.findByPhone(phone);
+        const contact = contactsManager.add({ ...(existing || {}), phone, name: (identity.isRealName(name) ? name : '') || (existing && existing.name) || identityResolver.nameFor(phone) || 'ग्रामवासी',
+            ward: ward || (existing && existing.ward) || (u && u.ward) || null, line: lineId,
+            tags: Array.from(new Set([...((existing && existing.tags) || []), '➕ Quick Add'])) });
+        if (u) {
+            if (identity.isRealName(name)) u.name = name;
+            if (ward) u.ward = ward;
+            if (!u.assignedLine) u.assignedLine = lineId;
+        }
+        const jid = `${phone}@s.whatsapp.net`;
+        if (identity.isRealName(name) && !existing) queueWhatsAppContactSync(sess.sock, jid, name);
+        // 2) message (+ optional poster from the Media Bank)
+        const text = (b.message === 'custom' && String(b.customText || '').trim()) ? String(b.customText).trim().slice(0, 2000) : QUICK_INTRO(identity.isRealName(name) ? name : (contact && identity.isRealName(contact.name) ? contact.name : ''));
+        let media = null;
+        if (b.poster) {
+            const f = path.basename(String(b.poster));
+            const full = path.join(MEDIA_DIR, f);
+            const t = mediaTypeOf(path.extname(f).toLowerCase());
+            if (!fs.existsSync(full) || !t) return res.status(400).json({ success: false, error: 'Poster not found in Media Bank: ' + f });
+            media = { file: f, type: t, full };
+        }
+        let sent;
+        if (media && media.type === 'image') sent = await sendSafeMessage(sess.sock, jid, { image: fs.readFileSync(media.full), caption: text });
+        else if (media && media.type === 'video') sent = await sendSafeMessage(sess.sock, jid, { video: fs.readFileSync(media.full), caption: text });
+        else if (media) sent = await sendSafeMessage(sess.sock, jid, { document: fs.readFileSync(media.full), fileName: media.file, mimetype: 'application/pdf', caption: text });
+        else sent = await sendSafeMessage(sess.sock, jid, { text });
+        userMemory.recordMessage(phone, 'bot', text, media ? 'quickadd_' + media.type : 'quickadd', sess.name);
+        // 3) the line's contact card (once per contact per line unless the operator asks to resend)
+        let card = 'already_sent';
+        if (b.forceCard || contactCard.needsCard(u, lineId)) {
+            await new Promise(r => setTimeout(r, 800));
+            await sendMultiContactCard(sess.sock, jid, lineId);
+            contactCard.markSent(u, lineId);
+            userMemory.recordMessage(phone, 'bot', '📇 [Line contact card sent]', null, sess.name);
+            card = 'sent';
+        }
+        userMemory.save();
+        logMessage({ session: sess.name, phone, incoming: `[Quick Add${name ? ': ' + name : ''}]`, reply: text, status: media ? 'MEDIA_SENT' : 'DELIVERED' });
+        operationsTracker.record('quick_add_send', 'sent', { lineId, mediaType: media ? media.type : 'text', card });
+        res.json({ success: true, phone, name: identityResolver.nameFor(phone), line: lineId, lineName: sess.name, message: text, poster: media ? media.file : null, contactCard: card,
+            messageId: sent && sent.key ? sent.key.id : null, contactId: contact && contact.id });
+    } catch (e) {
+        operationsTracker.record('quick_add_send', 'failed', { reason: e.message });
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
 // API: Send Message directly from Dashboard (Quick-Add / Field Mode)
 app.post('/api/send-message', async (req, res) => {
@@ -2740,6 +2820,16 @@ app.get('/', (req, res) => {
                     .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
                     .header-bar { flex-direction: column; align-items: flex-start; }
                 }
+                .qa-panel { background: linear-gradient(135deg, #065f46, #0f766e); color: #fff; border-radius: 14px; padding: 14px; margin-bottom: 16px; box-shadow: 0 6px 18px rgba(6,95,70,.25); }
+                .qa-head { font-weight: 800; font-size: 17px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+                .qa-panel form { display: grid; gap: 8px; max-width: 760px; }
+                .qa-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+                .qa-panel input[type=tel], .qa-panel input[type=text], .qa-panel input[type=number], .qa-panel select, .qa-panel textarea { width: 100%; min-height: 46px; padding: 10px 12px; border-radius: 10px; border: 0; font-size: 16px; color: #0f172a; background: #fff; }
+                .qa-panel #qa-phone { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+                .qa-check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+                .qa-send { min-height: 52px; border: 0; border-radius: 12px; background: #facc15; color: #111827; font-size: 18px; font-weight: 800; cursor: pointer; }
+                .qa-send:disabled { opacity: .6; }
+                .qa-status { font-size: 14px; font-weight: 700; min-height: 18px; word-break: break-word; }
                 /* Mobile-first: wrap tabs into a tap grid, scroll wide tables, 16px inputs (no iOS zoom) */
                 .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
                 img, video, canvas { max-width: 100%; height: auto; }
@@ -2820,6 +2910,60 @@ app.get('/', (req, res) => {
                         <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
                     </div>
                 </div>
+
+                <!-- ➕ Mobile-first quick add & send -->
+                <div id="qa-panel" class="qa-panel">
+                    <div class="qa-head">➕ Add contact &amp; send now <span style="font-weight:500;font-size:12px;opacity:.85;">नंबर डालें → भेजें (STOP वालों को नहीं जाएगा)</span></div>
+                    <form id="qa-form" autocomplete="off" onsubmit="return false;">
+                        <input id="qa-phone" type="tel" inputmode="tel" placeholder="📱 मोबाइल नंबर (10 अंक / +1…)" required>
+                        <div class="qa-row">
+                            <input id="qa-name" type="text" placeholder="नाम (optional)">
+                            <input id="qa-ward" type="number" inputmode="numeric" min="1" max="30" placeholder="वार्ड">
+                        </div>
+                        <div class="qa-row">
+                            <select id="qa-line">${SESSIONS.map(s => `<option value="${s.id}"${s.status === 'CONNECTED' ? '' : ' disabled'}>${s.status === 'CONNECTED' ? '🟢' : '⚪'} ${s.name}</option>`).join('')}</select>
+                            <select id="qa-msg"><option value="intro">👋 छोटा परिचय (default)</option><option value="custom">✍️ अपना मैसेज</option></select>
+                        </div>
+                        <textarea id="qa-custom" rows="3" placeholder="अपना मैसेज लिखें…" style="display:none;"></textarea>
+                        <div class="qa-row">
+                            <select id="qa-poster"><option value="">🖼️ बिना पोस्टर</option></select>
+                            <label class="qa-check"><input id="qa-forcecard" type="checkbox"> कार्ड दोबारा भेजें</label>
+                        </div>
+                        <button id="qa-send" type="button" class="qa-send">📲 Save &amp; Send now</button>
+                        <div id="qa-status" class="qa-status" role="status" aria-live="polite"></div>
+                    </form>
+                </div>
+                <script>
+                (function () {
+                    function $(id) { return document.getElementById(id); }
+                    function setStatus(t, ok) { var s = $('qa-status'); s.textContent = t; s.style.color = ok === false ? '#fecaca' : (ok ? '#bbf7d0' : '#e2e8f0'); }
+                    var line = $('qa-line'); if (line) { for (var i = 0; i < line.options.length; i++) if (!line.options[i].disabled) { line.selectedIndex = i; break; } }
+                    $('qa-msg').addEventListener('change', function () { $('qa-custom').style.display = this.value === 'custom' ? 'block' : 'none'; });
+                    fetch('/api/media/list', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+                        var sel = $('qa-poster');
+                        (d.media || []).filter(function (m) { return m.type === 'image'; }).forEach(function (m) { var o = document.createElement('option'); o.value = m.file; o.textContent = '🖼️ ' + m.file; sel.appendChild(o); });
+                    }).catch(function () {});
+                    var busy = false;
+                    $('qa-send').addEventListener('click', function () {
+                        if (busy) return;
+                        var phone = $('qa-phone').value.trim();
+                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ सही मोबाइल नंबर डालें', false); $('qa-phone').focus(); return; }
+                        if ($('qa-msg').value === 'custom' && !$('qa-custom').value.trim()) { setStatus('❌ मैसेज लिखें', false); return; }
+                        busy = true; this.disabled = true; setStatus('⏳ भेज रहे हैं…');
+                        var btn = this;
+                        fetch('/api/quick-add-send', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+                            phone: phone, name: $('qa-name').value.trim(), ward: $('qa-ward').value, lineId: $('qa-line').value,
+                            message: $('qa-msg').value, customText: $('qa-custom').value, poster: $('qa-poster').value, forceCard: $('qa-forcecard').checked
+                        }) }).then(function (r) { return r.json(); }).then(function (d) {
+                            if (d.success) {
+                                setStatus('✅ भेजा: ' + (d.name ? d.name + ' • ' : '') + d.phone + ' via ' + d.lineName + (d.poster ? ' + पोस्टर' : '') + ' • कार्ड: ' + (d.contactCard === 'sent' ? 'भेजा' : 'पहले से है'), true);
+                                $('qa-phone').value = ''; $('qa-name').value = ''; $('qa-ward').value = '';
+                            } else setStatus('❌ ' + (d.error || 'Failed'), false);
+                        }).catch(function (e) { setStatus('❌ नेटवर्क त्रुटि: ' + e.message, false); })
+                          .then(function () { busy = false; btn.disabled = false; });
+                    });
+                })();
+                </script>
 
                 <!-- Session Status Pills -->
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
