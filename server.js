@@ -1383,7 +1383,7 @@ app.use((req, res, next) => {
 app.post('/api/admin/pin', (req, res) => {
     if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
     const p = String((req.body && req.body.newPin) || '').trim();
-    if (!/^\d{4,12}$/.test(p)) return res.status(400).json({ success: false, error: 'PIN 4–12 अंकों का होना चाहिए' });
+    if (!/^\d{4,12}$/.test(p)) return res.status(400).json({ success: false, error: 'PIN must be 4–12 digits' });
     try { fs.writeFileSync(PIN_FILE, JSON.stringify({ pin: p, changedAt: new Date().toISOString(), by: req.dashUser.username }), { mode: 0o600 }); } catch (e) { return res.status(500).json({ success: false, error: 'save failed' }); }
     CAMPAIGN_PIN = p; dashAuth.setPin(p);
     res.json({ success: true });
@@ -1396,14 +1396,14 @@ app.post('/api/quick-add-send', async (req, res) => {
     const b = req.body || {};
     try {
         const phone = identity.normalizePhone(b.phone);
-        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'सही मोबाइल नंबर डालें (10 अंक या +देश कोड)' });
+        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'Enter a valid mobile number (10 digits or +country code)' });
         const lineId = String(b.lineId || 'sim_636');
         const sess = SESSIONS.find(x => x.id === lineId);
-        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'चुनी गई लाइन (' + lineId + ') कनेक्ट नहीं है' });
+        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'Selected line (' + lineId + ') is not connected' });
         const u = userMemory.getUser(phone);
         if (isBroadcastOptedOut(phone) || (u && (u.broadcastOptOut || u.consentStatus === 'REJECTED'))) {
             operationsTracker.record('quick_add_send', 'blocked_stop', { lineId });
-            return res.status(409).json({ success: false, error: 'इस नंबर ने STOP/मना किया है — मैसेज नहीं भेजा गया', optedOut: true });
+            return res.status(409).json({ success: false, error: 'This number said STOP / refused — message not sent', optedOut: true });
         }
         const name = String(b.name || '').trim().slice(0, 60);
         const ward = parseInt(b.ward) || null;
@@ -1493,16 +1493,16 @@ app.post('/api/operator-slip', async (req, res) => {
     const b = req.body || {};
     try {
         const phone = identity.normalizePhone(b.phone);
-        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'सही मोबाइल नंबर डालें (10 अंक या +देश कोड)' });
+        if (!phone || phone.length < 11) return res.status(400).json({ success: false, error: 'Enter a valid mobile number (10 digits or +country code)' });
         const lineId = String(b.lineId || 'sim_636');
         const sess = SESSIONS.find(x => x.id === lineId);
-        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'चुनी गई लाइन (' + lineId + ') कनेक्ट नहीं है' });
+        if (!sess || sess.status !== 'CONNECTED' || !sess.sock) return res.status(503).json({ success: false, error: 'Selected line (' + lineId + ') is not connected' });
         const u = userMemory.getUser(phone);
-        if (isBroadcastOptedOut(phone) || (u && (u.broadcastOptOut || u.consentStatus === 'REJECTED'))) return res.status(409).json({ success: false, error: 'इस नंबर ने STOP/मना किया है — मैसेज नहीं भेजा गया', optedOut: true });
+        if (isBroadcastOptedOut(phone) || (u && (u.broadcastOptOut || u.consentStatus === 'REJECTED'))) return res.status(409).json({ success: false, error: 'This number said STOP / refused — message not sent', optedOut: true });
         const mode = b.mode === 'choose' ? 'choose' : 'send';
         const keys = (Array.isArray(b.keys) ? b.keys : [b.key]).filter(Boolean).slice(0, 5);
         const voters = keys.map(voterByKey).filter(Boolean);
-        if (!voters.length) return res.status(400).json({ success: false, error: 'वोटर नहीं मिला — फिर से खोजें' });
+        if (!voters.length) return res.status(400).json({ success: false, error: 'Voter not found — search again' });
         const jid = `${phone}@s.whatsapp.net`;
         const existing = contactsManager.findByPhone(phone);
         let text, sent, kind;
@@ -2986,7 +2986,7 @@ app.get('/', (req, res) => {
                     .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
                     .header-bar { flex-direction: column; align-items: flex-start; }
                 }
-                /* 📱 Simple mobile view: only the header + "Add contact & send now" unless "पूरा डैशबोर्ड" is tapped */
+                /* 📱 Simple mobile view: only the header + "Add contact & send now" unless "Show full dashboard" is tapped */
                 .mobile-full-toggle { display: none; }
                 @media (max-width: 760px) {
                     .mobile-full-toggle { display: block; width: 100%; margin: 0 0 14px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; color: #0f172a; font-size: 15px; font-weight: 700; cursor: pointer; }
@@ -3089,7 +3089,7 @@ app.get('/', (req, res) => {
                 <!-- Top Header -->
                 <div class="header-bar">
                     <div class="brand">
-                        <h1>🏛️ सिहाली खुर्द चुनाव 2026 — बाबा अभय सिंह</h1>
+                        <h1>🏛️ Sihali Khurd Election 2026 — Baba Abhay Singh</h1>
                         <p>24/7 Multi-Session Campaign Tower • Mobile Field & AI Studio</p>
                     </div>
                     <div class="top-actions">
@@ -3102,42 +3102,42 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
 
                 <!-- ➕ Mobile-first quick add & send -->
                 <div id="qa-panel" class="qa-panel">
-                    <div class="qa-head">➕ Add contact &amp; send now <span style="font-weight:500;font-size:12px;opacity:.85;">नंबर डालें → भेजें (STOP वालों को नहीं जाएगा)</span></div>
+                    <div class="qa-head">➕ Add contact &amp; send now <span style="font-weight:500;font-size:12px;opacity:.85;">Enter number → send (never goes to people who said STOP)</span></div>
                     <form id="qa-form" autocomplete="off" onsubmit="return false;">
-                        <input id="qa-phone" type="tel" inputmode="tel" placeholder="📱 मोबाइल नंबर (10 अंक / +1…)" required>
+                        <input id="qa-phone" type="tel" inputmode="tel" placeholder="📱 Mobile number (10 digits / +1…)" required>
                         <div class="qa-row">
-                            <input id="qa-name" type="text" placeholder="नाम (optional)">
-                            <input id="qa-ward" type="number" inputmode="numeric" min="1" max="30" placeholder="वार्ड">
+                            <input id="qa-name" type="text" placeholder="Name (optional)">
+                            <input id="qa-ward" type="number" inputmode="numeric" min="1" max="30" placeholder="Ward">
                         </div>
                         <div class="qa-row">
                             <select id="qa-line">${SESSIONS.map(s => `<option value="${s.id}"${s.status === 'CONNECTED' ? '' : ' disabled'}>${s.status === 'CONNECTED' ? '🟢' : '⚪'} ${s.name}</option>`).join('')}</select>
-                            <select id="qa-msg"><option value="intro">👋 छोटा परिचय (default)</option><option value="custom">✍️ अपना मैसेज</option></select>
+                            <select id="qa-msg"><option value="intro">👋 Short intro (default)</option><option value="custom">✍️ My own message</option></select>
                         </div>
-                        <textarea id="qa-custom" rows="3" placeholder="अपना मैसेज लिखें…" style="display:none;"></textarea>
+                        <textarea id="qa-custom" rows="3" placeholder="Type your message…" style="display:none;"></textarea>
                         <div class="qa-row">
-                            <select id="qa-poster"><option value="">🖼️ बिना पोस्टर</option></select>
-                            <label class="qa-check"><input id="qa-forcecard" type="checkbox" checked> नंबर-सेव कार्ड भेजें</label>
+                            <select id="qa-poster"><option value="">🖼️ No poster</option></select>
+                            <label class="qa-check"><input id="qa-forcecard" type="checkbox" checked> Send contact card</label>
                         </div>
                         <details id="qa-vbox" class="qa-vbox">
-                            <summary>🔎 वोटर लिस्ट में खोजें → पर्ची भेजें</summary>
+                            <summary>🔎 Search voter list → send slip (parchi)</summary>
                             <div class="qa-row">
-                                <input id="qa-vq" type="text" placeholder="वोटर का नाम (जैसे rajesh devi)">
-                                <input id="qa-vrel" type="text" placeholder="पिता/पति का नाम (optional)">
+                                <input id="qa-vq" type="text" placeholder="Voter name (e.g. rajesh devi)">
+                                <input id="qa-vrel" type="text" placeholder="Father / husband name (optional)">
                             </div>
-                            <button id="qa-vsearch" type="button" class="qa-vbtn">🔎 खोजें</button>
+                            <button id="qa-vsearch" type="button" class="qa-vbtn">🔎 Search</button>
                             <div id="qa-vres" class="qa-vres"></div>
                             <div id="qa-vact" class="qa-row" style="display:none;">
-                                <button id="qa-vsend" type="button" class="qa-vbtn qa-vgo">📄 चुनी हुई पर्ची भेजें</button>
-                                <button id="qa-vchoose" type="button" class="qa-vbtn">📋 सूची भेजें, वोटर खुद चुने</button>
+                                <button id="qa-vsend" type="button" class="qa-vbtn qa-vgo">📄 Send this voter's slip</button>
+                                <button id="qa-vchoose" type="button" class="qa-vbtn">📋 Send list, voter picks</button>
                             </div>
-                            <div class="qa-vhint">पहचानते हैं तो एक चुनें → "पर्ची भेजें"। पक्का नहीं → 2–5 पर टिक करें → "सूची भेजें", वोटर नंबर लिखकर अपनी पर्ची ले लेगा।</div>
+                            <div class="qa-vhint">Know the person? Tick one → "Send this voter's slip". Not sure? Tick 2–5 → "Send list, voter picks" — the voter replies with a number and gets their own slip.</div>
                         </details>
                         <button id="qa-send" type="button" class="qa-send">📲 Save &amp; Send now</button>
                         <div id="qa-status" class="qa-status" role="status" aria-live="polite"></div>
                     </form>
                 </div>
-                <button type="button" id="mobile-full-toggle" class="mobile-full-toggle" onclick="(function(){var on=document.body.classList.toggle('show-full');try{localStorage.setItem('dashFull',on?'1':'0')}catch(e){};document.getElementById('mobile-full-toggle').textContent=on?'📱 सिर्फ़ मैसेज भेजना दिखाएँ':'📋 पूरा डैशबोर्ड दिखाएँ';})()">📋 पूरा डैशबोर्ड दिखाएँ</button>
-                <script>try{if(localStorage.getItem('dashFull')==='1'){document.body.classList.add('show-full');document.getElementById('mobile-full-toggle').textContent='📱 सिर्फ़ मैसेज भेजना दिखाएँ';}}catch(e){}</script>
+                <button type="button" id="mobile-full-toggle" class="mobile-full-toggle" onclick="(function(){var on=document.body.classList.toggle('show-full');try{localStorage.setItem('dashFull',on?'1':'0')}catch(e){};document.getElementById('mobile-full-toggle').textContent=on?'📱 Show only quick send':'📋 Show full dashboard';})()">📋 Show full dashboard</button>
+                <script>try{if(localStorage.getItem('dashFull')==='1'){document.body.classList.add('show-full');document.getElementById('mobile-full-toggle').textContent='📱 Show only quick send';}}catch(e){}</script>
                 <script>
                 (function () {
                     function $(id) { return document.getElementById(id); }
@@ -3152,19 +3152,19 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     $('qa-send').addEventListener('click', function () {
                         if (busy) return;
                         var phone = $('qa-phone').value.trim();
-                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ सही मोबाइल नंबर डालें', false); $('qa-phone').focus(); return; }
-                        if ($('qa-msg').value === 'custom' && !$('qa-custom').value.trim()) { setStatus('❌ मैसेज लिखें', false); return; }
-                        busy = true; this.disabled = true; setStatus('⏳ भेज रहे हैं…');
+                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ Enter a valid mobile number', false); $('qa-phone').focus(); return; }
+                        if ($('qa-msg').value === 'custom' && !$('qa-custom').value.trim()) { setStatus('❌ Type a message', false); return; }
+                        busy = true; this.disabled = true; setStatus('⏳ Sending…');
                         var btn = this;
                         fetch('/api/quick-add-send', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
                             phone: phone, name: $('qa-name').value.trim(), ward: $('qa-ward').value, lineId: $('qa-line').value,
                             message: $('qa-msg').value, customText: $('qa-custom').value, poster: $('qa-poster').value, forceCard: $('qa-forcecard').checked
                         }) }).then(function (r) { return r.json(); }).then(function (d) {
                             if (d.success) {
-                                setStatus('✅ भेजा: ' + (d.name ? d.name + ' • ' : '') + d.phone + ' via ' + d.lineName + (d.poster ? ' + पोस्टर' : '') + ' • कार्ड: ' + (d.contactCard === 'sent' ? 'भेजा' : 'पहले से है'), true);
+                                setStatus('✅ Sent: ' + (d.name ? d.name + ' • ' : '') + d.phone + ' via ' + d.lineName + (d.poster ? ' + poster' : '') + ' • Card: ' + (d.contactCard === 'sent' ? 'sent' : 'already has it'), true);
                                 $('qa-phone').value = ''; $('qa-name').value = ''; $('qa-ward').value = '';
                             } else setStatus('❌ ' + (d.error || 'Failed'), false);
-                        }).catch(function (e) { setStatus('❌ नेटवर्क त्रुटि: ' + e.message, false); })
+                        }).catch(function (e) { setStatus('❌ Network error: ' + e.message, false); })
                           .then(function () { busy = false; btn.disabled = false; });
                     });
                     // 🔎 voter search -> send parchi / send list to choose
@@ -3173,9 +3173,9 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     function vKeys() { return Object.keys(vSel).filter(function (k) { return vSel[k]; }); }
                     function vRender(list) {
                         vSel = {}; var box = $('qa-vres');
-                        if (!list.length) { box.innerHTML = '<div class="qa-vhint">कोई नहीं मिला — नाम वोटर कार्ड जैसा लिखें या वार्ड हटा कर देखें।</div>'; $('qa-vact').style.display = 'none'; return; }
-                        box.innerHTML = '<div class="qa-vhint">' + list.length + ' मिले' + (list.length > 15 ? ' — पिता/पति या वार्ड डालकर छोटा करें' : '') + '</div>' + list.map(function (v) {
-                            return '<label class="qa-vitem"><input type="checkbox" data-k="' + vEsc(v.key) + '" data-n="' + vEsc(v.name) + '" data-w="' + vEsc(v.ward) + '"><span><b>' + vEsc(v.name) + '</b><small>' + vEsc(v.rel) + ': ' + vEsc(v.relName) + ' • वार्ड ' + vEsc(v.ward) + ' • उम्र ' + vEsc(v.age) + ' • मकान ' + vEsc(v.house) + '</small></span></label>';
+                        if (!list.length) { box.innerHTML = '<div class="qa-vhint">No one found — type the name as on the voter card, or clear the ward and try again.</div>'; $('qa-vact').style.display = 'none'; return; }
+                        box.innerHTML = '<div class="qa-vhint">' + list.length + ' found' + (list.length > 15 ? ' — add father/husband name or ward to narrow it down' : '') + '</div>' + list.map(function (v) {
+                            return '<label class="qa-vitem"><input type="checkbox" data-k="' + vEsc(v.key) + '" data-n="' + vEsc(v.name) + '" data-w="' + vEsc(v.ward) + '"><span><b>' + vEsc(v.name) + '</b><small>' + vEsc(v.rel) + ': ' + vEsc(v.relName) + ' • Ward ' + vEsc(v.ward) + ' • Age ' + vEsc(v.age) + ' • House ' + vEsc(v.house) + '</small></span></label>';
                         }).join('');
                         $('qa-vact').style.display = 'grid';
                         box.querySelectorAll('input[type=checkbox]').forEach(function (cb) { cb.addEventListener('change', function () {
@@ -3187,8 +3187,8 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         $('qa-vsend').disabled = true; $('qa-vchoose').disabled = true;
                     }
                     function vSearch() {
-                        var q = $('qa-vq').value.trim(); if (q.length < 2) { setStatus('❌ वोटर का नाम लिखें', false); return; }
-                        setStatus('🔎 खोज रहे हैं…');
+                        var q = $('qa-vq').value.trim(); if (q.length < 2) { setStatus('❌ Type the voter name', false); return; }
+                        setStatus('🔎 Searching…');
                         fetch('/api/voter-lookup?q=' + encodeURIComponent(q) + '&rel=' + encodeURIComponent($('qa-vrel').value.trim()) + '&ward=' + encodeURIComponent($('qa-ward').value || ''), { credentials: 'same-origin' })
                           .then(function (r) { return r.json(); }).then(function (d) { setStatus(''); vRender(d.results || []); }).catch(function (e) { setStatus('❌ ' + e.message, false); });
                     }
@@ -3198,17 +3198,17 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     function vSend(mode) {
                         if (busy) return;
                         var phone = $('qa-phone').value.trim();
-                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ ऊपर मोबाइल नंबर डालें', false); $('qa-phone').focus(); return; }
+                        if (phone.replace(/[^0-9]/g, '').length < 10) { setStatus('❌ Enter the mobile number above', false); $('qa-phone').focus(); return; }
                         var ks = vKeys();
-                        if (mode === 'send' && ks.length !== 1) { setStatus('❌ पर्ची के लिए एक ही वोटर चुनें', false); return; }
-                        if (mode === 'choose' && (ks.length < 2 || ks.length > 5)) { setStatus('❌ सूची के लिए 2 से 5 वोटर चुनें', false); return; }
-                        busy = true; setStatus('⏳ भेज रहे हैं…');
+                        if (mode === 'send' && ks.length !== 1) { setStatus('❌ Tick exactly one voter to send a slip', false); return; }
+                        if (mode === 'choose' && (ks.length < 2 || ks.length > 5)) { setStatus('❌ Tick 2 to 5 voters to send a list', false); return; }
+                        busy = true; setStatus('⏳ Sending…');
                         fetch('/api/operator-slip', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
                             phone: phone, lineId: $('qa-line').value, mode: mode, key: ks[0], keys: ks, query: $('qa-vq').value.trim(), forceCard: $('qa-forcecard').checked
                         }) }).then(function (r) { return r.json(); }).then(function (d) {
-                            if (d.success) { setStatus(d.mode === 'send' ? ('✅ पर्ची भेजी: ' + d.voter + ' → ' + d.phone + ' via ' + d.lineName) : ('✅ ' + d.count + ' नाम की सूची भेजी → ' + d.phone + ' (वोटर नंबर लिखेगा तो पर्ची अपने आप जाएगी)'), true); $('qa-vres').innerHTML = ''; $('qa-vact').style.display = 'none'; $('qa-vq').value = ''; $('qa-vrel').value = ''; }
+                            if (d.success) { setStatus(d.mode === 'send' ? ('✅ Slip sent: ' + d.voter + ' → ' + d.phone + ' via ' + d.lineName) : ('✅ List of ' + d.count + ' names sent → ' + d.phone + ' (when the voter replies with a number, their slip goes automatically)'), true); $('qa-vres').innerHTML = ''; $('qa-vact').style.display = 'none'; $('qa-vq').value = ''; $('qa-vrel').value = ''; }
                             else setStatus('❌ ' + (d.error || 'Failed'), false);
-                        }).catch(function (e) { setStatus('❌ नेटवर्क त्रुटि: ' + e.message, false); }).then(function () { busy = false; });
+                        }).catch(function (e) { setStatus('❌ Network error: ' + e.message, false); }).then(function () { busy = false; });
                     }
                     $('qa-vsend').addEventListener('click', function () { vSend('send'); });
                     $('qa-vchoose').addEventListener('click', function () { vSend('choose'); });
@@ -3234,11 +3234,11 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <div class="quick-grid">
                             <div class="form-group">
                                 <label>📱 Voter Mobile Number *</label>
-                                <input type="tel" id="v-phone" class="input-field" placeholder="उदा: 9829xxxxxx या 6367810227" required autocomplete="off">
+                                <input type="tel" id="v-phone" class="input-field" placeholder="e.g. 9829xxxxxx or 6367810227" required autocomplete="off">
                             </div>
                             <div class="form-group" style="position: relative;">
-                                <label>🔍 Search & Link Voter (List में नाम)</label>
-                                <input type="text" id="v-name" class="input-field" placeholder="नाम या EPIC टाइप करें..." autocomplete="off" oninput="onVoterSearchInput(this.value)">
+                                <label>🔍 Search & Link Voter (name in voter list)</label>
+                                <input type="text" id="v-name" class="input-field" placeholder="Type name or EPIC..." autocomplete="off" oninput="onVoterSearchInput(this.value)">
                                 <div id="voter-search-dropdown" style="position: absolute; left: 0; right: 0; top: 100%; z-index: 999; background: white; border: 1px solid #cbd5e1; border-radius: 8px; max-height: 220px; overflow-y: auto; display: none; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.15);"></div>
                                 <div id="voter-linked-badge" style="display: none; margin-top: 6px; padding: 6px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 12px; color: #065f46; font-weight: 700;"></div>
                                 <input type="hidden" id="v-voter-id">
@@ -3256,35 +3256,35 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <div class="form-group">
                                 <label>💬 Action Template (Soft & Casual)</label>
                                 <select id="v-template" class="input-field" onchange="onTemplateChange(this.value)">
-                                    <option value="consent_check">🛡️ 0. एंटी-स्पैम सहमति (1. हाँ / 2. नहीं Consent Check)</option>
-                                    <option value="permission_casual">🤝 1. सहमति व हाल-चाल (Soft Permission - Non-spam)</option>
-                                    <option value="offer_parchi">🎫 2. वोटर पर्ची की पेशकश (Voter Slip Offer)</option>
-                                    <option value="ground_feedback">📢 3. वार्ड समस्या व चर्चा (Ward Feedback)</option>
-                                    <option value="direct_appeal">🗳️ 4. क्रम संख्या 1 — सीधा संदेश (Direct 16 Nov Appeal)</option>
-                                    <option value="welcome">👋 5. त्वरित स्वागत ("Aapko jod liya h...")</option>
-                                    <option value="custom">✍️ 6. कस्टम संदेश (Custom message...)</option>
+                                    <option value="consent_check">🛡️ 0. Anti-spam consent check (1. Yes / 2. No)</option>
+                                    <option value="permission_casual">🤝 1. Permission + how are you (soft, non-spam)</option>
+                                    <option value="offer_parchi">🎫 2. Offer voter slip (parchi)</option>
+                                    <option value="ground_feedback">📢 3. Ward problems & feedback</option>
+                                    <option value="direct_appeal">🗳️ 4. Ballot No. 1 — direct appeal (16 Nov)</option>
+                                    <option value="welcome">👋 5. Quick welcome ("Aapko jod liya h...")</option>
+                                    <option value="custom">✍️ 6. Custom message...</option>
                                 </select>
                             </div>
                             <div class="form-group" style="grid-column: 1 / -1; display: none;" id="custom-text-group">
-                                <label>कस्टम संदेश लिखें (Custom Message)</label>
-                                <input type="text" id="v-custom-text" class="input-field" placeholder="संदेश टाइप करें...">
+                                <label>Write custom message</label>
+                                <input type="text" id="v-custom-text" class="input-field" placeholder="Type message...">
                             </div>
 
                             <!-- Media Attachment Radios -->
                             <div class="form-group" style="grid-column: 1 / -1;">
-                                <label style="margin-bottom: 6px; display: block; font-size: 12px; font-weight: 700; color: #cbd5e1;">📎 मीडिया अटैचमेंट (Media Option):</label>
+                                <label style="margin-bottom: 6px; display: block; font-size: 12px; font-weight: 700; color: #cbd5e1;">📎 Media attachment:</label>
                                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                                     <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
-                                        <input type="radio" name="mediaOption" value="none" checked> 💬 केवल टेक्स्ट (Text Only)
+                                        <input type="radio" name="mediaOption" value="none" checked> 💬 Text only
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
-                                        <input type="radio" name="mediaOption" value="slip" id="media-opt-slip"> 🎫 वोटर पर्ची JPG कार्ड
+                                        <input type="radio" name="mediaOption" value="slip" id="media-opt-slip"> 🎫 Voter slip JPG card
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
-                                        <input type="radio" name="mediaOption" value="poster"> 📸 चुनाव प्रचार पोस्टर
+                                        <input type="radio" name="mediaOption" value="poster"> 📸 Campaign poster
                                     </label>
                                     <label style="display: flex; align-items: center; gap: 6px; background: #1e293b; padding: 6px 12px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-size: 13px; cursor: pointer;">
-                                        <input type="radio" name="mediaOption" value="video"> 📹 3D वीडियो रील
+                                        <input type="radio" name="mediaOption" value="video"> 📹 3D video reel
                                     </label>
                                 </div>
                             </div>
@@ -3500,13 +3500,13 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <!-- Header & Context Controls -->
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
                                 <div>
-                                    <h3 style="margin: 0; font-size: 18px; color: #0f172a;">🎮 AI प्लेग्राउंड (लाइव टेस्टिंग लैब)</h3>
-                                    <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">मतदाता के साथ रीयल-टाइम चैट, विज़न विश्लेषण और चुनावी लक्ष्य का लाइव परीक्षण करें।</p>
+                                    <h3 style="margin: 0; font-size: 18px; color: #0f172a;">🎮 AI Playground (live testing lab)</h3>
+                                    <p style="color: #64748b; font-size: 13px; margin: 4px 0 0 0;">Test a real-time voter chat, photo (vision) analysis and campaign goals live.</p>
                                 </div>
                                 <div style="display: flex; gap: 8px; align-items: center;">
-                                    <span style="font-size: 12px; font-weight: 700; color: #475569;">मॉडल:</span>
+                                    <span style="font-size: 12px; font-weight: 700; color: #475569;">Model:</span>
                                     <select id="pg-provider" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; background: white; color: #0f172a; font-weight: 600;">
-                                        <option value="cascade">⚡ ऑटो कैस्केड (NVIDIA ➡️ Groq ➡️ Gemini)</option>
+                                        <option value="cascade">⚡ Auto cascade (NVIDIA ➡️ Groq ➡️ Gemini)</option>
                                         <option value="groq">🟠 Groq Qwen (27B Ultra-Fast)</option>
                                         <option value="gemini">🔵 Gemini 3.8 Flash (Vision & Text)</option>
                                         <option value="nvidia">🟢 NVIDIA Nemotron</option>
@@ -3517,16 +3517,16 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <!-- Voter Simulation Context Bar -->
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 15px;">
                                 <div>
-                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">👤 मतदाता का नाम:</label>
-                                    <input type="text" id="pg-voter-name" placeholder="उदा: विक्रम यादव" value="विक्रम यादव" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">👤 Voter name:</label>
+                                    <input type="text" id="pg-voter-name" placeholder="e.g. Vikram Yadav" value="विक्रम यादव" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
                                 </div>
                                 <div>
-                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">📱 फोन नंबर:</label>
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">📱 Phone number:</label>
                                     <input type="text" id="pg-voter-phone" placeholder="919876543210" value="919876543210" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
                                 </div>
                                 <div>
-                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🎯 इस चैट का विशेष लक्ष्य (Campaign Goal):</label>
-                                    <input type="text" id="pg-campaign-goal" placeholder="उदा: कल सुबह चौपाल पर बुलाना" value="कल सुबह चौपाल पर चाय पर बुलाना और बिजली सबस्टेशन की बात छेड़ना" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
+                                    <label style="font-size: 11px; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🎯 Special goal for this chat (campaign goal):</label>
+                                    <input type="text" id="pg-campaign-goal" placeholder="e.g. invite to the chaupal tomorrow morning" value="कल सुबह चौपाल पर चाय पर बुलाना और बिजली सबस्टेशन की बात छेड़ना" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; background: white; color: #0f172a;">
                                 </div>
                             </div>
 
@@ -3540,19 +3540,19 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
 
                                 <!-- Image Preview Bar (if selected) -->
                                 <div id="pg-image-preview-bar" style="display: none; padding: 6px 14px; background: #e2e8f0; font-size: 12px; color: #1e293b; align-items: center; justify-content: space-between;">
-                                    <span id="pg-image-filename">📷 फोटो चयनित</span>
-                                    <button onclick="clearPlaygroundImage()" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">✕ हटाएं</button>
+                                    <span id="pg-image-filename">📷 Photo selected</span>
+                                    <button onclick="clearPlaygroundImage()" style="background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer;">✕ Remove</button>
                                 </div>
 
                                 <!-- Input Bar -->
                                 <div style="padding: 10px 14px; background: #f0f2f5; border-top: 1px solid #cbd5e1; display: flex; gap: 8px; align-items: center;">
                                     <input type="file" id="pg-file-input" accept="image/*" style="display: none;" onchange="onPlaygroundFileSelected(event)">
-                                    <button onclick="document.getElementById('pg-file-input').click()" style="background: white; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 20px; font-size: 14px; cursor: pointer;" title="फोटो अपलोड करें (वोटर कार्ड, टूटी सड़क, पोस्टर)">
+                                    <button onclick="document.getElementById('pg-file-input').click()" style="background: white; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 20px; font-size: 14px; cursor: pointer;" title="Upload photo (voter card, broken road, poster)">
                                         📷
                                     </button>
-                                    <input type="text" id="ai-test-input" placeholder="संदेश लिखें (उदा: 'बिजली का क्या माहौल है', 'वोटर पर्ची चाहिए', 'दारू बांटेगा क्या')..." class="input-field" style="flex: 1; background: white; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 20px; padding: 8px 16px; font-size: 13px;" onkeydown="if(event.key==='Enter') sendPlaygroundChat()">
+                                    <input type="text" id="ai-test-input" placeholder="Type a voter message (e.g. 'बिजली का क्या माहौल है', 'वोटर पर्ची चाहिए', 'दारू बांटेगा क्या')..." class="input-field" style="flex: 1; background: white; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 20px; padding: 8px 16px; font-size: 13px;" onkeydown="if(event.key==='Enter') sendPlaygroundChat()">
                                     <button onclick="sendPlaygroundChat()" id="btn-pg-send" style="background: #2563eb; color: white; border: none; padding: 8px 18px; border-radius: 20px; font-weight: 700; font-size: 13px; cursor: pointer;">
-                                        भेजें 🚀
+                                        Send 🚀
                                     </button>
                                 </div>
                             </div>
@@ -3563,54 +3563,54 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <!-- 1. Daily Campaign Agenda & Multi-Media Drip Box -->
                             <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <span style="font-weight: 700; color: #0f172a; font-size: 13px;">📢 आज का चुनावी एजेंडा (Daily Agenda)</span>
+                                    <span style="font-weight: 700; color: #0f172a; font-size: 13px;">📢 Today's campaign agenda</span>
                                     <span style="font-size: 11px; background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 10px; font-weight: 700;">Active RAG</span>
                                 </div>
                                 <div style="margin-bottom: 8px;">
-                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">विषय (Topic):</label>
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">Topic:</label>
                                     <input type="text" id="agenda-topic" style="width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 2px; color:#0f172a;">
                                 </div>
                                 <div style="margin-bottom: 8px;">
-                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">मुख्य बातचीत बिंदु (Talking Points):</label>
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">Talking points:</label>
                                     <textarea id="agenda-points" rows="2" style="width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; margin-top: 2px; color:#0f172a; resize: vertical;"></textarea>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="font-size: 11px; color: #64748b;">3-4 मीडिया ड्रिप अनुक्रम एक्टिव</span>
+                                    <span style="font-size: 11px; color: #64748b;">3-4 step media drip sequence active</span>
                                     <button onclick="saveCampaignAgendaUI()" style="background: #15803d; color: white; border: none; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
-                                        💾 एजेंडा सेव करें
+                                        💾 Save agenda
                                     </button>
                                 </div>
                             </div>
 
                             <!-- 2. Fuzzy Voter Search Engine -->
                             <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                                <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 6px;">🔍 3,636 वोटर स्मार्ट सर्च (Typo-Tolerant)</div>
+                                <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 6px;">🔍 Smart search of 3,636 voters (typo-tolerant)</div>
                                 <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                                    <input type="text" id="pg-voter-search-input" placeholder="उदा: rina, pirnce, w1 45..." style="flex: 1; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; color:#0f172a;" onkeydown="if(event.key==='Enter') testPlaygroundVoterSearch()">
-                                    <button onclick="testPlaygroundVoterSearch()" style="background: #2563eb; color: white; border: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;">खोजें</button>
+                                    <input type="text" id="pg-voter-search-input" placeholder="e.g. rina, pirnce, w1 45..." style="flex: 1; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; color:#0f172a;" onkeydown="if(event.key==='Enter') testPlaygroundVoterSearch()">
+                                    <button onclick="testPlaygroundVoterSearch()" style="background: #2563eb; color: white; border: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer;">Search</button>
                                 </div>
                                 <div id="pg-voter-search-result" style="max-height: 110px; overflow-y: auto; font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; color: #334155;">
-                                    सर्च रिजल्ट यहाँ दिखेगा...
+                                    Search results will show here...
                                 </div>
                             </div>
 
                             <!-- 3. Live AI Inspection Metrics -->
                             <div style="border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; background: #f8fafc; font-size: 12px;">
-                                <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">⚡ लाइव AI डिबग व विश्लेषण:</div>
+                                <div style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">⚡ Live AI debug & analysis:</div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                                    <span style="color: #64748b;">प्रदाता / मॉडल:</span>
+                                    <span style="color: #64748b;">Provider / model:</span>
                                     <span id="pg-metric-provider" style="font-weight: 700; color: #2563eb;">-</span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                                    <span style="color: #64748b;">विलंबता (Latency):</span>
+                                    <span style="color: #64748b;">Latency:</span>
                                     <span id="pg-metric-latency" style="font-weight: 700; color: #16a34a;">-</span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                                    <span style="color: #64748b;">पहचाने गए टैग:</span>
+                                    <span style="color: #64748b;">Detected tags:</span>
                                     <span id="pg-metric-tags" style="font-weight: 700; color: #d97706;">-</span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between;">
-                                    <span style="color: #64748b;">अगला मीडिया ड्रिप:</span>
+                                    <span style="color: #64748b;">Next media drip:</span>
                                     <span id="pg-metric-drip" style="font-weight: 700; color: #7c3aed;">-</span>
                                 </div>
                             </div>
@@ -3633,11 +3633,11 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <div class="wa-left">
                             <div class="wa-left-header">
                                 <div>
-                                    <h3 style="margin: 0; font-size: 14px; color: #0f172a; font-weight: 700;">💬 मतदाता संवाद कक्ष</h3>
+                                    <h3 style="margin: 0; font-size: 14px; color: #0f172a; font-weight: 700;">💬 Voter chat room</h3>
                                     <span style="font-size: 11px; color: #64748b;">WhatsApp Web Replica • Ground CRM</span>
                                 </div>
                                 <button onclick="toggleDemoPosterMode()" id="demo-mode-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid #16a34a; background: #dcfce7; color: #15803d; font-weight: 700; cursor: pointer;">
-                                    🖼️ पोस्टर मोड…
+                                    🖼️ Poster mode…
                                 </button>
                             </div>
                             <div class="wa-search-bar">
@@ -3652,34 +3652,34 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                     <option value="unknown">⚪ Unknown</option>
                                     <option value="undecided">🟡 Undecided</option>
                                     <option value="leaning">🟢 Leaning</option>
-                                    <option value="committed">✅ Committed (पक्का वोट)</option>
+                                    <option value="committed">✅ Committed (sure vote)</option>
                                     <option value="opposed">🔴 Opposed</option>
                                     <option value="needsAdmin">🚩 Needs admin</option>
                                 </select>
-                                <input type="text" id="voter-search" placeholder="🔍 नाम, फोन नंबर या टैग से खोजें..." style="width: 100%; padding: 8px 12px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 13px; outline: none; background: #f8fafc; color: #0f172a;" oninput="filterVoters(this.value)">
+                                <input type="text" id="voter-search" placeholder="🔍 Search by name, phone or tag..." style="width: 100%; padding: 8px 12px; border-radius: 16px; border: 1px solid #cbd5e1; font-size: 13px; outline: none; background: #f8fafc; color: #0f172a;" oninput="filterVoters(this.value)">
                             </div>
                             <!-- 17 Smart Filter Chips -->
                             <div class="wa-filter-chips">
-                                <span class="filter-chip active" onclick="applyTagFilter('ALL', this)">सभी (<span id="voter-count-badge">0</span>)</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🟢 पक्का समर्थक', this)">🟢 समर्थक</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🟡 सोच विचार', this)">🟡 असमंजस</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🔴 विरोधी / नाराज', this)">🔴 विरोधी</span>
-                                <span class="filter-chip" onclick="applyTagFilter('📝 काम की शिकायत', this)">📝 शिकायतें</span>
-                                <span class="filter-chip" onclick="applyTagFilter('📢 चुनावी माहौल', this)">📢 माहौल</span>
-                                <span class="filter-chip" onclick="applyTagFilter('👨‍👩‍👧 परिवार विवरण', this)">👨‍👩‍👧 परिवार</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🚩 युवा टीम', this)">🚩 युवा टीम</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🌾 किसान व पशुपालक', this)">🌾 किसान</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🚆 प्रवासी मतदाता', this)">🚆 प्रवासी</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🚨 धांधली अलर्ट', this)">🚨 धांधली अलर्ट</span>
-                                <span class="filter-chip" onclick="applyTagFilter('👵 बुजुर्ग व पेंशन', this)">👵 बुजुर्ग</span>
-                                <span class="filter-chip" onclick="applyTagFilter('👩‍🦰 महिला शक्ति', this)">👩‍🦰 महिला</span>
-                                <span class="filter-chip" onclick="applyTagFilter('📜 संकल्प पत्र', this)">📜 संकल्प</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🤝 सीधी मुलाकात', this)">🤝 मुलाकात</span>
-                                <span class="filter-chip" onclick="applyTagFilter('🎫 वोटर पर्ची', this)">🎫 पर्ची</span>
+                                <span class="filter-chip active" onclick="applyTagFilter('ALL', this)">All (<span id="voter-count-badge">0</span>)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🟢 पक्का समर्थक', this)">🟢 Supporters</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🟡 सोच विचार', this)">🟡 Undecided</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🔴 विरोधी / नाराज', this)">🔴 Opponents (virodhi)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📝 काम की शिकायत', this)">📝 Complaints</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📢 चुनावी माहौल', this)">📢 Ground mood (mahool)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👨‍👩‍👧 परिवार विवरण', this)">👨‍👩‍👧 Family</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚩 युवा टीम', this)">🚩 Youth team</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🌾 किसान व पशुपालक', this)">🌾 Farmers</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚆 प्रवासी मतदाता', this)">🚆 Migrants (pravasi)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🚨 धांधली अलर्ट', this)">🚨 Rigging alert</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👵 बुजुर्ग व पेंशन', this)">👵 Elderly</span>
+                                <span class="filter-chip" onclick="applyTagFilter('👩‍🦰 महिला शक्ति', this)">👩‍🦰 Women</span>
+                                <span class="filter-chip" onclick="applyTagFilter('📜 संकल्प पत्र', this)">📜 Pledge (sankalp)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🤝 सीधी मुलाकात', this)">🤝 Meetings (mulaqat)</span>
+                                <span class="filter-chip" onclick="applyTagFilter('🎫 वोटर पर्ची', this)">🎫 Slips (parchi)</span>
                                 <span class="filter-chip" onclick="applyTagFilter('MANUAL', this)">⏸️ Manual</span>
                             </div>
                             <div class="wa-contacts-list" id="voter-list-ui">
-                                <div style="padding: 30px; text-align: center; color: #94a3b8;">लोड हो रहा है...</div>
+                                <div style="padding: 30px; text-align: center; color: #94a3b8;">Loading...</div>
                             </div>
                         </div>
 
@@ -3691,28 +3691,28 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                     <div class="wa-avatar" id="header-avatar" style="width: 38px; height: 38px; font-size: 14px;">👤</div>
                                     <div>
                                         <div style="font-weight: 700; font-size: 14px; color: #0f172a;" id="header-name">Voter Name</div>
-                                        <div style="font-size: 12px; color: #64748b;" id="header-details">+91 00000 00000 • वार्ड: --</div>
+                                        <div style="font-size: 12px; color: #64748b;" id="header-details">+91 00000 00000 • Ward: --</div>
                                     </div>
                                 </div>
 
                                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                     <!-- AutoPilot AI Toggle Button -->
                                     <button id="btn-toggle-autopilot" onclick="toggleCurrentAutoPilot()" style="padding: 6px 12px; border-radius: 16px; font-size: 12px; font-weight: 700; border: none; cursor: pointer; background: #16a34a; color: white;">
-                                        🤖 AutoPilot AI: चालू
+                                        🤖 AutoPilot AI: ON
                                     </button>
 
                                     <!-- Sentiment Dropdown -->
                                     <select id="voter-sentiment-select" onchange="updateVoterSentiment(this.value)" style="padding: 5px 8px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 12px; font-weight: 600; background: white; color: #0f172a;">
-                                        <option value="positive">🟢 पक्का समर्थक</option>
-                                        <option value="swing">🟡 असमंजस / सोच-विचार</option>
-                                        <option value="critical">🔴 विरोधी / नाराज</option>
-                                        <option value="neutral">⚪ सामान्य संपर्क</option>
+                                        <option value="positive">🟢 Sure supporter</option>
+                                        <option value="swing">🟡 Undecided / thinking</option>
+                                        <option value="critical">🔴 Opponent / upset</option>
+                                        <option value="neutral">⚪ Normal contact</option>
                                     </select>
 
-                                    <button type="button" onclick="crmToggleProfile()" id="btn-crm-profile" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #6366f1; background: #eef2ff; font-size: 12px; font-weight: 700; cursor: pointer; color: #4338ca;">🧾 प्रोफ़ाइल व मेमरी</button>
+                                    <button type="button" onclick="crmToggleProfile()" id="btn-crm-profile" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #6366f1; background: #eef2ff; font-size: 12px; font-weight: 700; cursor: pointer; color: #4338ca;">🧾 Profile & memory</button>
                                     <!-- Toggle Intelligence Notes Drawer -->
                                     <button onclick="toggleIntelDrawer()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #0f172a;">
-                                        📋 वोटर नोट्स व टैग्स
+                                        📋 Voter notes & tags
                                     </button>
                                 </div>
                             </div>
@@ -3720,58 +3720,58 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <!-- Collapsible Voter Intelligence & Memory Drawer -->
                             <div class="wa-intel-bar" id="wa-intel-drawer">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <h4 style="margin: 0; font-size: 13px; color: #0f172a;">🧠 वोटर मेमरी, टैग्स व ज़मीनी खुफिया जानकारी</h4>
+                                    <h4 style="margin: 0; font-size: 13px; color: #0f172a;">🧠 Voter memory, tags & ground intel</h4>
                                     <button onclick="toggleIntelDrawer()" style="background: none; border: none; font-size: 14px; cursor: pointer; color: #64748b;">✕</button>
                                 </div>
 
                                 <!-- Active Tags -->
                                 <div style="margin-bottom: 10px;">
-                                    <span style="font-size: 11px; font-weight: 700; color: #64748b; margin-right: 6px;">सक्रिय टैग्स:</span>
+                                    <span style="font-size: 11px; font-weight: 700; color: #64748b; margin-right: 6px;">Active tags:</span>
                                     <span id="active-tags-container"></span>
                                     <select id="add-tag-select" onchange="addTagToCurrentVoter(this.value)" style="padding: 2px 6px; font-size: 11px; border-radius: 6px; border: 1px solid #cbd5e1; margin-left: 6px; background:white; color:#0f172a;">
-                                        <option value="">+ नया टैग जोड़ें...</option>
-                                        <option value="🟢 पक्का समर्थक">🟢 पक्का समर्थक</option>
-                                        <option value="🟡 सोच विचार">🟡 सोच विचार</option>
-                                        <option value="🔴 विरोधी / नाराज">🔴 विरोधी / नाराज</option>
-                                        <option value="👨‍👩‍👧 परिवार विवरण">👨‍👩‍👧 परिवार विवरण</option>
-                                        <option value="📢 चुनावी माहौल">📢 चुनावी माहौल</option>
-                                        <option value="📝 काम की शिकायत">📝 काम की शिकायत</option>
-                                        <option value="🎫 वोटर पर्ची जारी">🎫 वोटर पर्ची</option>
-                                        <option value="🤝 सीधी मुलाकात">🤝 सीधी मुलाकात</option>
-                                        <option value="🚩 युवा टीम">🚩 युवा टीम</option>
-                                        <option value="🌾 किसान व पशुपालक">🌾 किसान व पशुपालक</option>
-                                        <option value="👵 बुजुर्ग व पेंशन">👵 बुजुर्ग व पेंशन</option>
-                                        <option value="👩‍🦰 महिला शक्ति">👩‍🦰 महिला शक्ति</option>
-                                        <option value="🚨 धांधली अलर्ट">🚨 धांधली अलर्ट</option>
-                                        <option value="📜 संकल्प पत्र">📜 संकल्प पत्र</option>
-                                        <option value="🚆 प्रवासी मतदाता">🚆 प्रवासी मतदाता</option>
+                                        <option value="">+ Add new tag...</option>
+                                        <option value="🟢 पक्का समर्थक">🟢 Sure supporter</option>
+                                        <option value="🟡 सोच विचार">🟡 Thinking / undecided</option>
+                                        <option value="🔴 विरोधी / नाराज">🔴 Opponent / upset</option>
+                                        <option value="👨‍👩‍👧 परिवार विवरण">👨‍👩‍👧 Family details</option>
+                                        <option value="📢 चुनावी माहौल">📢 Election mood</option>
+                                        <option value="📝 काम की शिकायत">📝 Work complaint</option>
+                                        <option value="🎫 वोटर पर्ची जारी">🎫 Voter slip given</option>
+                                        <option value="🤝 सीधी मुलाकात">🤝 Direct meeting (mulaqat)</option>
+                                        <option value="🚩 युवा टीम">🚩 Youth team</option>
+                                        <option value="🌾 किसान व पशुपालक">🌾 Farmer / livestock</option>
+                                        <option value="👵 बुजुर्ग व पेंशन">👵 Elderly / pension</option>
+                                        <option value="👩‍🦰 महिला शक्ति">👩‍🦰 Women</option>
+                                        <option value="🚨 धांधली अलर्ट">🚨 Rigging alert</option>
+                                        <option value="📜 संकल्प पत्र">📜 Pledge letter (sankalp)</option>
+                                        <option value="🚆 प्रवासी मतदाता">🚆 Migrant voter</option>
                                     </select>
                                 </div>
 
                                 <!-- Notes Form -->
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
                                     <div>
-                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">👨‍👩‍👧 परिवार विवरण (Family Info)</label>
-                                        <input type="text" id="intel-family" placeholder="उदा: 5 वोट, चाचा जी साथ हैं..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">👨‍👩‍👧 Family info</label>
+                                        <input type="text" id="intel-family" placeholder="e.g. 5 votes, uncle is with us..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
                                     </div>
                                     <div>
-                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📢 चुनावी माहौल व चर्चा (Ground Mahool)</label>
-                                        <input type="text" id="intel-mahool" placeholder="उदा: वार्ड में अच्छी हवा, विरोधियों की चर्चा..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📢 Ground mood & talk (mahool)</label>
+                                        <input type="text" id="intel-mahool" placeholder="e.g. good mood in ward, opponents are talking about..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
                                     </div>
                                     <div>
-                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📝 बाबा अभय सिंह प्राथमिकता रजिस्टर</label>
-                                        <input type="text" id="intel-baba" placeholder="उदा: रास्ते की नाली ठीक करवाने का वादा..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                        <label style="font-size: 11px; font-weight: 600; color: #475569;">📝 Baba Abhay Singh priority register</label>
+                                        <input type="text" id="intel-baba" placeholder="e.g. promise to fix the street drain..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
                                     </div>
                                 </div>
                                 <div style="margin-top: 10px;">
-                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">🎯 इस मतदाता से बातचीत का विशेष लक्ष्य (Campaign Goal)</label>
-                                    <input type="text" id="intel-goal" placeholder="उदा: कल सुबह चौपाल पर बुलाना, पानी का समाधान बताना, वार्ड 3 की नाराजगी दूर करना..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
+                                    <label style="font-size: 11px; font-weight: 600; color: #475569;">🎯 Special goal for chats with this voter (campaign goal)</label>
+                                    <input type="text" id="intel-goal" placeholder="e.g. invite to chaupal tomorrow morning, explain the water fix, calm ward 3 anger..." style="width: 100%; padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background:#f8fafc; color:#0f172a;">
                                 </div>
                                 <div style="text-align: right; margin-top: 8px;">
                                     <button onclick="saveVoterIntelligence()" style="background: #2563eb; color: white; border: none; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
                                         💾 Save Notes & Intelligence
                                     </button>
-                                    <span id="intel-save-status" style="font-size: 11px; font-weight: 600; color: #16a34a; margin-left: 8px; display: none;">✅ सहेज लिया गया!</span>
+                                    <span id="intel-save-status" style="font-size: 11px; font-weight: 600; color: #16a34a; margin-left: 8px; display: none;">✅ Saved!</span>
                                 </div>
                             </div>
 
@@ -3780,40 +3780,40 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <div class="wa-chat-scroll" id="wa-chat-scroll">
                                 <div style="text-align: center; color: #8696a0; margin-top: 180px;">
                                     <div style="font-size: 44px; margin-bottom: 10px;">💬</div>
-                                    <div style="font-weight: 700; font-size: 16px; color: #334155;">मतदाता संवाद कक्ष में आपका स्वागत है</div>
-                                    <p style="font-size: 13px; max-width: 420px; margin: 6px auto 0 auto; color: #64748b;">बाईं तरफ से किसी भी मतदाता पर क्लिक करें। आप उनकी पूरी चैट देख सकते हैं, सीधे बात कर सकते हैं, या ऑटोपायलट संभाल सकते हैं।</p>
+                                    <div style="font-weight: 700; font-size: 16px; color: #334155;">Welcome to the voter chat room</div>
+                                    <p style="font-size: 13px; max-width: 420px; margin: 6px auto 0 auto; color: #64748b;">Click any voter on the left. You can see their full chat, talk to them directly, or let AutoPilot handle it.</p>
                                 </div>
                             </div>
 
                             <!-- Quick Action Bar -->
                             <div class="wa-quick-actions" id="wa-quick-actions" style="display: none;">
-                                <button type="button" class="wa-action-btn" id="qa-card" style="background: #0284c7; color: white; border-color: #0369a1; font-weight: 700;" onclick="sendQuickAction('contact_card')">📇 संपर्क कार्ड (Anti-Ban)</button>
-                                <button type="button" class="wa-action-btn" id="qa-ramram" onclick="sendQuickAction('ramram')">🙏 राम राम</button>
-                                <button type="button" class="wa-action-btn" id="qa-poster" onclick="sendQuickAction('poster')">📸 पोस्टर भेजें (स्वीकृत)</button>
-                                <button type="button" class="wa-action-btn" id="qa-video" onclick="sendQuickAction('video')">📹 3D वीडियो रील</button>
-                                <button type="button" class="wa-action-btn" id="qa-slip" onclick="sendQuickAction('slip')">🎫 वोटर पर्ची निकालें</button>
-                                <button type="button" class="wa-action-btn" id="qa-register" onclick="sendQuickAction('baba_register')">📝 बाबा रजिस्टर में दर्ज</button>
-                                <button type="button" class="wa-action-btn" id="qa-meeting" onclick="sendQuickAction('meeting')">🤝 चौपाल मुलाकात</button>
+                                <button type="button" class="wa-action-btn" id="qa-card" style="background: #0284c7; color: white; border-color: #0369a1; font-weight: 700;" onclick="sendQuickAction('contact_card')">📇 Contact card (anti-ban)</button>
+                                <button type="button" class="wa-action-btn" id="qa-ramram" onclick="sendQuickAction('ramram')">🙏 Ram Ram greeting</button>
+                                <button type="button" class="wa-action-btn" id="qa-poster" onclick="sendQuickAction('poster')">📸 Send poster (approved)</button>
+                                <button type="button" class="wa-action-btn" id="qa-video" onclick="sendQuickAction('video')">📹 3D video reel</button>
+                                <button type="button" class="wa-action-btn" id="qa-slip" onclick="sendQuickAction('slip')">🎫 Get voter slip</button>
+                                <button type="button" class="wa-action-btn" id="qa-register" onclick="sendQuickAction('baba_register')">📝 Add to Baba register</button>
+                                <button type="button" class="wa-action-btn" id="qa-meeting" onclick="sendQuickAction('meeting')">🤝 Chaupal meeting</button>
                             </div>
 
                             <!-- AI Co-pilot: reads the full chat + voter memory, suggests the best next reply (validated) -->
                             <div id="wa-copilot-container" class="crm-copilot">
                                 <div class="crm-copilot-row">
-                                    <span style="font-size: 12px; font-weight: 700; color: #6366f1; white-space: nowrap;">✨ AI सह-चालक</span>
-                                    <input type="text" id="wa-ai-instruction" placeholder="वैकल्पिक निर्देश (उदा: 'चौपाल पर बुलाओ') — खाली छोड़ें तो अगला सबसे अच्छा जवाब" onkeydown="if(event.key==='Enter') crmSuggest(false)">
-                                    <button type="button" class="crm-btn" id="crm-cp-suggest" onclick="crmSuggest(false)">✨ सुझाव दें</button>
+                                    <span style="font-size: 12px; font-weight: 700; color: #6366f1; white-space: nowrap;">✨ AI co-pilot</span>
+                                    <input type="text" id="wa-ai-instruction" placeholder="Optional instruction (e.g. 'invite to chaupal') — leave empty for the next best reply" onkeydown="if(event.key==='Enter') crmSuggest(false)">
+                                    <button type="button" class="crm-btn" id="crm-cp-suggest" onclick="crmSuggest(false)">✨ Suggest</button>
                                 </div>
                                 <div id="crm-cp-info" style="font-size: 11px; color: #5b21b6;"></div>
                                 <textarea id="crm-suggestion" style="display: none;"></textarea>
                                 <div class="crm-copilot-row" id="crm-cp-actions" style="display: none;">
-                                    <button type="button" class="crm-btn go" id="crm-cp-send" onclick="crmSendSuggestion()">📤 भेजें</button>
-                                    <button type="button" class="crm-btn alt" id="crm-cp-again" onclick="crmSuggest(true)">🔁 दूसरा सुझाव</button>
+                                    <button type="button" class="crm-btn go" id="crm-cp-send" onclick="crmSendSuggestion()">📤 Send</button>
+                                    <button type="button" class="crm-btn alt" id="crm-cp-again" onclick="crmSuggest(true)">🔁 Another suggestion</button>
                                 </div>
                             </div>
 
                             <!-- Chat Direct Input Bar -->
                             <div class="wa-input-container" id="wa-input-container" style="display: none;">
-                                <input type="text" id="wa-direct-input" class="wa-input-field" placeholder="सीधा WhatsApp संदेश लिखें (Enter दबाएं या Send पर क्लिक करें)..." onkeydown="if(event.key==='Enter') sendManualWhatsAppReply()">
+                                <input type="text" id="wa-direct-input" class="wa-input-field" placeholder="Type a direct WhatsApp message (press Enter or click Send)..." onkeydown="if(event.key==='Enter') sendManualWhatsAppReply()">
                                 <button class="wa-send-btn" onclick="sendManualWhatsAppReply()" title="Send WhatsApp Message">➤</button>
                             </div>
                         </div>
@@ -3847,20 +3847,20 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
                         <!-- Import from Voter DB -->
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📥 3,636 वोटर लिस्ट से आयात:</span>
+                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📥 Import from 3,636 voter list:</span>
                             <select id="import-ward-select" style="padding: 5px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white;">
-                                <option value="all">सभी वार्ड (1-11)</option>
-                                <option value="1">वार्ड नं. 1</option>
-                                <option value="2">वार्ड नं. 2</option>
-                                <option value="3">वार्ड नं. 3</option>
-                                <option value="4">वार्ड नं. 4</option>
-                                <option value="5">वार्ड नं. 5</option>
-                                <option value="6">वार्ड नं. 6</option>
-                                <option value="7">वार्ड नं. 7</option>
-                                <option value="8">वार्ड नं. 8</option>
-                                <option value="9">वार्ड नं. 9</option>
-                                <option value="10">वार्ड नं. 10</option>
-                                <option value="11">वार्ड नं. 11</option>
+                                <option value="all">All wards (1-11)</option>
+                                <option value="1">Ward No. 1</option>
+                                <option value="2">Ward No. 2</option>
+                                <option value="3">Ward No. 3</option>
+                                <option value="4">Ward No. 4</option>
+                                <option value="5">Ward No. 5</option>
+                                <option value="6">Ward No. 6</option>
+                                <option value="7">Ward No. 7</option>
+                                <option value="8">Ward No. 8</option>
+                                <option value="9">Ward No. 9</option>
+                                <option value="10">Ward No. 10</option>
+                                <option value="11">Ward No. 11</option>
                             </select>
                             <select id="import-line-select" style="padding: 5px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white;">
                                 <option value="sim_636">Primary Line (6367810227)</option>
@@ -3868,73 +3868,73 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                 <option value="canada">Canada Line (+1)</option>
                             </select>
                             <button onclick="importVotersToContacts()" style="background: #ea580c; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                                📥 आयात करें
+                                📥 Import
                             </button>
                         </div>
 
                         <!-- Direct Upload CSV / VCF -->
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📂 VCF / CSV फाइल अपलोड:</span>
+                            <span style="font-size: 12px; font-weight: 700; color: #334155;">📂 Upload VCF / CSV file:</span>
                             <input type="file" id="vcf-upload-input" accept=".vcf,.csv" style="font-size: 12px;">
                             <button onclick="uploadContactsFile()" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                                ⬆️ अपलोड करें
+                                ⬆️ Upload
                             </button>
                         </div>
                     </div>
 
                     <!-- Add Single Contact Form (Collapsible/Inline) -->
                     <div style="background: white; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; margin-bottom: 16px;">
-                        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #0f172a;">➕ नया संपर्क सीधे जोड़ें</h4>
+                        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #0f172a;">➕ Add a new contact directly</h4>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;">
-                            <input type="text" id="new-c-name" placeholder="मतदाता का नाम (उदा: राजेश यादव)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                            <input type="text" id="new-c-phone" placeholder="मोबाइल नंबर (10 अंक)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <input type="text" id="new-c-name" placeholder="Voter name (e.g. Rajesh Yadav)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <input type="text" id="new-c-phone" placeholder="Mobile number (10 digits)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
                             <select id="new-c-ward" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
-                                <option value="1">वार्ड नं. 1</option>
-                                <option value="2">वार्ड नं. 2</option>
-                                <option value="3" selected>वार्ड नं. 3</option>
-                                <option value="4">वार्ड नं. 4</option>
-                                <option value="5">वार्ड नं. 5</option>
-                                <option value="6">वार्ड नं. 6</option>
-                                <option value="7">वार्ड नं. 7</option>
-                                <option value="8">वार्ड नं. 8</option>
-                                <option value="9">वार्ड नं. 9</option>
-                                <option value="10">वार्ड नं. 10</option>
-                                <option value="11">वार्ड नं. 11</option>
+                                <option value="1">Ward No. 1</option>
+                                <option value="2">Ward No. 2</option>
+                                <option value="3" selected>Ward No. 3</option>
+                                <option value="4">Ward No. 4</option>
+                                <option value="5">Ward No. 5</option>
+                                <option value="6">Ward No. 6</option>
+                                <option value="7">Ward No. 7</option>
+                                <option value="8">Ward No. 8</option>
+                                <option value="9">Ward No. 9</option>
+                                <option value="10">Ward No. 10</option>
+                                <option value="11">Ward No. 11</option>
                             </select>
                             <select id="new-c-line" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
                                 <option value="sim_636">Primary Line (6367810227)</option>
                                 <option value="baba_aux">Baba Aux Line</option>
                                 <option value="canada">Canada Line (+1)</option>
                             </select>
-                            <input type="text" id="new-c-notes" placeholder="नोट्स (उदा: पक्का समर्थक, 4 वोट)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <input type="text" id="new-c-notes" placeholder="Notes (e.g. sure supporter, 4 votes)" style="padding: 6px 10px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
                             <button onclick="saveSingleContact()" style="background: #16a34a; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
-                                💾 सहेजें
+                                💾 Save
                             </button>
                         </div>
                     </div>
 
                     <!-- Filter & Search Bar -->
                     <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-                        <input type="text" id="contact-search-input" placeholder="🔍 नाम या फोन नंबर से खोजें..." onkeyup="filterContactsTable()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">
+                        <input type="text" id="contact-search-input" placeholder="🔍 Search by name or phone..." onkeyup="filterContactsTable()" style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px;">
                         <select id="contact-filter-line" onchange="loadContacts()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; background: white;">
-                            <option value="all">सभी लाइन्स (All WhatsApp)</option>
+                            <option value="all">All lines (all WhatsApp)</option>
                             <option value="sim_636">Primary (6367810227)</option>
                             <option value="baba_aux">Baba Aux Line</option>
                             <option value="canada">Canada Line (+1)</option>
                         </select>
                         <select id="contact-filter-ward" onchange="loadContacts()" style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; background: white;">
-                            <option value="all">सभी वार्ड (1-11)</option>
-                            <option value="1">वार्ड 1</option>
-                            <option value="2">वार्ड 2</option>
-                            <option value="3">वार्ड 3</option>
-                            <option value="4">वार्ड 4</option>
-                            <option value="5">वार्ड 5</option>
-                            <option value="6">वार्ड 6</option>
-                            <option value="7">वार्ड 7</option>
-                            <option value="8">वार्ड 8</option>
-                            <option value="9">वार्ड 9</option>
-                            <option value="10">वार्ड 10</option>
-                            <option value="11">वार्ड 11</option>
+                            <option value="all">All wards (1-11)</option>
+                            <option value="1">Ward 1</option>
+                            <option value="2">Ward 2</option>
+                            <option value="3">Ward 3</option>
+                            <option value="4">Ward 4</option>
+                            <option value="5">Ward 5</option>
+                            <option value="6">Ward 6</option>
+                            <option value="7">Ward 7</option>
+                            <option value="8">Ward 8</option>
+                            <option value="9">Ward 9</option>
+                            <option value="10">Ward 10</option>
+                            <option value="11">Ward 11</option>
                         </select>
                     </div>
 
@@ -3944,16 +3944,16 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <thead>
                                 <tr>
                                     <th style="width: 40px;"><input type="checkbox" id="select-all-contacts" onclick="toggleSelectAllContacts(this)"></th>
-                                    <th>मतदाता का नाम</th>
-                                    <th>फोन नंबर</th>
-                                    <th>वार्ड</th>
-                                    <th>WhatsApp लाइन</th>
-                                    <th>नोट्स / पहचान</th>
-                                    <th style="width: 140px;">कार्य (Action)</th>
+                                    <th>Voter name</th>
+                                    <th>Phone number</th>
+                                    <th>Ward</th>
+                                    <th>WhatsApp line</th>
+                                    <th>Notes / identity</th>
+                                    <th style="width: 140px;">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="contacts-table-body">
-                                <tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 30px;">⏳ संपर्क लोड हो रहे हैं...</td></tr>
+                                <tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 30px;">⏳ Loading contacts...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -3965,8 +3965,8 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     <!-- One-click Media Bank upload (image / video / pdf) -->
                     <div id="hm-drop" style="border: 2px dashed #94a3b8; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 16px; background: #f8fafc; cursor: pointer;">
                         <div style="font-size: 28px;">📤</div>
-                        <div style="font-weight: 800;">फ़ोटो / वीडियो / PDF यहाँ छोड़ें या टैप करके चुनें</div>
-                        <div style="font-size: 11px; color: #64748b;">Max 45 MB • तुरंत नीचे की सूची में दिखेगा, Bulk Send और एजेंडा में इस्तेमाल कर सकते हैं</div>
+                        <div style="font-weight: 800;">Drop photo / video / PDF here or tap to choose</div>
+                        <div style="font-size: 11px; color: #64748b;">Max 45 MB • shows up in the list below right away; you can use it in Bulk Send and the agenda</div>
                         <input type="file" id="hm-file" accept="image/*,video/*,application/pdf" multiple style="display:none;">
                         <div id="hm-status" style="margin-top: 8px; font-size: 13px; font-weight: 600;"></div>
                     </div>
@@ -4003,7 +4003,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     </div>
                     <!-- Daily Media Drip Schedule (4 Active Slots) -->
                     <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-                        <h4 style="margin: 0 0 10px 0; color: #0f172a;">⏰ दैनिक 4-स्लॉट ऑटोमैटिक शेड्यूल (Daily Drip Slots)</h4>
+                        <h4 style="margin: 0 0 10px 0; color: #0f172a;">⏰ Daily 4-slot automatic schedule (drip slots)</h4>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:12px;">
                             <label style="font-size:12px;">Morning <input id="schedule-morning-start" type="time"> to <input id="schedule-morning-end" type="time"></label>
                             <label style="font-size:12px;">Afternoon <input id="schedule-dopahar-start" type="time"> to <input id="schedule-dopahar-end" type="time"></label>
@@ -4013,24 +4013,24 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <button onclick="saveCampaignAgendaUI()" style="margin-bottom:12px;background:#15803d;color:white;border:0;border-radius:7px;padding:7px 12px;font-weight:700;cursor:pointer;">Save Media Times</button>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                                <div style="font-weight: 700; color: #ea580c; font-size: 13px;">🌅 सुबह का स्लॉट</div>
+                                <div style="font-weight: 700; color: #ea580c; font-size: 13px;">🌅 Morning slot</div>
                                 <div style="font-size: 11px; color: #64748b;">08:30 AM - 10:30 AM</div>
-                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">डेली एजेंडा पोस्टर + माहौल हुक</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">Daily agenda poster + mood hook</div>
                             </div>
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                                <div style="font-weight: 700; color: #0284c7; font-size: 13px;">☀️ दोपहर का स्लॉट</div>
+                                <div style="font-weight: 700; color: #0284c7; font-size: 13px;">☀️ Afternoon slot</div>
                                 <div style="font-size: 11px; color: #64748b;">01:30 PM - 03:30 PM</div>
-                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">विकास कार्य फैक्ट रिपोर्ट कार्ड</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">Development work fact report card</div>
                             </div>
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                                <div style="font-weight: 700; color: #16a34a; font-size: 13px;">🌇 शाम का स्लॉट</div>
+                                <div style="font-weight: 700; color: #16a34a; font-size: 13px;">🌇 Evening slot</div>
                                 <div style="font-size: 11px; color: #64748b;">05:30 PM - 07:30 PM</div>
-                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">संकल्प व स्टेटस पोस्टर</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">Pledge (sankalp) & status poster</div>
                             </div>
                             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                                <div style="font-weight: 700; color: #7c3aed; font-size: 13px;">🌙 रात का स्लॉट</div>
+                                <div style="font-weight: 700; color: #7c3aed; font-size: 13px;">🌙 Night slot</div>
                                 <div style="font-size: 11px; color: #64748b;">08:00 PM - 09:30 PM</div>
-                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">3D विकास संकल्प वीडियो रील</div>
+                                <div style="font-size: 12px; font-weight: 600; margin-top: 4px;">3D development pledge video reel</div>
                             </div>
                         </div>
                     </div>
@@ -4073,13 +4073,13 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 <!-- ===== Bulk Send Tab (broadcast_engine.js) ===== -->
                 <div id="tab-bulk" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">📣 Bulk Send (Safe Broadcast)</h3>
-                    <div style="font-size: 12px; color: #64748b; margin-bottom: 14px;">हर लाइन पर 20-60 सेकंड का अंतर, घंटे/दिन की सीमा, रात 9 से सुबह 8 बजे तक बंद, STOP/बंद/रुको लिखने वालों को कभी नहीं भेजा जाता। केवल उन्हीं लोगों को भेजें जिन्होंने संपर्क की अनुमति दी है।</div>
+                    <div style="font-size: 12px; color: #64748b; margin-bottom: 14px;">20-60 second gap on each line, hourly/daily limits, paused from 9 pm to 8 am, never sent to anyone who wrote STOP/बंद/रुको. Only send to people who gave permission to contact them.</div>
 
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
                         <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
                             <h4 style="margin: 0 0 8px 0;">1️⃣ Audience</h4>
                             <label style="font-size: 12px; font-weight: 700;">Paste numbers (one per line: phone, name, ward, village)</label>
-                            <textarea id="bulk-phones" rows="6" style="width: 100%; box-sizing: border-box; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="9876543210, राम लाल, 5, सिहाली खुर्द&#10;+91 98290 12345"></textarea>
+                            <textarea id="bulk-phones" rows="6" style="width: 100%; box-sizing: border-box; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;" placeholder="9876543210, Ram Lal, 5, Sihali Khurd&#10;+91 98290 12345"></textarea>
                             <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                                 <label style="font-size: 12px; font-weight: 700;">📄 CSV upload:</label>
                                 <input type="file" id="bulk-csv-file" accept=".csv,.txt,text/csv" style="font-size: 12px;">
@@ -4103,7 +4103,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <div style="font-size: 11px; color: #64748b;">{name} = recipient name • {राम राम|नमस्ते} = random choice per person, so no two messages are identical.</div>
                             <div style="margin-top: 8px; font-size: 12px;">
                                 <label style="font-weight: 700;">🗓️ Fill from today's agenda slot:</label>
-                                <select id="bulk-agenda-slot" style="font-size: 12px; padding: 3px;"><option value="">—</option><option value="morning">🌅 सुबह</option><option value="dopahar">☀️ दोपहर</option><option value="evening">🌇 शाम</option><option value="night">🌙 रात</option></select>
+                                <select id="bulk-agenda-slot" style="font-size: 12px; padding: 3px;"><option value="">—</option><option value="morning">🌅 Morning</option><option value="dopahar">☀️ Afternoon</option><option value="evening">🌇 Evening</option><option value="night">🌙 Night</option></select>
                             </div>
                             <div style="margin-top: 8px;">
                                 <label style="font-size: 12px; font-weight: 700;">🖼️ Media (optional):</label>
@@ -4173,18 +4173,18 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
 
                 <!-- ===== Goal & Agenda Tab ===== -->
                 <div id="tab-goal" class="card tab-content" style="display: none;">
-                    <h3 style="margin-top:0;">🎯 आज का लक्ष्य, प्रगति और एजेंडा</h3>
+                    <h3 style="margin-top:0;">🎯 Today's goal, progress and agenda</h3>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
                         <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px;">
                             <h4 style="margin: 0 0 8px 0;">Daily goal / task</h4>
-                            <input id="hg-title" placeholder="उदा: आज 300 लोगों से बात, 100 पक्के वोट" style="width:100%; box-sizing:border-box; padding:7px; margin-bottom:6px; border:1px solid #cbd5e1; border-radius:6px;">
-                            <textarea id="hg-instruction" rows="2" placeholder="बॉट के लिए आज का फोकस (बातचीत में उपयोग होगा)" style="width:100%; box-sizing:border-box; padding:7px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                            <input id="hg-title" placeholder="e.g. talk to 300 people today, 100 sure votes" style="width:100%; box-sizing:border-box; padding:7px; margin-bottom:6px; border:1px solid #cbd5e1; border-radius:6px;">
+                            <textarea id="hg-instruction" rows="2" placeholder="Today's focus for the bot (used in conversations)" style="width:100%; box-sizing:border-box; padding:7px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px; margin-top:6px;">
                                 <label>Target people <input id="hg-target" type="number" min="0" style="width:70px;"></label>
-                                <label>Target पक्के वोट <input id="hg-target-committed" type="number" min="0" style="width:70px;"></label>
+                                <label>Target sure votes <input id="hg-target-committed" type="number" min="0" style="width:70px;"></label>
                                 <label>Task ward <input id="hg-ward" style="width:50px;" placeholder="—"></label>
                             </div>
-                            <textarea id="hg-task" rows="2" placeholder="उस वार्ड के लिए संदेश (उदा: कल शाम 5 बजे चौपाल पर ज़रूर आइए) — आप जो लिखेंगे वही भेजा जाएगा" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                            <textarea id="hg-task" rows="2" placeholder="Message for that ward (e.g. कल शाम 5 बजे चौपाल पर ज़रूर आइए) — exactly what you write is sent" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
                             <button type="button" data-goal-action="save-goal" style="margin-top:8px; padding:7px 14px; border:none; border-radius:6px; background:#16a34a; color:white; font-weight:800; cursor:pointer;">💾 Save goal</button>
                             <span id="hg-goal-status" style="font-size:12px; margin-left:8px;"></span>
                         </div>
@@ -4207,8 +4207,8 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             <button type="button" data-goal-action="load-day" style="padding:5px 10px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer; font-size:12px;">Load</button>
                             <span id="ha-days" style="color:#64748b;"></span>
                         </div>
-                        <input id="ha-topic" placeholder="आज का विषय" style="width:100%; box-sizing:border-box; padding:7px; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
-                        <textarea id="ha-points" rows="3" placeholder="बातचीत के मुख्य बिंदु (सिर्फ़ सत्यापित तथ्य)" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
+                        <input id="ha-topic" placeholder="Today's topic" style="width:100%; box-sizing:border-box; padding:7px; margin-top:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                        <textarea id="ha-points" rows="3" placeholder="Main talking points (verified facts only)" style="width:100%; box-sizing:border-box; padding:7px; margin-top:6px; border:1px solid #cbd5e1; border-radius:6px;"></textarea>
                         <div id="ha-slots" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin-top:8px;"></div>
                         <button type="button" data-goal-action="save-day" style="margin-top:8px; padding:7px 14px; border:none; border-radius:6px; background:#2563eb; color:white; font-weight:800; cursor:pointer;">💾 Save day agenda</button>
                         <span id="ha-status" style="font-size:12px; margin-left:8px;"></span>
@@ -4399,12 +4399,12 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     const statusEl = document.getElementById('p-send-status');
 
                     if (!phone || phone.length < 10) {
-                        alert('कृपया मतदाता का सही 10 अंकों का मोबाइल नंबर दर्ज करें!');
+                        alert('Please enter a correct 10-digit mobile number for the voter!');
                         return;
                     }
 
                     statusEl.style.color = '#2563eb';
-                    statusEl.textContent = '⏳ नाम सहित कस्टम पोस्टर जनरेट करके WhatsApp पर भेजा जा रहा है...';
+                    statusEl.textContent = '⏳ Making a custom poster with the name and sending it on WhatsApp...';
 
                     try {
                         const res = await fetch('/api/send-message', {
@@ -4420,14 +4420,14 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         const data = await res.json();
                         if (res.ok) {
                             statusEl.style.color = '#16a34a';
-                            statusEl.textContent = '✅ पोस्टर सफलता पूर्वक ' + phone + ' को भेज दिया गया है!';
+                            statusEl.textContent = '✅ Poster sent to ' + phone + ' successfully!';
                         } else {
                             statusEl.style.color = '#dc2626';
-                            statusEl.textContent = '❌ त्रुटि: ' + (data.error || 'भेजने में विफल');
+                            statusEl.textContent = '❌ Error: ' + (data.error || 'Failed to send');
                         }
                     } catch (err) {
                         statusEl.style.color = '#dc2626';
-                        statusEl.textContent = '❌ नेटवर्क त्रुटि: ' + err.message;
+                        statusEl.textContent = '❌ Network error: ' + err.message;
                     }
                 }
 
@@ -4479,7 +4479,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             if (!data.results || data.results.length === 0) {
                                 const emptyEl = document.createElement('div');
                                 emptyEl.style.cssText = 'padding: 10px; font-size: 12px; color: #64748b; text-align: center;';
-                                emptyEl.textContent = 'कोई मतदाता नहीं मिला';
+                                emptyEl.textContent = 'No voter found';
                                 dropdown.appendChild(emptyEl);
                                 dropdown.style.display = 'block';
                                 return;
@@ -4498,7 +4498,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                 
                                 const subtitle = document.createElement('div');
                                 subtitle.style.cssText = 'font-size: 11px; color: #64748b;';
-                                subtitle.textContent = rel + ': ' + (v.rel_name_hi || v.rel_name || '--') + ' | वार्ड: ' + (v.ward || '--') + ' | क्रम #' + (v.sr_no || '--') + ' | EPIC: ' + (v.epic || '--');
+                                subtitle.textContent = rel + ': ' + (v.rel_name_hi || v.rel_name || '--') + ' | Ward: ' + (v.ward || '--') + ' | Serial #' + (v.sr_no || '--') + ' | EPIC: ' + (v.epic || '--');
                                 
                                 item.appendChild(title);
                                 item.appendChild(subtitle);
@@ -4520,7 +4520,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
 
                     const badge = document.getElementById('voter-linked-badge');
                     const rel = require('./relation_label').relLabel(v);
-                    badge.innerHTML = '✅ <strong>' + (v.name_hi || v.name) + '</strong> (' + rel + ': ' + (v.rel_name_hi || '--') + ', वार्ड ' + v.ward + ', #' + v.sr_no + ', EPIC: ' + v.epic + ') <button type="button" onclick="clearLinkedVoter()" style="background: none; border: none; color: #dc2626; cursor: pointer; margin-left: 8px; font-weight: 700;">✕ Unlink</button>';
+                    badge.innerHTML = '✅ <strong>' + (v.name_hi || v.name) + '</strong> (' + rel + ': ' + (v.rel_name_hi || '--') + ', Ward ' + v.ward + ', #' + v.sr_no + ', EPIC: ' + v.epic + ') <button type="button" onclick="clearLinkedVoter()" style="background: none; border: none; color: #dc2626; cursor: pointer; margin-left: 8px; font-weight: 700;">✕ Unlink</button>';
                     badge.style.display = 'block';
 
                     const slipRadio = document.getElementById('media-opt-slip');
@@ -4871,12 +4871,12 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             badge.style.background = '#dcfce7';
                             badge.style.color = '#15803d';
                             badge.style.borderColor = '#16a34a';
-                            badge.innerText = '📸 डेमो पोस्टर मोड: चालू';
+                            badge.innerText = '📸 Demo poster mode: ON';
                         } else {
                             badge.style.background = '#e0f2fe';
                             badge.style.color = '#0284c7';
                             badge.style.borderColor = '#0284c7';
-                            badge.innerText = '🖼️ ओरिजिनल पोस्टर मोड';
+                            badge.innerText = '🖼️ Original poster mode';
                         }
                     } catch (e) {
                         alert('Error toggling demo poster mode: ' + e.message);
@@ -4933,7 +4933,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 function renderVoterList(voters) {
                     const listUi = document.getElementById('voter-list-ui');
                     if (!voters || voters.length === 0) {
-                        listUi.innerHTML = '<div style="padding: 30px; text-align: center; color: #94a3b8; font-size: 13px;">कोई मतदाता नहीं मिला।</div>';
+                        listUi.innerHTML = '<div style="padding: 30px; text-align: center; color: #94a3b8; font-size: 13px;">No voter found.</div>';
                         return;
                     }
 
@@ -4941,7 +4941,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         const isSelected = selectedVoterPhone === v.phone;
                         const initial = (v.name && v.name.trim()) ? v.name.trim().charAt(0).toUpperCase() : '👤';
                         const lastMsg = (v.history && v.history.length > 0) ? v.history[v.history.length - 1] : null;
-                        const snippet = lastMsg ? ((lastMsg.role === 'user' ? '📩 ' : '🚩 ') + lastMsg.text) : 'नई बातचीत...';
+                        const snippet = lastMsg ? ((lastMsg.role === 'user' ? '📩 ' : '🚩 ') + lastMsg.text) : 'New conversation...';
                         const time = lastMsg ? lastMsg.time : '';
                         const autoPilotBadge = v.autoPilot === false 
                             ? '<span style="background:#fed7aa; color:#9a3412; padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700;">⏸️ Manual</span>'
@@ -4955,13 +4955,13 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             '<div class="wa-avatar">' + initial + '</div>' +
                             '<div class="wa-contact-info">' +
                                 '<div class="wa-contact-top">' +
-                                    '<div class="wa-contact-name">' + (v.name || 'ग्रामवासी') + '</div>' +
+                                    '<div class="wa-contact-name">' + (v.name || 'Villager') + '</div>' +
                                     '<div class="wa-contact-time">' + time + '</div>' +
                                 '</div>' +
                                 '<div class="wa-contact-sub">' +
                                     '<span>+' + v.phone + '</span>' +
                                     autoPilotBadge +
-                                    ' <span style="padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700; background:#f1f5f9;">' + ({ unknown: '⚪', undecided: '🟡', leaning: '🟢', committed: '✅ पक्का', opposed: '🔴' }[v.persuasionStage || 'unknown'] || '⚪') + '</span>' +
+                                    ' <span style="padding:1px 6px; border-radius:10px; font-size:10px; font-weight:700; background:#f1f5f9;">' + ({ unknown: '⚪', undecided: '🟡', leaning: '🟢', committed: '✅ Sure', opposed: '🔴' }[v.persuasionStage || 'unknown'] || '⚪') + '</span>' +
                                     (v.needsAdmin ? ' <span title="Needs admin" style="font-size:11px;">🚩</span>' : '') +
                                 '</div>' +
                                 '<div class="wa-contact-snippet">' + snippet + '</div>' +
@@ -4984,8 +4984,8 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         document.getElementById('wa-quick-actions').style.display = 'flex';
                         document.getElementById('wa-input-container').style.display = 'flex';
 
-                        document.getElementById('header-name').innerText = v.name || 'ग्रामवासी';
-                        const details = '+' + v.phone + ' • वार्ड: ' + (v.ward || '--') + (v.fatherOrSpouse ? ' • संबंध: ' + v.fatherOrSpouse : '');
+                        document.getElementById('header-name').innerText = v.name || 'Villager';
+                        const details = '+' + v.phone + ' • Ward: ' + (v.ward || '--') + (v.fatherOrSpouse ? ' • Relation: ' + v.fatherOrSpouse : '');
                         document.getElementById('header-details').innerText = details;
                         document.getElementById('header-avatar').innerText = (v.name && v.name.trim()) ? v.name.trim().charAt(0).toUpperCase() : '👤';
 
@@ -4993,11 +4993,11 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         const apBtn = document.getElementById('btn-toggle-autopilot');
                         if (v.autoPilot === false) {
                             apBtn.style.background = '#f97316';
-                            apBtn.innerText = '⏸️ मैन्युअल मोड: सक्रिय';
+                            apBtn.innerText = '⏸️ Manual mode: active';
                             apBtn.title = 'Click to activate AI AutoPilot';
                         } else {
                             apBtn.style.background = '#16a34a';
-                            apBtn.innerText = '🤖 AutoPilot AI: चालू';
+                            apBtn.innerText = '🤖 AutoPilot AI: ON';
                             apBtn.title = 'Click to pause AI and takeover manually';
                         }
 
@@ -5015,21 +5015,21 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         // Render messages
                         const scrollUi = document.getElementById('wa-chat-scroll');
                         if (!v.history || v.history.length === 0) {
-                            scrollUi.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top:150px;">इस मतदाता के साथ अभी कोई संदेश रिकॉर्ड नहीं हुआ है। नीचे से सीधा संदेश भेजें!</div>';
+                            scrollUi.innerHTML = '<div style="text-align:center; color:#94a3b8; margin-top:150px;">No messages recorded with this voter yet. Send a direct message below!</div>';
                             return;
                         }
 
                         scrollUi.innerHTML = v.history.map(function(h) {
                             let bubbleClass = 'wa-bubble-user';
-                            let senderLabel = '👤 ' + (v.name || 'वोटर');
+                            let senderLabel = '👤 ' + (v.name || 'Voter');
 
                             if (h.role === 'bot') {
                                 if (h.session === 'Admin Direct' || h.session === 'Admin Manual' || h.session === 'Admin Quick Action') {
                                     bubbleClass = 'wa-bubble-admin';
-                                    senderLabel = '👨‍💻 एडमिन सीधा संदेश (' + h.session + ')';
+                                    senderLabel = '👨‍💻 Admin direct message (' + h.session + ')';
                                 } else {
                                     bubbleClass = 'wa-bubble-bot';
-                                    senderLabel = '🚩 बाबा अभय सिंह जनसंपर्क';
+                                    senderLabel = '🚩 Baba Abhay Singh team (bot)';
                                 }
                             }
 
@@ -5162,7 +5162,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     if (!selectedVoterPhone) return;
                     let customNote = '';
                     if (action === 'baba_register') {
-                        customNote = prompt('बाबा अभय सिंह के प्राथमिकता रजिस्टर में क्या समस्या दर्ज करनी है?');
+                        customNote = prompt('What problem should be added to Baba Abhay Singh priority register?');
                         if (!customNote) return;
                     }
 
@@ -5223,13 +5223,13 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     const inputEl = document.getElementById('wa-ai-instruction');
                     const instruction = inputEl.value.trim();
                     if (!instruction) {
-                        alert('कृपया AI को निर्देश लिखें (उदा: "बोलो कि कल सुबह चौपाल पर आएं")');
+                        alert('Please write an instruction for the AI (e.g. "tell them to come to the chaupal tomorrow morning")');
                         return;
                     }
 
                     const btn = document.getElementById('btn-ai-draft');
                     btn.disabled = true;
-                    btn.innerText = '⏳ सोच रहे हैं...';
+                    btn.innerText = '⏳ Thinking...';
 
                     try {
                         const res = await fetch('/api/ai-draft', {
@@ -5249,7 +5249,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         alert('Draft error: ' + e.message);
                     } finally {
                         btn.disabled = false;
-                        btn.innerText = '✨ ड्राफ्ट बनाएं';
+                        btn.innerText = '✨ Make draft';
                     }
                 }
 
@@ -5314,10 +5314,10 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         });
                         const data = await res.json();
                         if (data.success) {
-                            alert('✅ चुनावी एजेंडा सफलतापूर्वक सेव हो गया!');
+                            alert('✅ Campaign agenda saved!');
                         }
                     } catch (e) {
-                        alert('एजेंडा सेव करने में त्रुटि: ' + e.message);
+                        alert('Error saving agenda: ' + e.message);
                     }
                 }
 
@@ -5350,25 +5350,25 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     const q = document.getElementById('pg-voter-search-input').value.trim();
                     if (!q) return;
                     const resEl = document.getElementById('pg-voter-search-result');
-                    resEl.innerHTML = '⏳ खोज रहे हैं...';
+                    resEl.innerHTML = '⏳ Searching...';
                     try {
                         const res = await fetch('/api/search-voters?q=' + encodeURIComponent(q));
                         const data = await res.json();
                         if (data && data.results && data.results.length > 0) {
-                            let html = '<b>' + data.results.length + ' परिणाम मिले:</b><br>';
+                            let html = '<b>' + data.results.length + ' results found:</b><br>';
                             data.results.slice(0, 3).forEach(v => {
                                 html += '<div style="margin-top:4px; padding:4px; background:white; border-radius:4px; border:1px solid #cbd5e1;">'
                                     + '🏛️ <b>' + v.name + '</b> (W' + v.ward + ', #' + v.sr_no + ')<br>'
-                                    + 'संबंधी: ' + v.rel_name + ' (' + v.rel_type + ') | EPIC: ' + v.epic + '<br>'
-                                    + 'मकान: ' + v.house_no + ' | बूथ: ' + v.booth
+                                    + 'Relative: ' + v.rel_name + ' (' + v.rel_type + ') | EPIC: ' + v.epic + '<br>'
+                                    + 'House: ' + v.house_no + ' | Booth: ' + v.booth
                                     + '</div>';
                             });
                             resEl.innerHTML = html;
                         } else {
-                            resEl.innerHTML = '❌ कोई पर्ची नहीं मिली। स्पेलिंग जांचें।';
+                            resEl.innerHTML = '❌ No slip found. Check the spelling.';
                         }
                     } catch (e) {
-                        resEl.innerHTML = 'सर्च त्रुटि: ' + e.message;
+                        resEl.innerHTML = 'Search error: ' + e.message;
                     }
                 }
 
@@ -5401,7 +5401,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
 
                     const btn = document.getElementById('btn-pg-send');
                     btn.disabled = true;
-                    btn.innerText = '⏳ सोच रहे हैं...';
+                    btn.innerText = '⏳ Thinking...';
 
                     try {
                         const res = await fetch('/api/playground/chat', {
@@ -5431,16 +5431,16 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             // Update live debug metrics
                             document.getElementById('pg-metric-provider').innerText = data.provider || provider;
                             document.getElementById('pg-metric-latency').innerText = data.timeMs + ' ms';
-                            document.getElementById('pg-metric-tags').innerText = ((data.user && data.user.tags) || []).join(', ') || 'सामान्य';
-                            document.getElementById('pg-metric-drip').innerText = data.nextDripMedia ? data.nextDripMedia.title : 'पूर्ण';
+                            document.getElementById('pg-metric-tags').innerText = ((data.user && data.user.tags) || []).join(', ') || 'Normal';
+                            document.getElementById('pg-metric-drip').innerText = data.nextDripMedia ? data.nextDripMedia.title : 'Done';
                         } else {
-                            chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">त्रुटि: ' + (data.error || 'अज्ञात समस्या') + '</div>';
+                            chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">Error: ' + (data.error || 'Unknown problem') + '</div>';
                         }
                     } catch (e) {
-                        chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">कनेक्शन त्रुटि: ' + e.message + '</div>';
+                        chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">Connection error: ' + e.message + '</div>';
                     } finally {
                         btn.disabled = false;
-                        btn.innerText = 'भेजें 🚀';
+                        btn.innerText = 'Send 🚀';
                     }
                 }
 
@@ -5463,7 +5463,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         }
                     } catch (e) {
                         console.error('Error loading contacts:', e);
-                        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;">त्रुटि: ' + e.message + '</td></tr>';
+                        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#ef4444;">Error: ' + e.message + '</td></tr>';
                     }
                 }
 
@@ -5471,7 +5471,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     const tbody = document.getElementById('contacts-table-body');
                     if (!tbody) return;
                     if (!list || list.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:30px;">कोई संपर्क नहीं मिला। ऊपर से नया जोड़ें या वोटर लिस्ट से आयात करें!</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:30px;">No contacts found. Add one above or import from the voter list!</td></tr>';
                         return;
                     }
 
@@ -5485,11 +5485,11 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             '<td><input type="checkbox" class="contact-checkbox" value="' + c.id + '"></td>' +
                             '<td style="font-weight:700; color:#0f172a;">' + escapeHtml(c.name) + (c.voterMatch && c.voterMatch.matched ? '<div style="font-size:10px;color:#15803d;margin-top:2px;">✓ Voter matched • ' + escapeHtml(c.voterMatch.epic || ('Serial ' + c.voterMatch.serial)) + '</div>' : '<div style="font-size:10px;color:#64748b;margin-top:2px;">Contact only • no unique voter match</div>') + '</td>' +
                             '<td style="font-family:monospace; font-weight:600; color:#2563eb;">' + escapeHtml(c.phone) + '</td>' +
-                            '<td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700;">वार्ड ' + (c.ward || '--') + '</span></td>' +
+                            '<td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700;">Ward ' + (c.ward || '--') + '</span></td>' +
                             '<td><span style="background:' + lineBg + '; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">' + lineBadge + '</span></td>' +
                             '<td style="font-size:12px; color:#64748b;">' + escapeHtml(c.notes || '--') + '</td>' +
                             '<td>' +
-                                '<button data-phone="' + (c.phone || '') + '" data-name="' + escapeHtml(c.name || '') + '" onclick="sendQuickWhatsAppToPhone(this.dataset.phone, this.dataset.name)" style="background:#16a34a; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-right:4px;">📲 चैट</button>' +
+                                '<button data-phone="' + (c.phone || '') + '" data-name="' + escapeHtml(c.name || '') + '" onclick="sendQuickWhatsAppToPhone(this.dataset.phone, this.dataset.name)" style="background:#16a34a; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-right:4px;">📲 Chat</button>' +
                                 '<button data-id="' + c.id + '" onclick="deleteContactRow(this.dataset.id)" style="background:#ef4444; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">✕</button>' +
                             '</td>' +
                         '</tr>';
@@ -5518,7 +5518,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     const line = document.getElementById('new-c-line').value;
                     const notes = document.getElementById('new-c-notes').value.trim();
 
-                    if (!phone) { alert('मोबाइल नंबर आवश्यक है!'); return; }
+                    if (!phone) { alert('Mobile number is required!'); return; }
                     try {
                         const res = await fetch('/api/contacts/add', {
                             method: 'POST',
@@ -5531,15 +5531,15 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             document.getElementById('new-c-phone').value = '';
                             document.getElementById('new-c-notes').value = '';
                             loadContacts();
-                            alert('✅ संपर्क सहेज लिया गया!');
+                            alert('✅ Contact saved!');
                         } else {
-                            alert('त्रुटि: ' + data.error);
+                            alert('Error: ' + data.error);
                         }
                     } catch (e) { alert('Error: ' + e.message); }
                 }
 
                 async function deleteContactRow(id) {
-                    if (!confirm('क्या आप इस संपर्क को हटाना चाहते हैं?')) return;
+                    if (!confirm('Do you want to delete this contact?')) return;
                     try {
                         const res = await fetch('/api/contacts/delete', {
                             method: 'POST',
@@ -5554,7 +5554,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 async function importVotersToContacts() {
                     const ward = document.getElementById('import-ward-select').value;
                     const line = document.getElementById('import-line-select').value;
-                    const confirmMsg = 'क्या आप ' + (ward === 'all' ? 'सभी वार्डों' : 'वार्ड ' + ward) + ' के मतदाताओं को संपर्क सूची में आयात करना चाहते हैं?';
+                    const confirmMsg = 'Import the voters of ' + (ward === 'all' ? 'all wards' : 'ward ' + ward) + ' into the contact list?';
                     if (!confirm(confirmMsg)) return;
 
                     try {
@@ -5565,10 +5565,10 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         });
                         const data = await res.json();
                         if (data.success) {
-                            alert('✅ ' + data.added + ' मतदाता संपर्क सूची में आयात कर लिए गए!');
+                            alert('✅ ' + data.added + ' voters imported into the contact list!');
                             loadContacts();
                         } else {
-                            alert('त्रुटि: ' + data.error);
+                            alert('Error: ' + data.error);
                         }
                     } catch (e) { alert('Error: ' + e.message); }
                 }
@@ -5576,7 +5576,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 async function uploadContactsFile() {
                     const input = document.getElementById('vcf-upload-input');
                     const file = input.files[0];
-                    if (!file) { alert('कृपया VCF या CSV फाइल चुनें!'); return; }
+                    if (!file) { alert('Please choose a VCF or CSV file!'); return; }
 
                     const reader = new FileReader();
                     reader.onload = async function(e) {
@@ -5593,7 +5593,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                                 loadContacts();
                                 input.value = '';
                             } else {
-                                alert('त्रुटि: ' + data.error);
+                                alert('Error: ' + data.error);
                             }
                         } catch (err) { alert('Upload error: ' + err.message); }
                     };
@@ -5828,7 +5828,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
             </script>
             <script>
             (function () {
-                var SLOTS = [['morning', '🌅 सुबह'], ['dopahar', '☀️ दोपहर'], ['evening', '🌇 शाम'], ['night', '🌙 रात']];
+                var SLOTS = [['morning', '🌅 Morning'], ['dopahar', '☀️ Afternoon'], ['evening', '🌇 Evening'], ['night', '🌙 Night']];
                 var mediaCache = [];
                 function el(id) { return document.getElementById(id); }
                 function esc(v) { return String(v === undefined || v === null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -5906,7 +5906,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 function table(map, keyLabel) {
                     var keys = Object.keys(map || {});
                     if (!keys.length) return '<span style="color:#64748b;">No activity yet today</span>';
-                    return '<table class="table"><thead><tr><th>' + keyLabel + '</th><th>Reached</th><th>Replies</th><th>Leaning</th><th>पक्के</th><th>Opposed</th></tr></thead><tbody>' +
+                    return '<table class="table"><thead><tr><th>' + keyLabel + '</th><th>Reached</th><th>Replies</th><th>Leaning</th><th>Sure</th><th>Opposed</th></tr></thead><tbody>' +
                         keys.map(function (k) { var v = map[k]; return '<tr><td>' + esc(k) + '</td><td>' + v.reached + '</td><td>' + v.replies + '</td><td>' + (v.leaning || 0) + '</td><td><b>' + v.committed + '</b></td><td>' + (v.opposed || 0) + '</td></tr>'; }).join('') + '</tbody></table>';
                 }
                 function loadGoal() {
@@ -5917,10 +5917,10 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             el('hg-target').value = g.targetContacts || 0; el('hg-target-committed').value = g.targetCommitted || 0;
                             el('hg-ward').value = g.targetWard || ''; el('hg-task').value = g.task || '';
                         }
-                        el('hg-progress').innerHTML = '👥 पहुँचे: <b>' + p.reached + '</b> / ' + p.targetContacts + bar(p.reached, p.targetContacts) +
-                            '<div style="margin-top:6px;">✅ आज पक्के वोट: <b>' + p.committedToday + '</b> / ' + p.targetCommitted + '</div>' + bar(p.committedToday, p.targetCommitted) +
+                        el('hg-progress').innerHTML = '👥 Reached: <b>' + p.reached + '</b> / ' + p.targetContacts + bar(p.reached, p.targetContacts) +
+                            '<div style="margin-top:6px;">✅ Sure votes today: <b>' + p.committedToday + '</b> / ' + p.targetCommitted + '</div>' + bar(p.committedToday, p.targetCommitted) +
                             '<div style="margin-top:6px; font-size:12px;">💬 ' + p.replies + ' replies from ' + p.repliedPeople + ' people • 🔴 ' + p.opposedToday + ' opposed today</div>' +
-                            '<div style="margin-top:6px; font-size:12px;">📋 आज समस्याएँ दर्ज: <b>' + (p.samasyaToday || 0) + '</b> (खुली ' + (p.samasyaOpen || 0) + ') • 🤝 मुलाक़ात/घर-बुलावे: <b>' + (p.mulaqatToday || 0) + '</b> (बाकी ' + (p.mulaqatOpen || 0) + ')</div>';
+                            '<div style="margin-top:6px; font-size:12px;">📋 Problems (samasya) logged today: <b>' + (p.samasyaToday || 0) + '</b> (open ' + (p.samasyaOpen || 0) + ') • 🤝 Meeting requests (mulaqat) / home visits: <b>' + (p.mulaqatToday || 0) + '</b> (pending ' + (p.mulaqatOpen || 0) + ')</div>';
                         var sc = Object.keys(p.stageChanges || {}).map(function (k) { return esc(k) + ': ' + p.stageChanges[k]; }).join(' • ');
                         el('hg-funnel').innerHTML = '<b>All contacts:</b> ⚪ unknown ' + (t.unknown || 0) + ' • 🟡 undecided ' + (t.undecided || 0) + ' • 🟢 leaning ' + (t.leaning || 0) + ' • ✅ committed ' + (t.committed || 0) + ' • 🔴 opposed ' + (t.opposed || 0) + ' • 🚩 needs admin ' + (t.needsAdmin || 0) +
                             (sc ? '<div style="margin-top:4px;"><b>Stage changes today:</b> ' + sc + '</div>' : '');

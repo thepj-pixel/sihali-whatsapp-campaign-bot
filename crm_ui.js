@@ -67,11 +67,11 @@ function script() {
         return fetch(url, o).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { d._ok = r.ok; d._status = r.status; return d; }); });
     }
     function bubble(h) {
-        var name = (typeof currentVoterData !== 'undefined' && currentVoterData && currentVoterData.name) || 'वोटर';
+        var name = (typeof currentVoterData !== 'undefined' && currentVoterData && currentVoterData.name) || 'Voter';
         var cls = 'wa-bubble-user', who = '👤 ' + name;
         if (h.role === 'bot') {
-            if (h.session === 'Admin Direct' || h.session === 'Admin Manual' || h.session === 'Admin Quick Action') { cls = 'wa-bubble-admin'; who = '👨‍💻 एडमिन (' + (h.session || '') + ')'; }
-            else { cls = 'wa-bubble-bot'; who = '🚩 अभय सिंह जनसंपर्क'; }
+            if (h.session === 'Admin Direct' || h.session === 'Admin Manual' || h.session === 'Admin Quick Action') { cls = 'wa-bubble-admin'; who = '👨‍💻 Admin (' + (h.session || '') + ')'; }
+            else { cls = 'wa-bubble-bot'; who = '🚩 Abhay Singh team (bot)'; }
         }
         var media = '';
         if (h.mediaUrl) media = '<div style="margin-top:6px;"><img src="' + esc(h.mediaUrl) + '" style="max-width:220px;max-height:220px;border-radius:8px;border:1px solid #cbd5e1;display:block;"></div>';
@@ -86,7 +86,7 @@ function script() {
             if (!d.success || CRM.phone !== phone) return;
             var box = document.getElementById('wa-chat-scroll'); if (!box) return;
             var html = d.messages.map(bubble).join('');
-            var head = (d.hasMore ? '<button class="crm-loadmore" id="crm-loadmore" type="button">⬆️ पुराने संदेश (' + d.start + ')</button>' : '<div class="crm-count">पूरी चैट • ' + d.total + ' संदेश</div>');
+            var head = (d.hasMore ? '<button class="crm-loadmore" id="crm-loadmore" type="button">⬆️ Older messages (' + d.start + ')</button>' : '<div class="crm-count">Full chat • ' + d.total + ' messages</div>');
             if (older) {
                 var oldH = box.scrollHeight;
                 var lm = document.getElementById('crm-loadmore'); if (lm) lm.parentNode.removeChild(lm);
@@ -94,13 +94,13 @@ function script() {
                 box.insertAdjacentHTML('afterbegin', head + html);
                 box.scrollTop = box.scrollHeight - oldH;
             } else {
-                if (!d.total) { box.innerHTML = '<div style="text-align:center;color:#94a3b8;margin-top:120px;">इस मतदाता के साथ अभी कोई संदेश नहीं है।</div>'; }
+                if (!d.total) { box.innerHTML = '<div style="text-align:center;color:#94a3b8;margin-top:120px;">No messages with this voter yet.</div>'; }
                 else { box.innerHTML = head + html; box.scrollTop = box.scrollHeight; }
                 CRM.total = d.total;
             }
             CRM.start = d.start;
             var b = document.getElementById('crm-loadmore'); if (b) b.onclick = function () { loadChat(phone, true); };
-        }).catch(function (e) { toast('चैट लोड नहीं हुई: ' + e.message, false); });
+        }).catch(function (e) { toast('Chat did not load: ' + e.message, false); });
     }
     function pollChat() {
         if (!CRM.phone) return;
@@ -116,14 +116,14 @@ function script() {
     setInterval(pollChat, 8000);
 
     // ---------- profile & memory ----------
-    var F = [['name', 'नाम'], ['relName', 'पिता/पति'], ['ward', 'वार्ड'], ['booth', 'बूथ (auto)', 1], ['gender', 'लिंग (M/F)'], ['age', 'आयु / उम्र'], ['stance', 'रुख़'], ['familyVotes', 'घर के वोट'], ['interests', 'रुचि / मुद्दे'], ['scriptPref', 'जवाब की लिपि']];
-    var MODEL = { normal: '⚖️ सामान्य', aggressive: '🔥 ज़ोरदार', chill: '😌 आराम से', gentle: '🕊️ नरम' };
+    var F = [['name', 'Name'], ['relName', 'Father / husband'], ['ward', 'Ward'], ['booth', 'Booth (auto)', 1], ['gender', 'Gender (M/F)'], ['age', 'Age'], ['stance', 'Stance'], ['familyVotes', 'Family votes'], ['interests', 'Interests / issues'], ['scriptPref', 'Reply script']];
+    var MODEL = { normal: '⚖️ Normal', aggressive: '🔥 Assertive', chill: '😌 Relaxed', gentle: '🕊️ Gentle (virodhi)' };
     function sel(k, label, opts, v) { return '<div><label>' + label + '</label><select data-pf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div>'; }
     function modeBadge(p) {
         var hd = document.getElementById('header-details'); if (!hd || !p) return;
         var b = document.getElementById('crm-mode-badge');
         if (!b) { b = document.createElement('span'); b.id = 'crm-mode-badge'; b.className = 'crm-mode-badge'; hd.parentNode.insertBefore(b, hd.nextSibling); }
-        b.textContent = (MODEL[p.effectiveMode] || p.effectiveMode || '') + (p.about || p.style ? ' • 🔐 ब्रीफ़' : '') + (p.followup && p.followup !== 'off' ? ' • 🔁 ' + (p.followup === 'daily' ? 'रोज़' : '2 दिन') : '');
+        b.textContent = (MODEL[p.effectiveMode] || p.effectiveMode || '') + (p.about || p.style ? ' • 🔐 Brief' : '') + (p.followup && p.followup !== 'off' ? ' • 🔁 ' + (p.followup === 'daily' ? 'daily' : 'every 2 days') : '');
     }
     window.crmModeBadge = modeBadge;
     function renderProfile(p) {
@@ -131,32 +131,32 @@ function script() {
         var el = document.getElementById('crm-profile-panel'); if (!el) return;
         var g = F.map(function (f) {
             if (f[0] === 'scriptPref') {
-                var so = [['', '— (डिफ़ॉल्ट हिंदी)'], ['hindi', 'हिंदी (देवनागरी)'], ['hinglish', 'Hinglish (Roman)']];
+                var so = [['', '— (default: Hindi)'], ['hindi', 'Hindi (Devanagari)'], ['hinglish', 'Hinglish (Roman)']];
                 return '<div><label>' + f[1] + '</label><select data-pf="scriptPref">' + so.map(function (o) { return '<option value="' + o[0] + '"' + ((p.scriptPref || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
             }
             if (f[0] === 'stance') {
-                var opts = [['unknown', '⚪ पता नहीं'], ['undecided', '🟡 सोच रहे'], ['leaning', '🟢 झुकाव'], ['committed', '✅ पक्का'], ['opposed', '🔴 विरोधी']];
+                var opts = [['unknown', '⚪ Unknown'], ['undecided', '🟡 Undecided'], ['leaning', '🟢 Leaning'], ['committed', '✅ Committed (sure)'], ['opposed', '🔴 Opposed']];
                 return '<div><label>' + f[1] + '</label><select data-pf="stance">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (p.stance === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
             }
             return '<div><label>' + f[1] + '</label><input data-pf="' + f[0] + '" value="' + esc(p[f[0]]) + '"' + (f[2] ? ' readonly style="background:#eef2f7"' : '') + '></div>';
         }).join('');
         var sam = (p.samasya || []).map(function (s) { return '📝 ' + esc(s.id) + ' [' + esc(s.status) + '] ' + esc(s.category || '') + ': ' + esc((s.description || '').slice(0, 90)); }).join('<br>') || '—';
         var mul = (p.mulaqat || []).map(function (m) { return '🤝 ' + esc(m.id) + ' [' + esc(m.status) + '] ' + esc(m.when || '') + ' ' + esc(m.place || '') + ' ' + esc(m.purpose || ''); }).join('<br>') || '—';
-        el.innerHTML = '<h4><span>🧾 वोटर प्रोफ़ाइल व मेमरी' + (p.optedOut ? ' <span style="color:#dc2626">• STOP</span>' : '') + '</span>' +
+        el.innerHTML = '<h4><span>🧾 Voter profile & memory' + (p.optedOut ? ' <span style="color:#dc2626">• STOP</span>' : '') + '</span>' +
             '<span><button class="crm-btn go" type="button" id="crm-profile-save">💾 Save</button> <button class="crm-btn alt" type="button" id="crm-profile-close">✕</button></span></h4>' +
             '<div class="crm-pgrid">' + g + '</div>' +
-            '<div class="crm-brief"><div class="crm-brief-h">🔐 निजी ब्रीफ़ — बोट इसे कभी वोटर को नहीं बताएगा, बस इसी हिसाब से बात करेगा</div>' +
-            '<label>इनके बारे में जानकारी (कौन हैं, रिश्ते, इतिहास, चिंताएँ)</label><textarea data-pf="about" rows="3" placeholder="उदा: रिटायर्ड फ़ौजी, बेटा जयपुर में नौकरी ढूँढ रहा है, पिछली बार सड़क को लेकर नाराज़ थे">' + esc(p.about) + '</textarea>' +
-            '<label>बातचीत का तरीका</label><textarea data-pf="style" rows="2" placeholder="उदा: छोटे भाई की तरह बात करो, बेटे की नौकरी के बारे में पूछो, सड़क का ज़िक्र मत करो">' + esc(p.style) + '</textarea>' +
+            '<div class="crm-brief"><div class="crm-brief-h">🔐 Private brief — the bot will never tell this to the voter, it only uses it to guide how it talks</div>' +
+            '<label>About this person (who they are, relations, history, worries)</label><textarea data-pf="about" rows="3" placeholder="e.g. retired soldier, son is looking for a job in Jaipur, was upset about the road last time">' + esc(p.about) + '</textarea>' +
+            '<label>How to talk to them</label><textarea data-pf="style" rows="2" placeholder="e.g. talk like a younger brother, ask about the son job hunt, do not mention the road">' + esc(p.style) + '</textarea>' +
             '<div class="crm-pgrid" style="margin-top:6px;">' +
-            sel('mode', 'मोड', [['', '— डिफ़ॉल्ट (' + (MODEL[p.defaultMode] || p.defaultMode || 'सामान्य') + ')'], ['normal', MODEL.normal], ['aggressive', MODEL.aggressive], ['chill', MODEL.chill], ['gentle', MODEL.gentle]], p.mode || '') +
-            sel('voteAsk', 'वोट की बात कितनी बार', [['auto', 'मोड के हिसाब से'], ['every', 'हर जवाब में'], ['every2', 'हर 2-3 जवाब में'], ['rarely', 'कभी-कभार']], p.voteAsk || 'auto') +
-            sel('followup', 'फ़ॉलो-अप', [['off', 'बंद'], ['daily', 'रोज़ (1 बार)'], ['every2days', 'हर 2 दिन']], p.followup || 'off') +
+            sel('mode', 'Mode', [['', '— Default (' + (MODEL[p.defaultMode] || p.defaultMode || 'Normal') + ')'], ['normal', MODEL.normal], ['aggressive', MODEL.aggressive], ['chill', MODEL.chill], ['gentle', MODEL.gentle]], p.mode || '') +
+            sel('voteAsk', 'How often to ask for the vote', [['auto', 'Based on mode'], ['every', 'In every reply'], ['every2', 'Every 2-3 replies'], ['rarely', 'Rarely']], p.voteAsk || 'auto') +
+            sel('followup', 'Follow-up', [['off', 'Off'], ['daily', 'Daily (once)'], ['every2days', 'Every 2 days']], p.followup || 'off') +
             '</div></div>' +
-            '<label style="font-size:10.5px;font-weight:700;color:#475569;display:block;margin-top:6px;">ऑपरेटर नोट्स (निजी — बोट कभी नहीं बताएगा)</label><textarea data-pf="notes" rows="2">' + esc(p.notes) + '</textarea>' +
-            '<div class="crm-ro"><b>परिवार:</b> ' + esc(p.family || '—') + ' • <b>गाँव:</b> ' + esc(p.village || '—') + ' • <b>लाइन:</b> ' + esc(p.line || '—') + '<br><b>आख़िरी वादा/रुख़:</b> ' + esc(p.commitment || '—') + '<br><b>सार:</b> ' + esc(p.summary || '—') + '</div>' +
-            '<div class="crm-ro"><b>समस्या:</b><br>' + sam + '</div><div class="crm-ro"><b>मुलाक़ात:</b><br>' + mul + '</div>' +
-            '<div style="font-size:10.5px;color:#64748b;margin-top:4px;">' + (p.editedBy ? 'आख़िरी बदलाव: ' + esc(p.editedBy) : 'बातचीत व मेमरी से अपने-आप भरा गया') + '</div>';
+            '<label style="font-size:10.5px;font-weight:700;color:#475569;display:block;margin-top:6px;">Operator notes (private — the bot will never tell)</label><textarea data-pf="notes" rows="2">' + esc(p.notes) + '</textarea>' +
+            '<div class="crm-ro"><b>Family:</b> ' + esc(p.family || '—') + ' • <b>Village:</b> ' + esc(p.village || '—') + ' • <b>Line:</b> ' + esc(p.line || '—') + '<br><b>Last promise / stance:</b> ' + esc(p.commitment || '—') + '<br><b>Summary:</b> ' + esc(p.summary || '—') + '</div>' +
+            '<div class="crm-ro"><b>Problems (samasya):</b><br>' + sam + '</div><div class="crm-ro"><b>Meeting requests (mulaqat):</b><br>' + mul + '</div>' +
+            '<div style="font-size:10.5px;color:#64748b;margin-top:4px;">' + (p.editedBy ? 'Last edited by: ' + esc(p.editedBy) : 'Filled automatically from chats & memory') + '</div>';
         document.getElementById('crm-profile-save').onclick = saveProfile;
         document.getElementById('crm-profile-close').onclick = function () { el.style.display = 'none'; };
     }
@@ -168,8 +168,8 @@ function script() {
         var body = {}; var els = document.querySelectorAll('#crm-profile-panel [data-pf]');
         for (var i = 0; i < els.length; i++) { var k = els[i].getAttribute('data-pf'); if (k !== 'booth') body[k] = els[i].value; }
         api('/api/crm/profile/' + encodeURIComponent(CRM.phone), body).then(function (d) {
-            if (d.success) { renderProfile(d.profile); toast('✅ प्रोफ़ाइल सेव — बोट की मेमरी अपडेट हो गई', true); if (typeof loadVoters === 'function') loadVoters(); }
-            else toast('❌ सेव नहीं हुआ: ' + (d.error || d._status), false);
+            if (d.success) { renderProfile(d.profile); toast('✅ Profile saved — bot memory updated', true); if (typeof loadVoters === 'function') loadVoters(); }
+            else toast('❌ Not saved: ' + (d.error || d._status), false);
         }).catch(function (e) { toast('❌ ' + e.message, false); });
     }
     window.crmToggleProfile = function () {
@@ -186,11 +186,11 @@ function script() {
         if (again && box.value.trim()) CRM.exclude.push(box.value.trim());
         CRM.attempt = again ? CRM.attempt + 1 : 0;
         if (!again) CRM.exclude = [];
-        btn.disabled = true; btn2.disabled = true; info.textContent = '⏳ पूरी बातचीत व मेमरी पढ़कर सुझाव बना रही हूँ...';
+        btn.disabled = true; btn2.disabled = true; info.textContent = '⏳ Reading the full chat & memory to make a suggestion...';
         var instr = document.getElementById('wa-ai-instruction');
         api('/api/crm/copilot', { phone: CRM.phone, attempt: CRM.attempt, exclude: CRM.exclude, instruction: instr ? instr.value.trim() : '' }).then(function (d) {
-            if (d.success && d.text) { box.value = d.text; box.style.display = 'block'; document.getElementById('crm-cp-actions').style.display = 'flex'; info.textContent = '✔ सुझाव (' + (d.source || '') + ') • वोटर का आख़िरी संदेश: "' + String(d.basedOn || '').slice(0, 60) + '"' + (d.note ? ' • ' + d.note : ''); }
-            else { info.textContent = ''; toast('❌ सुझाव नहीं बना: ' + (d.error || d._status), false); }
+            if (d.success && d.text) { box.value = d.text; box.style.display = 'block'; document.getElementById('crm-cp-actions').style.display = 'flex'; info.textContent = '✔ Suggestion (' + (d.source || '') + ') • voter last message: "' + String(d.basedOn || '').slice(0, 60) + '"' + (d.note ? ' • ' + d.note : ''); }
+            else { info.textContent = ''; toast('❌ Could not make a suggestion: ' + (d.error || d._status), false); }
         }).catch(function (e) { info.textContent = ''; toast('❌ ' + e.message, false); })
           .then(function () { btn.disabled = false; btn2.disabled = false; });
     }
@@ -199,8 +199,8 @@ function script() {
         if (!CRM.phone || !text) return;
         var b = document.getElementById('crm-cp-send'); b.disabled = true;
         api('/api/send-message', { phone: CRM.phone, template: 'custom', customText: text, lineId: (CRM.profile && CRM.profile.line) || undefined }).then(function (d) {
-            if (d._ok && d.success !== false) { toast('✅ भेज दिया', true); box.value = ''; box.style.display = 'none'; document.getElementById('crm-cp-actions').style.display = 'none'; document.getElementById('crm-cp-info').textContent = ''; CRM.exclude = []; setTimeout(function () { loadChat(CRM.phone, false); }, 700); }
-            else toast('❌ नहीं भेजा: ' + (d.error || d._status), false);
+            if (d._ok && d.success !== false) { toast('✅ Sent', true); box.value = ''; box.style.display = 'none'; document.getElementById('crm-cp-actions').style.display = 'none'; document.getElementById('crm-cp-info').textContent = ''; CRM.exclude = []; setTimeout(function () { loadChat(CRM.phone, false); }, 700); }
+            else toast('❌ Not sent: ' + (d.error || d._status), false);
         }).catch(function (e) { toast('❌ ' + e.message, false); }).then(function () { b.disabled = false; });
     }
     window.crmSuggest = suggest; window.crmSendSuggestion = sendSuggestion;
@@ -212,7 +212,7 @@ function script() {
         bg.innerHTML = '<div class="crm-modal"><h4>' + esc(title) + '</h4>' + fields.map(function (f) {
             if (f.type === 'check') return '<label style="font-size:13px;display:block;margin:4px 0 10px 0;"><input type="checkbox" data-mf="' + f.k + '" ' + (f.v ? 'checked' : '') + ' style="width:auto;margin-right:6px;">' + esc(f.label) + '</label>';
             return '<label style="font-size:12px;font-weight:700;color:#475569;">' + esc(f.label) + '</label>' + (f.area ? '<textarea rows="3" data-mf="' + f.k + '">' + esc(f.v || '') + '</textarea>' : '<input data-mf="' + f.k + '" value="' + esc(f.v || '') + '">');
-        }).join('') + '<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="crm-btn alt" type="button" data-x="0">रद्द</button><button class="crm-btn go" type="button" data-x="1">✔ ठीक है</button></div></div>';
+        }).join('') + '<div style="display:flex;gap:8px;justify-content:flex-end;"><button class="crm-btn alt" type="button" data-x="0">Cancel</button><button class="crm-btn go" type="button" data-x="1">✔ OK</button></div></div>';
         document.body.appendChild(bg);
         bg.addEventListener('click', function (e) {
             var x = e.target.getAttribute && e.target.getAttribute('data-x'); if (x === null || x === undefined) return;
@@ -221,27 +221,27 @@ function script() {
             document.body.removeChild(bg); if (x === '1') cb(out);
         });
     }
-    var LABEL = { contact_card: '📇 संपर्क कार्ड', ramram: '🙏 राम राम', poster: '📸 पोस्टर', demo_poster: '📸 पोस्टर', video: '📹 वीडियो', slip: '🎫 पर्ची', baba_register: '📝 रजिस्टर', meeting: '🤝 मुलाक़ात' };
+    var LABEL = { contact_card: '📇 Contact card', ramram: '🙏 Ram Ram', poster: '📸 Poster', demo_poster: '📸 Poster', video: '📹 Video', slip: '🎫 Slip (parchi)', baba_register: '📝 Register', meeting: '🤝 Meeting (mulaqat)' };
     function run(action, extra) {
         var body = { phone: CRM.phone, action: action, lineId: (CRM.profile && CRM.profile.line) || undefined };
         for (var k in (extra || {})) body[k] = extra[k];
         var btns = document.querySelectorAll('#wa-quick-actions .wa-action-btn'); for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
         return api('/api/quick-action', body).then(function (d) {
             if (d._ok && d.success) {
-                var msg = '✅ ' + (LABEL[action] || action) + ': ' + (d.sent ? 'भेज दिया' : 'दर्ज हो गया') + (d.record && d.record.id ? ' (' + d.record.id + ')' : '') + (d.record && d.record.slipStep && d.record.slipStep !== 'deliver' ? ' — वोटर से पुष्टि माँगी गई (' + d.record.slipStep + ')' : '');
+                var msg = '✅ ' + (LABEL[action] || action) + ': ' + (d.sent ? 'sent' : 'recorded') + (d.record && d.record.id ? ' (' + d.record.id + ')' : '') + (d.record && d.record.slipStep && d.record.slipStep !== 'deliver' ? ' — asked the voter to confirm (' + d.record.slipStep + ')' : '');
                 toast(msg, true); setTimeout(function () { loadChat(CRM.phone, false); if (document.getElementById('crm-profile-panel').style.display !== 'none') loadProfile(CRM.phone); }, 600);
             } else toast('❌ ' + (LABEL[action] || action) + ': ' + (d.error || ('HTTP ' + d._status)), false);
         }).catch(function (e) { toast('❌ ' + e.message, false); })
           .then(function () { for (var i = 0; i < btns.length; i++) btns[i].disabled = false; });
     }
     window.sendQuickAction = function (action) {
-        if (!CRM.phone) { toast('पहले बाईं तरफ़ से कोई चैट खोलिए', false); return; }
+        if (!CRM.phone) { toast('First open a chat from the left side', false); return; }
         if (action === 'demo_poster') action = 'poster';
-        if (action === 'baba_register') return modal('📝 बाबा रजिस्टर में समस्या दर्ज करें', [{ k: 'note', label: 'समस्या (क्या, कहाँ)', area: true, v: '' }, { k: 'place', label: 'जगह / गली (वैकल्पिक)' }, { k: 'send', type: 'check', label: 'वोटर को "दर्ज कर ली है" संदेश भी भेजें', v: true }], function (o) { if (!o.note.trim()) return toast('समस्या लिखिए', false); run('baba_register', o); });
-        if (action === 'meeting') return modal('🤝 चौपाल मुलाक़ात दर्ज करें', [{ k: 'when', label: 'कब (उदा: कल शाम 5 बजे)' }, { k: 'place', label: 'कहाँ (घर/चौपाल/गली)' }, { k: 'purpose', label: 'मक़सद' }, { k: 'send', type: 'check', label: 'वोटर को पुष्टि संदेश भी भेजें', v: true }], function (o) { run('meeting', o); });
-        if (action === 'slip') return modal('🎫 वोटर पर्ची', [{ k: 'name', label: 'नाम (खाली छोड़ें तो बातचीत वाला नाम)', v: (CRM.profile && CRM.profile.name) || '' }], function (o) { run('slip', o.name ? { name: o.name } : {}); });
+        if (action === 'baba_register') return modal('📝 Add a problem to Baba register', [{ k: 'note', label: 'Problem (what, where)', area: true, v: '' }, { k: 'place', label: 'Place / street (optional)' }, { k: 'send', type: 'check', label: 'Also send the voter a "we have noted it" message', v: true }], function (o) { if (!o.note.trim()) return toast('Write the problem', false); run('baba_register', o); });
+        if (action === 'meeting') return modal('🤝 Record a chaupal meeting', [{ k: 'when', label: 'When (e.g. tomorrow 5 pm)' }, { k: 'place', label: 'Where (home / chaupal / street)' }, { k: 'purpose', label: 'Purpose' }, { k: 'send', type: 'check', label: 'Also send the voter a confirmation message', v: true }], function (o) { run('meeting', o); });
+        if (action === 'slip') return modal('🎫 Voter slip (parchi)', [{ k: 'name', label: 'Name (leave empty to use the name from the chat)', v: (CRM.profile && CRM.profile.name) || '' }], function (o) { run('slip', o.name ? { name: o.name } : {}); });
         if (action === 'poster' || action === 'video') {
-            var c = window.confirm((action === 'poster' ? 'स्वीकृत पोस्टर' : 'स्वीकृत वीडियो') + ' इस वोटर को भेजें?'); if (!c) return;
+            var c = window.confirm('Send the approved ' + (action === 'poster' ? 'poster' : 'video') + ' to this voter?'); if (!c) return;
         }
         run(action, {});
     };
@@ -275,7 +275,7 @@ function script() {
     // demo poster badge shows the real state (it can only be ON when the VM env allows it)
     api('/api/demo-poster-status').then(function (d) {
         var b = document.getElementById('demo-mode-badge'); if (!b) return;
-        b.textContent = d.demoMode ? '📸 डेमो पोस्टर मोड: चालू' : '🖼️ स्वीकृत पोस्टर मोड (डेमो बंद)';
+        b.textContent = d.demoMode ? '📸 Demo poster mode: ON' : '🖼️ Approved poster mode (demo off)';
         if (!d.demoMode) { b.style.background = '#e0f2fe'; b.style.color = '#0284c7'; b.style.borderColor = '#0284c7'; }
     }).catch(function () {});
     refreshActions();

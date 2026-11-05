@@ -43,20 +43,20 @@ function summaryOf(u, { samasya = [], mulaqat = [] } = {}) {
     const intents = [];
     for (const x of (u.persuasionHistory || [])) if (x.intent && INTENT_HI[x.intent] && !intents.includes(INTENT_HI[x.intent])) intents.push(INTENT_HI[x.intent]);
     const m = u.memory || {};
-    if (u.lastFoundVoter) bits.push('पर्ची मिली');
+    if (u.lastFoundVoter) bits.push('slip found');
     const topics = [];
     for (const c of (m.concerns || [])) { const t = TOPIC_HI[c.topic] || c.topic; if (t && !topics.includes(t)) topics.push(t); }
-    if (topics.length) bits.push('मुद्दे: ' + topics.slice(0, 3).join(', '));
-    if (m.familyVotes) bits.push(`घर के ${m.familyVotes} वोट`);
+    if (topics.length) bits.push('issues: ' + topics.slice(0, 3).join(', '));
+    if (m.familyVotes) bits.push(`${m.familyVotes} family votes`);
     bits.push(...intents.slice(-3));
-    if (samasya.length) bits.push(`समस्या ${samasya.map(s => catLabel(s.category)).join(', ')}`);
-    if (mulaqat.length) bits.push('मुलाक़ात माँगी');
+    if (samasya.length) bits.push(`samasya: ${samasya.map(s => catLabel(s.category)).join(', ')}`);
+    if (mulaqat.length) bits.push('asked for meeting');
     const lastUser = [...(u.history || [])].reverse().find(h => h.role === 'user' && h.text && !/^\[/.test(h.text));
     const base = bits.filter(Boolean).join(' · ');
     if (base) return clip(base + (lastUser ? ` — "${clip(lastUser.text, 50)}"` : ''), 180);
-    if (lastUser) return clip(`कहा: "${lastUser.text}"`, 180);
+    if (lastUser) return clip(`said: "${lastUser.text}"`, 180);
     const bot = [...(u.history || [])].reverse().find(h => h.role === 'bot');
-    return bot ? clip('सिर्फ़ हमारा संदेश गया (जवाब नहीं): ' + bot.text, 180) : '—';
+    return bot ? clip('only our message went (no reply): ' + bot.text, 180) : '—';
 }
 
 /**
@@ -117,10 +117,10 @@ function build({ users = [], samasya = [], mulaqat = [], isVirodhi = () => false
     }));
     const good = rows.filter(r => r.stance === 'commit' || r.stance === 'समर्थक' || r.mulaqat.length || (r.familyVotes && r.stance !== 'विरोधी'))
         .sort((a, b) => (b.familyVotes || 0) - (a.familyVotes || 0)).slice(0, 15)
-        .map(r => ({ phone: r.phone, name: r.name, why: r.stance === 'commit' ? 'पक्का साथ' + (r.familyVotes ? ` (घर के ${r.familyVotes} वोट)` : '') : (r.mulaqat.length ? 'मुलाक़ात माँगी' : 'समर्थन में') }));
+        .map(r => ({ phone: r.phone, name: r.name, why: r.stance === 'commit' ? 'committed' + (r.familyVotes ? ` (${r.familyVotes} family votes)` : '') : (r.mulaqat.length ? 'asked for meeting' : 'supportive') }));
     const bad = rows.filter(r => r.stance === 'नाराज़' || r.stance === 'विरोधी' || r.optedOut || r.samasya.some(s => s.status === 'new'))
         .slice(0, 15)
-        .map(r => ({ phone: r.phone, name: r.name, why: r.stance === 'नाराज़' ? 'नाराज़/गुस्सा — शांति से बात करें' : r.stance === 'विरोधी' ? 'विरोधी — सम्मान से, दबाव नहीं' : r.optedOut ? 'STOP किया' : 'नई समस्या, अभी कार्रवाई नहीं' }));
+        .map(r => ({ phone: r.phone, name: r.name, why: r.stance === 'नाराज़' ? 'upset/angry — talk calmly' : r.stance === 'विरोधी' ? 'opponent (virodhi) — with respect, no pressure' : r.optedOut ? 'said STOP' : 'new problem, no action yet' }));
 
     let view = rows;
     if (filter.stance) view = view.filter(r => r.stance === filter.stance);

@@ -266,7 +266,7 @@ function install(app, deps) {
             const send = b.send !== false && b.send !== 'false';
             const logOnly = ['baba_register', 'meeting'].includes(action) && !send;
             const blocked = (user.broadcastOptOut || user.consentStatus === 'REJECTED');
-            if (blocked && !logOnly) return res.status(409).json({ success: false, error: 'यह नंबर STOP/मना कर चुका है—संदेश नहीं भेजा जाएगा (STOP honoured).' });
+            if (blocked && !logOnly) return res.status(409).json({ success: false, error: 'This number said STOP / refused — message will not be sent (STOP honoured).' });
             const lineId = b.lineId || user.assignedLine || 'sim_636';
             const active = logOnly ? null : getActiveSocket(lineId);
             if (!logOnly && !active) return res.status(503).json({ success: false, error: 'WhatsApp line not connected: ' + lineId });
@@ -309,7 +309,7 @@ function install(app, deps) {
                 record = { slipStep: plan.kind };
             } else if (action === 'baba_register') {
                 const note = String(b.note || '').trim();
-                if (!note) return res.status(400).json({ success: false, error: 'समस्या लिखिए (note required)' });
+                if (!note) return res.status(400).json({ success: false, error: 'Write the problem (note required)' });
                 const m = require('./voter_memory.js').ensure(user);
                 record = samasyaStore.create({ phone, name: user.name || m.name || null, village: m.village || null, ward: m.ward || user.ward || null, category: b.category || 'other', topic: null, description: note.slice(0, 300), location: b.place || null, since: null, line: lineId, test: !!b.test, source: 'crm', notes: 'logged from CRM chat' });
                 text = `आपकी बात रजिस्टर में दर्ज कर ली है (क्रमांक ${record.id}) और अभय सिंह जी तक पहुँचा दी है 🙏`;

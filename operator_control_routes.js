@@ -1,5 +1,5 @@
 /**
- * v6 operator control — API + dashboard tab "🔒 आज का लक्ष्य" (daily lock: main goal, talking points, bot line, media;
+ * v6 operator control — API + dashboard tab "🔒 Today's goal" (daily lock: main goal, talking points, bot line, media;
  * global default mode; history). Per-voter brief/mode is edited in the CRM profile panel (crm_routes/crm_ui).
  * All routes sit behind the dashboard PIN middleware. ES5-safe UI (no optional chaining).
  */
@@ -47,30 +47,30 @@ function install(app, deps = {}) {
 }
 
 const tabButtons = () => `
-                    <button id="tab-btn-lock" class="tab-btn" type="button" data-tab="lock">🔒 आज का लक्ष्य</button>`;
+                    <button id="tab-btn-lock" class="tab-btn" type="button" data-tab="lock">🔒 Today's goal</button>`;
 
 const tabPanes = () => `
                 <div id="tab-lock" class="tab-content" style="display:none;">
                   <div class="oc-wrap">
-                    <h3 style="margin:0 0 4px 0;">🔒 आज का मुख्य लक्ष्य व एजेंडा <span id="oc-lock-badge" class="oc-badge">—</span></h3>
-                    <div class="oc-sub">लॉक करने पर बोट आज हर बातचीत को इसी लक्ष्य की ओर ले जाएगा, आज के बिंदु इस्तेमाल करेगा और आज का मीडिया हर वोटर को दिन में एक बार सही समय पर भेजेगा। तारीख़ (IST) बदलते ही नया दिन — पुराने दिन नीचे इतिहास में।</div>
+                    <h3 style="margin:0 0 4px 0;">🔒 Today's main goal & agenda <span id="oc-lock-badge" class="oc-badge">—</span></h3>
+                    <div class="oc-sub">When locked, the bot steers every chat today toward this goal, uses today's talking points, and sends today's media to each voter once a day at the right time. A new date (IST) starts a new day — older days appear in the history below.</div>
                     <div class="oc-grid">
-                      <div><label>तारीख़ (IST)</label><input id="oc-date" type="date"></div>
-                      <div><label>डिफ़ॉल्ट मोड (सब वोटर)</label><select id="oc-default-mode"><option value="normal">⚖️ सामान्य</option><option value="aggressive">🔥 ज़ोरदार (बार-बार वादा माँगे)</option><option value="chill">😌 आराम से (रिश्ता पहले)</option><option value="gentle">🕊️ नरम (वोट की बात नहीं)</option></select></div>
+                      <div><label>Date (IST)</label><input id="oc-date" type="date"></div>
+                      <div><label>Default mode (all voters)</label><select id="oc-default-mode"><option value="normal">⚖️ Normal</option><option value="aggressive">🔥 Assertive (asks for the vote promise often)</option><option value="chill">😌 Relaxed (relationship first)</option><option value="gentle">🕊️ Gentle / virodhi (no vote talk)</option></select></div>
                     </div>
-                    <label>🎯 आज का मुख्य लक्ष्य</label>
-                    <input id="oc-goal" placeholder="उदा: वोटर पर्ची पहुँचाओ + 16 नवंबर को वोट का वादा">
-                    <label>🗒️ आज के बात-चीत के बिंदु (हर लाइन एक बिंदु)</label>
-                    <textarea id="oc-points" rows="4" placeholder="उदा: आज शाम चौपाल में अभय सिंह जी मिलेंगे&#10;पर्ची न मिली हो तो नाम और पिता का नाम भेजें"></textarea>
-                    <label>💬 बोट की लाइन (वैकल्पिक — हर वोटर को दिन में एक बार, हिंदी में लिखें)</label>
-                    <input id="oc-steer" placeholder="उदा: आपकी वोटर पर्ची पहुँच गई? न मिली हो तो अपना नाम लिख दीजिए 🙏">
-                    <label>📎 आज का मीडिया (फ़ोटो / पोस्टर / mp4 — अधिकतम 3)</label>
+                    <label>🎯 Today's main goal</label>
+                    <input id="oc-goal" placeholder="e.g. deliver voter slips + get a vote promise for 16 Nov">
+                    <label>🗒️ Today's talking points (one point per line)</label>
+                    <textarea id="oc-points" rows="4" placeholder="e.g. Abhay Singh ji will be at the chaupal this evening&#10;If you did not get your slip, send your name and father name"></textarea>
+                    <label>💬 Bot line (optional — sent to each voter once a day; write it in Hindi)</label>
+                    <input id="oc-steer" placeholder="e.g. आपकी वोटर पर्ची पहुँच गई? न मिली हो तो अपना नाम लिख दीजिए 🙏">
+                    <label>📎 Today's media (photo / poster / mp4 — max 3)</label>
                     <div class="oc-upload"><input id="oc-file" type="file" accept="image/*,video/mp4,video/3gpp,video/quicktime"><span id="oc-up-status"></span></div>
-                    <div id="oc-media" class="oc-media">लोड हो रहा है…</div>
-                    <label class="oc-check"><input id="oc-locked" type="checkbox"> 🔒 आज के लिए लॉक करें</label>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button id="oc-save" class="oc-btn" type="button">💾 सेव करें</button><button id="oc-run-fu" class="oc-btn alt" type="button">🔁 फ़ॉलो-अप अभी चलाएँ</button></div>
+                    <div id="oc-media" class="oc-media">Loading…</div>
+                    <label class="oc-check"><input id="oc-locked" type="checkbox"> 🔒 Lock for today</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button id="oc-save" class="oc-btn" type="button">💾 Save</button><button id="oc-run-fu" class="oc-btn alt" type="button">🔁 Run follow-ups now</button></div>
                     <div id="oc-fu" class="oc-sub" style="margin-top:6px;"></div>
-                    <h4 style="margin:16px 0 6px 0;">📜 पिछले दिन</h4>
+                    <h4 style="margin:16px 0 6px 0;">📜 Previous days</h4>
                     <div id="oc-history" class="oc-sub">—</div>
                   </div>
                 </div>`;
@@ -106,12 +106,12 @@ const script = () => `
     function renderMedia() {
         var el = document.getElementById('oc-media'); if (!el) return;
         var list = OC.media.filter(function (m) { return (m.type === 'image' || m.type === 'video') && !RETIRED.test(m.file) && !/^(baba_face|baba_33_transparent)/.test(m.file); });
-        if (!list.length) { el.innerHTML = 'मीडिया बैंक खाली है — ऊपर से फ़ाइल चुनें।'; return; }
+        if (!list.length) { el.innerHTML = 'Media bank is empty — choose a file above.'; return; }
         el.innerHTML = list.map(function (m) {
             var s = OC.sel[m.file]; var url = '/media/' + encodeURIComponent(m.file);
             return '<div class="oc-item' + (s ? ' sel' : '') + '" data-f="' + esc(m.file) + '">' + (m.type === 'video' ? '<video src="' + url + '" muted preload="metadata"></video>' : '<img loading="lazy" src="' + url + '">') +
                 '<label style="display:flex;gap:4px;align-items:center;margin:4px 0 0 0;font-size:11px;"><input type="checkbox" data-pick="1"' + (s ? ' checked' : '') + '> ' + esc(m.file.slice(0, 22)) + '</label>' +
-                '<input type="text" data-cap="1" placeholder="कैप्शन (वैकल्पिक)" value="' + esc(s ? s.caption : '') + '"></div>';
+                '<input type="text" data-cap="1" placeholder="Caption (optional)" value="' + esc(s ? s.caption : '') + '"></div>';
         }).join('');
     }
     function collect() {
@@ -131,20 +131,20 @@ const script = () => `
             document.getElementById('oc-steer').value = day.steerLine || '';
             document.getElementById('oc-locked').checked = !!day.locked;
             OC.sel = {}; (day.media || []).forEach(function (m) { OC.sel[m.file] = m; });
-            var b = document.getElementById('oc-lock-badge'); b.textContent = d.locked ? '🔒 आज लॉक है' : 'लॉक नहीं'; b.className = 'oc-badge' + (d.locked ? ' on' : '');
-            document.getElementById('oc-history').innerHTML = (d.history || []).map(function (h) { return '<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;"><b>' + esc(h.date) + '</b> ' + (h.locked ? '🔒' : '') + ' ' + esc(h.goal || '—') + (h.points && h.points.length ? ' • ' + h.points.length + ' बिंदु' : '') + (h.media && h.media.length ? ' • 📎' + h.media.length : '') + '</div>'; }).join('') || '—';
+            var b = document.getElementById('oc-lock-badge'); b.textContent = d.locked ? '🔒 Locked today' : 'Not locked'; b.className = 'oc-badge' + (d.locked ? ' on' : '');
+            document.getElementById('oc-history').innerHTML = (d.history || []).map(function (h) { return '<div style="padding:4px 0;border-bottom:1px solid #f1f5f9;"><b>' + esc(h.date) + '</b> ' + (h.locked ? '🔒' : '') + ' ' + esc(h.goal || '—') + (h.points && h.points.length ? ' • ' + h.points.length + ' points' : '') + (h.media && h.media.length ? ' • 📎' + h.media.length : '') + '</div>'; }).join('') || '—';
             return api('/api/media/list').then(function (m) { OC.media = (m && m.media) || []; renderMedia(); });
         }).catch(function (e) { toast('❌ ' + e.message, false); });
     }
     function save() {
         var body = { date: document.getElementById('oc-date').value, goal: document.getElementById('oc-goal').value, points: document.getElementById('oc-points').value, steerLine: document.getElementById('oc-steer').value, media: collect(), locked: document.getElementById('oc-locked').checked };
-        api('/api/control/day', body).then(function (d) { if (d.success) { toast('✅ सेव — ' + (d.locked ? 'आज का लक्ष्य लॉक है' : 'लॉक नहीं'), true); load(); } else toast('❌ ' + (d.error || 'error'), false); });
+        api('/api/control/day', body).then(function (d) { if (d.success) { toast('✅ Saved — ' + (d.locked ? 'goal locked for today' : 'not locked'), true); load(); } else toast('❌ ' + (d.error || 'error'), false); });
         api('/api/control/default-mode', { mode: document.getElementById('oc-default-mode').value });
     }
     function upload(f) {
         var st = document.getElementById('oc-up-status');
-        if (f.size > 45 * 1024 * 1024) { st.textContent = '❌ 45 MB से बड़ी फ़ाइल'; return; }
-        st.textContent = '⏳ अपलोड हो रहा है…';
+        if (f.size > 45 * 1024 * 1024) { st.textContent = '❌ File is bigger than 45 MB'; return; }
+        st.textContent = '⏳ Uploading…';
         var r = new FileReader();
         r.onload = function (ev) {
             api('/api/media/upload', { fileName: f.name, base64Data: ev.target.result }).then(function (d) {
@@ -154,7 +154,7 @@ const script = () => `
         };
         r.readAsDataURL(f);
     }
-    function fu() { api('/api/control/followups').then(function (d) { var el = document.getElementById('oc-fu'); if (el && d.success) el.textContent = 'फ़ॉलो-अप चालू: ' + d.voters.length + ' वोटर' + (d.voters.length ? ' (' + d.voters.slice(0, 5).map(function (v) { return (v.name || v.phone) + ': ' + v.followup; }).join(', ') + ')' : ''); }); }
+    function fu() { api('/api/control/followups').then(function (d) { var el = document.getElementById('oc-fu'); if (el && d.success) el.textContent = 'Follow-ups on: ' + d.voters.length + ' voters' + (d.voters.length ? ' (' + d.voters.slice(0, 5).map(function (v) { return (v.name || v.phone) + ': ' + v.followup; }).join(', ') + ')' : ''); }); }
     function safeInit() { try { init(); } catch (e) { if (window.console) console.warn('lock tab init failed', e); } }
     document.addEventListener('DOMContentLoaded', safeInit); if (document.readyState !== 'loading') safeInit();
     var inited = false;
@@ -167,7 +167,7 @@ const script = () => `
             var it = e.target.closest ? e.target.closest('.oc-item') : null; if (!it) return;
             if (e.target.getAttribute('data-pick')) { if (e.target.checked) { OC.sel[it.getAttribute('data-f')] = { file: it.getAttribute('data-f'), caption: '' }; it.classList.add('sel'); } else { delete OC.sel[it.getAttribute('data-f')]; it.classList.remove('sel'); } }
         });
-        document.getElementById('oc-run-fu').onclick = function () { api('/api/control/followups/run', {}).then(function (d) { toast(d.success ? '✅ फ़ॉलो-अप: ' + ((d.result && d.result.sent) || 0) + ' भेजे' : '❌ ' + (d.error || ''), !!d.success); fu(); }); };
+        document.getElementById('oc-run-fu').onclick = function () { api('/api/control/followups/run', {}).then(function (d) { toast(d.success ? '✅ Follow-ups: ' + ((d.result && d.result.sent) || 0) + ' sent' : '❌ ' + (d.error || ''), !!d.success); fu(); }); };
         var b = document.getElementById('tab-btn-lock'); if (b) b.addEventListener('click', function () { load(); fu(); });
         if (typeof location !== 'undefined' && location.hash === '#lock') { load(); fu(); }
     }

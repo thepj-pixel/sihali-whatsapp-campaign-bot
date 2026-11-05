@@ -122,7 +122,7 @@ function seq(seed = 7) { let x = seed; return () => { x = (x * 16807) % 21474836
         assert.strictEqual(o.totals.samasyaByCategory['सड़क'], 1);
         assert.strictEqual(o.mulaqatScheduled[0].when, 'रविवार शाम 5 बजे');
         assert.strictEqual(o.mulaqatScheduled[0].place, 'मंदिर के पास');
-        assert.ok(/घर के 4 वोट/.test(by['919800000001'].summary), by['919800000001'].summary);
+        assert.ok(/4 family votes/.test(by['919800000001'].summary), by['919800000001'].summary);
         assert.ok(o.good.some(g => g.phone === '919800000001'));
         assert.ok(o.bad.some(g => g.phone === '919800000003'));
         assert.ok(!o.rows.some(r => r.phone === '914500000000'), 'test hidden by default');

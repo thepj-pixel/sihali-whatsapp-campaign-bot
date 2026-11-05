@@ -241,14 +241,14 @@ function create(opts = {}) {
     // ---------- users ----------
     async function upsertUser({ username, password, role, disabled } = {}) {
         const name = normUser(username);
-        if (!USERNAME_RE.test(name)) throw Object.assign(new Error('username: 3-32 अक्षर, केवल a-z 0-9 . _ -'), { status: 400 });
+        if (!USERNAME_RE.test(name)) throw Object.assign(new Error('username: 3-32 characters, only a-z 0-9 . _ -'), { status: 400 });
         if (name === PIN_USER.toLowerCase()) throw Object.assign(new Error('username reserved'), { status: 400 });
         const r = role == null || role === '' ? null : String(role);
         if (r && !ROLES.includes(r)) throw Object.assign(new Error('role must be admin or member'), { status: 400 });
         const existing = findUser(name);
         if (password != null && password !== '') {
             const pw = String(password);
-            if (pw.length < 6 || pw.length > 200) throw Object.assign(new Error('password: कम से कम 6 अक्षर'), { status: 400 });
+            if (pw.length < 6 || pw.length > 200) throw Object.assign(new Error('password: at least 6 characters'), { status: 400 });
         } else if (!existing) throw Object.assign(new Error('password required for a new user'), { status: 400 });
         const t = new Date(now()).toISOString();
         if (existing) {
@@ -315,30 +315,30 @@ function create(opts = {}) {
 
     // ---------- audit ----------
     const AUDIT_RULES = [
-        [/^\/api\/send-message$/, 'send', 'संदेश भेजा'],
-        [/^\/api\/quick-add-send$/, 'quick_add', 'नंबर जोड़ा व भेजा'],
-        [/^\/api\/quick-action(-legacy)?$/, 'quick_action', 'क्विक एक्शन'],
-        [/^\/api\/test-send$/, 'test_send', 'टेस्ट संदेश'],
-        [/^\/api\/broadcast\/create$/, 'bulk_create', 'बल्क सेंड बनाया'],
-        [/^\/api\/broadcast\/(pause|resume|cancel)$/, 'bulk_control', 'बल्क सेंड रोका/चलाया'],
-        [/^\/api\/scheduled\/(create|from-agenda)$/, 'scheduled_create', 'शेड्यूल्ड बल्क बनाया'],
-        [/^\/api\/scheduled\/[^/]+\/(pause|resume|cancel)$/, 'scheduled_control', 'शेड्यूल्ड बल्क रोका/चलाया'],
-        [/^\/api\/crm\/profile\//, 'brief_edit', 'वोटर प्रोफ़ाइल/ब्रीफ़ बदला'],
-        [/^\/api\/control\/voter\//, 'mode_edit', 'वोटर मोड/ब्रीफ़ बदला'],
-        [/^\/api\/control\/day$/, 'daily_lock', 'आज का लक्ष्य/लॉक'],
-        [/^\/api\/control\/default-mode$/, 'default_mode', 'डिफ़ॉल्ट मोड बदला'],
-        [/^\/api\/control\/followups\/run$/, 'followups_run', 'फ़ॉलो-अप चलाए'],
-        [/^\/api\/dashboard-users/, 'users_admin', 'लॉगिन यूज़र बदला'],
-        [/^\/api\/virodhi\//, 'virodhi', 'विरोधी सूची बदली'],
-        [/^\/api\/(samasya|mulaqat)\/(update|delete)$/, 'record_edit', 'समस्या/मुलाक़ात बदली'],
-        [/^\/api\/contacts\//, 'contacts', 'कॉन्टैक्ट बदले'],
-        [/^\/api\/media\/(upload|delete)$/, 'media', 'मीडिया बदला'],
-        [/^\/api\/upload-media$/, 'media', 'मीडिया अपलोड'],
-        [/^\/api\/settings\/outbound$/, 'settings', 'भेजने की सेटिंग बदली'],
-        [/^\/api\/toggle-autopilot$/, 'settings', 'ऑटोपायलट बदला'],
-        [/^\/api\/ai-keys$/, 'settings', 'AI keys बदलीं'],
-        [/^\/api\/self-test\/(start|stop)$/, 'self_test', 'सेल्फ़-टेस्ट'],
-        [/^\/api\/voter\/stage$/, 'stage', 'वोटर स्टेज बदली'],
+        [/^\/api\/send-message$/, 'send', 'Message sent'],
+        [/^\/api\/quick-add-send$/, 'quick_add', 'Number added & sent'],
+        [/^\/api\/quick-action(-legacy)?$/, 'quick_action', 'Quick action'],
+        [/^\/api\/test-send$/, 'test_send', 'Test message'],
+        [/^\/api\/broadcast\/create$/, 'bulk_create', 'Bulk send created'],
+        [/^\/api\/broadcast\/(pause|resume|cancel)$/, 'bulk_control', 'Bulk send paused/resumed'],
+        [/^\/api\/scheduled\/(create|from-agenda)$/, 'scheduled_create', 'Scheduled bulk created'],
+        [/^\/api\/scheduled\/[^/]+\/(pause|resume|cancel)$/, 'scheduled_control', 'Scheduled bulk paused/resumed'],
+        [/^\/api\/crm\/profile\//, 'brief_edit', 'Voter profile/brief changed'],
+        [/^\/api\/control\/voter\//, 'mode_edit', 'Voter mode/brief changed'],
+        [/^\/api\/control\/day$/, 'daily_lock', 'Today goal/lock'],
+        [/^\/api\/control\/default-mode$/, 'default_mode', 'Default mode changed'],
+        [/^\/api\/control\/followups\/run$/, 'followups_run', 'Follow-ups run'],
+        [/^\/api\/dashboard-users/, 'users_admin', 'Login user changed'],
+        [/^\/api\/virodhi\//, 'virodhi', 'Opponent (virodhi) list changed'],
+        [/^\/api\/(samasya|mulaqat)\/(update|delete)$/, 'record_edit', 'Problem/meeting record changed'],
+        [/^\/api\/contacts\//, 'contacts', 'Contacts changed'],
+        [/^\/api\/media\/(upload|delete)$/, 'media', 'Media changed'],
+        [/^\/api\/upload-media$/, 'media', 'Media uploaded'],
+        [/^\/api\/settings\/outbound$/, 'settings', 'Sending settings changed'],
+        [/^\/api\/toggle-autopilot$/, 'settings', 'AutoPilot changed'],
+        [/^\/api\/ai-keys$/, 'settings', 'AI keys changed'],
+        [/^\/api\/self-test\/(start|stop)$/, 'self_test', 'Self-test'],
+        [/^\/api\/voter\/stage$/, 'stage', 'Voter stage changed'],
         [/^\/api\/(campaign-agenda|agenda\/day|campaign-profile(\/import)?|daily-target|update-tags|update-notes|clear-logs|toggle-demo-posters|test-records\/cleanup|request-pairing-code)$/, 'other', null],
     ];
     const SKIP = /^\/api\/(broadcast\/preview|scheduled\/preview|crm\/copilot|ai-draft|playground\/|test-ai|generate-poster|daily-goal\/summary)/;
@@ -410,7 +410,7 @@ function create(opts = {}) {
                 return next();
             }
             if (PUBLIC(req.path)) return next();
-            if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return wantsJson(req) ? res.status(429).json({ error: 'Too many attempts. Try later.', retryAfter: r.locked }) : res.status(429).send(loginPage(req, { error: `बहुत ज़्यादा गलत कोशिशें — ${Math.ceil(r.locked / 60)} मिनट बाद फिर कोशिश करें।`, mode: 'pin' })); }
+            if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return wantsJson(req) ? res.status(429).json({ error: 'Too many attempts. Try later.', retryAfter: r.locked }) : res.status(429).send(loginPage(req, { error: `Too many wrong attempts — try again in ${Math.ceil(r.locked / 60)} min.`, mode: 'pin' })); }
         } else if (cookies[LEGACY_PIN_COOKIE] && pin && safeEqual(cookies[LEGACY_PIN_COOKIE], pin)) {
             // Legacy cookie that held the PIN: accept once and upgrade it to a server-side session.
             req.dashUser = { username: PIN_USER, role: 'admin', via: 'pin' };
@@ -433,24 +433,24 @@ function create(opts = {}) {
         const userForm = `
                 <form method="POST" action="/login" autocomplete="on">
                     <input type="hidden" name="next" value="${escapeHtml(next)}">
-                    <label for="lg-user">यूज़रनेम</label>
+                    <label for="lg-user">Username</label>
                     <input id="lg-user" type="text" name="username" value="${escapeHtml(username)}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
-                    <label for="lg-pass">पासवर्ड</label>
+                    <label for="lg-pass">Password</label>
                     <input id="lg-pass" type="password" name="password" autocomplete="current-password" required>
-                    <button type="submit" class="btn">🔓 लॉगिन करें</button>
+                    <button type="submit" class="btn">🔓 Log in</button>
                 </form>
-                <a class="alt" href="/login?mode=pin&amp;next=${encodeURIComponent(next)}">PIN से लॉगिन</a>`;
+                <a class="alt" href="/login?mode=pin&amp;next=${encodeURIComponent(next)}">Log in with PIN</a>`;
         const pinForm = `
                 <form method="POST" action="/login" autocomplete="off">
                     <input type="hidden" name="next" value="${escapeHtml(next)}">
                     <input type="hidden" name="mode" value="pin">
-                    <label for="lg-pin">डैशबोर्ड PIN</label>
+                    <label for="lg-pin">Dashboard PIN</label>
                     <input id="lg-pin" type="password" name="pin" class="pin" placeholder="••••" maxlength="12" inputmode="numeric" autocomplete="off" required autofocus>
-                    <button type="submit" class="btn">🔓 खोलें</button>
+                    <button type="submit" class="btn">🔓 Open</button>
                 </form>
-                ${hasUsers ? `<a class="alt" href="/login?next=${encodeURIComponent(next)}">यूज़रनेम व पासवर्ड से लॉगिन</a>` : ''}`;
+                ${hasUsers ? `<a class="alt" href="/login?next=${encodeURIComponent(next)}">Log in with username & password</a>` : ''}`;
         return `<!DOCTYPE html>
-<html lang="hi"><head><meta charset="utf-8"><title>🔒 लॉगिन — सिहाली खुर्द 2026</title>
+<html lang="en"><head><meta charset="utf-8"><title>🔒 Login — Sihali Khurd 2026</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
 <style>
 *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Devanagari",sans-serif;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px}
@@ -463,11 +463,11 @@ input:focus{border-color:#38bdf8}input.pin{font-size:24px;text-align:center;lett
 .alt{display:inline-block;margin-top:16px;color:#93c5fd;font-size:13px;text-decoration:none}
 </style></head><body><div class="card">
 <div style="font-size:40px;margin-bottom:8px">🔒</div>
-<h2 style="margin:0;font-size:20px;color:#f8fafc">ग्राम पंचायत सिहाली खुर्द</h2>
-<p style="color:#94a3b8;font-size:13px;margin:6px 0 0">बाबा अभय सिंह चुनाव 2026 — निजी कंट्रोल रूम</p>
+<h2 style="margin:0;font-size:20px;color:#f8fafc">Gram Panchayat Sihali Khurd</h2>
+<p style="color:#94a3b8;font-size:13px;margin:6px 0 0">Baba Abhay Singh Election 2026 — private control room</p>
 ${error ? `<div class="err" role="alert">${escapeHtml(error)}</div>` : ''}
 ${m === 'pin' ? pinForm : userForm}
-<p style="color:#64748b;font-size:11px;margin-top:18px">केवल कैंपेन टीम के लिए</p>
+<p style="color:#64748b;font-size:11px;margin-top:18px">Campaign team only</p>
 </div></body></html>`;
     }
 
@@ -487,21 +487,21 @@ ${m === 'pin' ? pinForm : userForm}
             try {
                 if (b.pin != null && (b.mode === 'pin' || b.username == null)) {
                     const r = checkPin(req, String(b.pin));
-                    if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return fail(429, `बहुत ज़्यादा गलत कोशिशें — ${Math.ceil(r.locked / 60)} मिनट बाद फिर कोशिश करें।`, { retryAfter: r.locked }, 'pin'); }
-                    if (!r.ok) return fail(401, 'गलत PIN', {}, 'pin');
+                    if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return fail(429, `Too many wrong attempts — try again in ${Math.ceil(r.locked / 60)} min.`, { retryAfter: r.locked }, 'pin'); }
+                    if (!r.ok) return fail(401, 'Wrong PIN', {}, 'pin');
                     setSessionCookie(req, res, createSession(PIN_USER, 'admin', 'pin', { ua: req.headers['user-agent'] }), [clearLegacyPinCookie(req)]);
-                    record({ ts: new Date(now()).toISOString(), username: PIN_USER, role: 'admin', via: 'pin', action: 'login', label: 'लॉगिन (PIN)', method: 'POST', path: '/login', status: 200, ip: clientIp(req), detail: {} });
+                    record({ ts: new Date(now()).toISOString(), username: PIN_USER, role: 'admin', via: 'pin', action: 'login', label: 'Login (PIN)', method: 'POST', path: '/login', status: 200, ip: clientIp(req), detail: {} });
                     return json ? res.json({ success: true, username: PIN_USER, role: 'admin', via: 'pin' }) : res.redirect(303, next);
                 }
                 const r = await loginPassword(req, b.username, b.password);
-                if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return fail(429, `बहुत ज़्यादा गलत कोशिशें — ${Math.ceil(r.locked / 60)} मिनट बाद फिर कोशिश करें।`, { retryAfter: r.locked }, 'user'); }
-                if (!r.ok) return fail(401, 'यूज़रनेम या पासवर्ड गलत है', {}, 'user');
+                if (r.locked) { res.setHeader('Retry-After', String(r.locked)); return fail(429, `Too many wrong attempts — try again in ${Math.ceil(r.locked / 60)} min.`, { retryAfter: r.locked }, 'user'); }
+                if (!r.ok) return fail(401, 'Wrong username or password', {}, 'user');
                 setSessionCookie(req, res, createSession(r.user.username, r.user.role, 'password', { ua: req.headers['user-agent'] }), [clearLegacyPinCookie(req)]);
-                record({ ts: new Date(now()).toISOString(), username: r.user.username, role: r.user.role, via: 'password', action: 'login', label: 'लॉगिन', method: 'POST', path: '/login', status: 200, ip: clientIp(req), detail: {} });
+                record({ ts: new Date(now()).toISOString(), username: r.user.username, role: r.user.role, via: 'password', action: 'login', label: 'Login', method: 'POST', path: '/login', status: 200, ip: clientIp(req), detail: {} });
                 return json ? res.json({ success: true, username: r.user.username, role: r.user.role, via: 'password' }) : res.redirect(303, next);
             } catch (e) {
                 console.warn('[DashAuth] login error', e.message);
-                return fail(500, 'लॉगिन में दिक्कत — फिर कोशिश करें');
+                return fail(500, 'Login problem — please try again');
             }
         });
         app.post('/logout', (req, res) => {
@@ -519,7 +519,7 @@ ${m === 'pin' ? pinForm : userForm}
             catch (e) { res.status(e.status || 500).json({ success: false, error: e.message }); }
         });
         const selfGuard = (req, res) => {
-            if (req.dashUser.via === 'password' && normUser(req.params.u) === req.dashUser.username) { res.status(400).json({ success: false, error: 'अपना ही खाता बंद/डिलीट नहीं कर सकते' }); return true; }
+            if (req.dashUser.via === 'password' && normUser(req.params.u) === req.dashUser.username) { res.status(400).json({ success: false, error: 'You cannot disable/delete your own account' }); return true; }
             return false;
         };
         app.post('/api/dashboard-users/:u/disable', requireAdmin, (req, res) => {
@@ -544,24 +544,24 @@ ${m === 'pin' ? pinForm : userForm}
             const u = req && req.dashUser;
             if (!u) return '';
             return `<span id="dash-user-badge" style="background:#ede9fe;color:#5b21b6;padding:6px 12px;border-radius:20px;font-size:13px;font-weight:700;border:1px solid #ddd6fe;">👤 ${escapeHtml(u.username)}${u.role === 'admin' ? ' · admin' : ''}</span>
-                        <form method="POST" action="/logout" style="display:inline;margin:0;"><button type="submit" id="dash-logout" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🚪 लॉगआउट</button></form>`;
+                        <form method="POST" action="/logout" style="display:inline;margin:0;"><button type="submit" id="dash-logout" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🚪 Logout</button></form>`;
         },
         pane: (req) => {
             if (!req || !req.dashUser || req.dashUser.role !== 'admin') return '';
             return `
                     <div id="dash-users-section" style="margin-top:22px;border-top:1px solid #e2e8f0;padding-top:16px;">
-                        <h3 style="margin:0 0 4px 0;font-size:16px;">👥 लॉगिन यूज़र</h3>
-                        <div style="color:#64748b;font-size:12px;margin-bottom:10px;">परिवार के हर सदस्य का अपना यूज़रनेम-पासवर्ड। पासवर्ड कहीं सेव नहीं दिखता — भूल जाएँ तो यहीं नया डाल दें।</div>
+                        <h3 style="margin:0 0 4px 0;font-size:16px;">👥 Login users</h3>
+                        <div style="color:#64748b;font-size:12px;margin-bottom:10px;">Each family member gets their own username and password. Passwords are never shown anywhere — if someone forgets, just set a new one here.</div>
                         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
-                            <input id="du-name" type="text" placeholder="यूज़रनेम" autocapitalize="none" autocomplete="off" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:140px;flex:1;">
-                            <input id="du-pass" type="password" placeholder="नया पासवर्ड (6+ अक्षर)" autocomplete="new-password" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:160px;flex:1;">
-                            <select id="du-role" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;"><option value="member">सदस्य</option><option value="admin">admin</option></select>
-                            <button type="button" id="du-save" style="background:#2563eb;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;">💾 जोड़ें / पासवर्ड बदलें</button>
+                            <input id="du-name" type="text" placeholder="Username" autocapitalize="none" autocomplete="off" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:140px;flex:1;">
+                            <input id="du-pass" type="password" placeholder="New password (6+ characters)" autocomplete="new-password" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;min-width:160px;flex:1;">
+                            <select id="du-role" style="font-size:16px;padding:9px;border-radius:8px;border:1px solid #cbd5e1;"><option value="member">member</option><option value="admin">admin</option></select>
+                            <button type="button" id="du-save" style="background:#2563eb;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer;">💾 Add / change password</button>
                         </div>
                         <div id="du-msg" style="font-size:13px;margin-top:6px;"></div>
-                        <div class="table-responsive" style="margin-top:10px;"><table class="table"><thead><tr><th>यूज़रनेम</th><th>भूमिका</th><th>स्थिति</th><th>आख़िरी लॉगिन</th><th></th></tr></thead><tbody id="du-body"><tr><td colspan="5">…</td></tr></tbody></table></div>
-                        <h4 style="margin:16px 0 6px 0;font-size:14px;">🧾 किसने क्या किया (हाल के 50)</h4>
-                        <div class="table-responsive"><table class="table"><thead><tr><th>समय</th><th>किसने</th><th>क्या</th><th>विवरण</th></tr></thead><tbody id="du-audit"><tr><td colspan="4">…</td></tr></tbody></table></div>
+                        <div class="table-responsive" style="margin-top:10px;"><table class="table"><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr></thead><tbody id="du-body"><tr><td colspan="5">…</td></tr></tbody></table></div>
+                        <h4 style="margin:16px 0 6px 0;font-size:14px;">🧾 Who did what (last 50)</h4>
+                        <div class="table-responsive"><table class="table"><thead><tr><th>Time</th><th>Who</th><th>What</th><th>Details</th></tr></thead><tbody id="du-audit"><tr><td colspan="4">…</td></tr></tbody></table></div>
                     </div>`;
         },
         script: () => `
@@ -576,38 +576,38 @@ ${m === 'pin' ? pinForm : userForm}
                 function load(){
                     api('GET', '/api/dashboard-users').then(function(j){
                         var rows = (j.users || []).map(function(u){
-                            return '<tr><td><b>' + esc(u.username) + '</b></td><td>' + (u.role === 'admin' ? 'admin' : 'सदस्य') + '</td><td>' + (u.disabled ? '⛔ बंद' : '✅ चालू') + '</td><td>' + esc(t(u.lastLoginAt)) + '</td><td style="white-space:nowrap;">' +
-                                (u.disabled ? '<button type="button" data-du="enable" data-u="' + esc(u.username) + '">चालू करें</button> ' : '<button type="button" data-du="disable" data-u="' + esc(u.username) + '">बंद करें</button> ') +
-                                '<button type="button" data-du="delete" data-u="' + esc(u.username) + '" style="color:#b91c1c;">हटाएँ</button></td></tr>';
+                            return '<tr><td><b>' + esc(u.username) + '</b></td><td>' + (u.role === 'admin' ? 'admin' : 'member') + '</td><td>' + (u.disabled ? '⛔ Disabled' : '✅ Active') + '</td><td>' + esc(t(u.lastLoginAt)) + '</td><td style="white-space:nowrap;">' +
+                                (u.disabled ? '<button type="button" data-du="enable" data-u="' + esc(u.username) + '">Enable</button> ' : '<button type="button" data-du="disable" data-u="' + esc(u.username) + '">Disable</button> ') +
+                                '<button type="button" data-du="delete" data-u="' + esc(u.username) + '" style="color:#b91c1c;">Delete</button></td></tr>';
                         });
-                        document.getElementById('du-body').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="5" style="color:#94a3b8;">अभी कोई यूज़र नहीं — ऊपर से जोड़ें (PIN से लॉगिन हमेशा चलता रहेगा)।</td></tr>';
+                        document.getElementById('du-body').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="5" style="color:#94a3b8;">No users yet — add one above (PIN login always keeps working).</td></tr>';
                     });
                     api('GET', '/api/audit?limit=50').then(function(j){
                         var rows = (j.entries || []).map(function(e){
                             var d = e.detail || {}; var parts = [];
                             ['phone','target','line','action','mode','date','text'].forEach(function(k){ if (d[k]) parts.push(esc(d[k])); });
-                            ['phonesCount','numbersCount','recipientsCount','audienceCount'].forEach(function(k){ if (d[k]) parts.push(d[k] + ' नंबर'); });
+                            ['phonesCount','numbersCount','recipientsCount','audienceCount'].forEach(function(k){ if (d[k]) parts.push(d[k] + ' numbers'); });
                             if (e.status >= 400) parts.push('❌ ' + e.status);
                             return '<tr><td style="white-space:nowrap;">' + esc(t(e.ts)) + '</td><td><b>' + esc(e.username) + '</b></td><td>' + esc(e.label || e.action) + '</td><td style="font-size:12px;">' + parts.join(' · ') + '</td></tr>';
                         });
-                        document.getElementById('du-audit').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" style="color:#94a3b8;">अभी कुछ दर्ज नहीं।</td></tr>';
+                        document.getElementById('du-audit').innerHTML = rows.length ? rows.join('') : '<tr><td colspan="4" style="color:#94a3b8;">Nothing recorded yet.</td></tr>';
                     });
                 }
                 document.getElementById('du-save').addEventListener('click', function(){
                     var name = document.getElementById('du-name').value.trim(), pass = document.getElementById('du-pass').value, role = document.getElementById('du-role').value;
-                    if (!name) return msg('यूज़रनेम डालें', false);
+                    if (!name) return msg('Enter a username', false);
                     api('POST', '/api/dashboard-users', { username: name, password: pass, role: role }).then(function(j){
-                        if (!j.success) return msg(j.error || 'नहीं हुआ', false);
+                        if (!j.success) return msg(j.error || 'Did not work', false);
                         document.getElementById('du-pass').value = '';
-                        msg(j.created ? ('✅ ' + j.user.username + ' जोड़ा गया') : ('✅ ' + j.user.username + ' अपडेट हुआ'), true); load();
+                        msg(j.created ? ('✅ ' + j.user.username + ' added') : ('✅ ' + j.user.username + ' updated'), true); load();
                     });
                 });
                 document.getElementById('du-body').addEventListener('click', function(ev){
                     var b = ev.target; if (!b || !b.getAttribute) return;
                     var act = b.getAttribute('data-du'), u = b.getAttribute('data-u'); if (!act || !u) return;
-                    if (act === 'delete' && !window.confirm(u + ' को हटाएँ?')) return;
+                    if (act === 'delete' && !window.confirm('Delete ' + u + '?')) return;
                     var p = act === 'delete' ? api('DELETE', '/api/dashboard-users/' + encodeURIComponent(u)) : api('POST', '/api/dashboard-users/' + encodeURIComponent(u) + '/' + act);
-                    p.then(function(j){ msg(j.success ? '✅ हो गया' : (j.error || 'नहीं हुआ'), !!j.success); load(); });
+                    p.then(function(j){ msg(j.success ? '✅ Done' : (j.error || 'Did not work'), !!j.success); load(); });
                 });
                 load();
             })();

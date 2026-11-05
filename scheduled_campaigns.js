@@ -222,7 +222,7 @@ class ScheduledCampaigns {
             valid = built.valid; invalid = built.invalid; duplicates = built.duplicates;
         }
         valid = valid.filter(r => { const why = this.blockReason(r.phone, c0); if (why) { blocked.push({ ...r, reason: why }); return false; } return true; });
-        if (!valid.length) errors.push('No recipients left after cleaning (invalid, duplicate, opted-out or विरोधी)');
+        if (!valid.length) errors.push('No recipients left after cleaning (invalid, duplicate, opted-out or opponents (virodhi))');
         if (valid.length > MAX_RECIPIENTS) errors.push(`Too many recipients (${valid.length}); max ${MAX_RECIPIENTS} per scheduled campaign`);
         if (errors.length) return { errors, counts: { valid: valid.length, invalid: invalid.length, duplicates, blocked: blocked.length } };
 

@@ -99,7 +99,7 @@ const tokenOf = (sc) => (sc.match(/^dash_session=([^;]*)/) || [])[1] || '';
         check('store file mode 0600', (fs.statSync(files.DASHBOARD_USERS_PATH).mode & 0o777) === 0o600);
 
         const page1 = await (await fetch(base + '/login')).text();
-        check('with users: username/password default + "PIN से लॉगिन" link', page1.includes('name="username"') && page1.includes('name="password"') && page1.includes('PIN से लॉगिन') && /font-size:16px/.test(page1));
+        check('with users: username/password default + "Log in with PIN" link', page1.includes('name="username"') && page1.includes('name="password"') && page1.includes('Log in with PIN') && /font-size:16px/.test(page1));
 
         // ---------- password login ----------
         const login = (u, p, extra = {}) => fetch(base + '/login', { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/json', ...extra }, body: J({ username: u, password: p }) });
@@ -125,7 +125,7 @@ const tokenOf = (sc) => (sc.match(/^dash_session=([^;]*)/) || [])[1] || '';
         check('wrong password 401, no cookie', bad.status === 401 && !cookieOf(bad));
         const badForm = await fetch(base + '/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'username=alice&password=nope' });
         const badHtml = await badForm.text();
-        check('form wrong password -> page with Hindi error', badForm.status === 401 && badHtml.includes('यूज़रनेम या पासवर्ड गलत है'));
+        check('form wrong password -> page with error', badForm.status === 401 && badHtml.includes('Wrong username or password'));
 
         // ---------- audit ----------
         r = await fetch(base + '/api/control/default-mode', { method: 'POST', headers: A, body: J({ mode: 'normal' }) });

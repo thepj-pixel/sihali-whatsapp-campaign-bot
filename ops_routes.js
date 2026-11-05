@@ -112,12 +112,12 @@ function install(app, d) {
 // ---------------- Dashboard UI (plain strings, injected into server.js page) ----------------
 const BTN = 'padding:6px 12px; border:1px solid #cbd5e1; border-radius:6px; background:white; cursor:pointer;';
 const tabButtons = () => `
-                    <button id="tab-btn-overview" class="tab-btn" type="button" data-tab="overview">📊 Overview / निष्कर्ष</button>
+                    <button id="tab-btn-overview" class="tab-btn" type="button" data-tab="overview">📊 Overview / conclusions</button>
                     <button id="tab-btn-schedule" class="tab-btn" type="button" data-tab="schedule">🗓️ Scheduled Bulk</button>`;
 
 const tabPanes = () => `
                 <div id="tab-overview" class="card tab-content" style="display: none;">
-                    <h3 style="margin-top:0;">📊 Overview / निष्कर्ष — every conversation in one line</h3>
+                    <h3 style="margin-top:0;">📊 Overview / conclusions — every conversation in one line</h3>
                     <div id="ov-totals" style="display:flex; gap:8px; flex-wrap:wrap; font-size:13px;"></div>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:10px; font-size:12px;">
                         <div><b>✅ Good</b><div id="ov-good"></div></div>
@@ -125,7 +125,7 @@ const tabPanes = () => `
                     </div>
                     <div style="margin-top:10px; font-size:12px;"><b>🤝 Mulaqat</b><div id="ov-mulaqat"></div></div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px; margin-top:12px;">
-                        <select id="ov-stance"><option value="">All stances</option><option>commit</option><option>समर्थक</option><option>सोच रहे</option><option>विरोधी</option><option>नाराज़</option></select>
+                        <select id="ov-stance"><option value="">All stances</option><option value="commit">✅ Committed</option><option value="समर्थक">🟢 Supporter (samarthak)</option><option value="सोच रहे">🟡 Thinking (soch rahe)</option><option value="विरोधी">🔴 Opponent (virodhi)</option><option value="नाराज़">😠 Upset (naraz)</option></select>
                         <input id="ov-line" placeholder="Line id" style="width:80px;">
                         <input id="ov-ward" placeholder="Ward" style="width:56px;">
                         <input id="ov-q" placeholder="Search name / phone / topic" style="width:180px;">
@@ -135,12 +135,12 @@ const tabPanes = () => `
                     </div>
                     <div id="ov-list" style="font-size:12px; margin-top:10px; max-height:640px; overflow:auto;"></div>
                     <details style="margin-top:14px;">
-                        <summary style="cursor:pointer; font-weight:700;">🚫 विरोधी list (gentle mode: respect, listen, no vote asks)</summary>
-                        <p style="font-size:12px; color:#64748b;">Paste numbers, one per line (optionally "phone, name"). The bot stays very respectful with them, never asks for their vote, listens and logs any samasya. Scheduled Bulk skips them unless you tick "include विरोधी".</p>
-                        <textarea id="vr-text" rows="4" style="width:100%;" placeholder="98XXXXXXXX, नाम"></textarea>
+                        <summary style="cursor:pointer; font-weight:700;">🚫 Opponent list (virodhi) — gentle mode: respect, listen, no vote asks</summary>
+                        <p style="font-size:12px; color:#64748b;">Paste numbers, one per line (optionally "phone, name"). The bot stays very respectful with them, never asks for their vote, listens and logs any samasya. Scheduled Bulk skips them unless you tick "include opponents (virodhi)".</p>
+                        <textarea id="vr-text" rows="4" style="width:100%;" placeholder="98XXXXXXXX, name"></textarea>
                         <div style="display:flex; gap:8px; align-items:center; margin-top:6px; font-size:12px;">
                             <input id="vr-note" placeholder="note (optional)" style="width:200px;">
-                            <button type="button" id="vr-add" style="${BTN}">➕ Add as विरोधी</button>
+                            <button type="button" id="vr-add" style="${BTN}">➕ Add as opponent (virodhi)</button>
                             <span id="vr-status"></span>
                         </div>
                         <div id="vr-list" style="font-size:12px; margin-top:8px; max-height:260px; overflow:auto;"></div>
@@ -148,17 +148,17 @@ const tabPanes = () => `
                 </div>
                 <div id="tab-schedule" class="card tab-content" style="display: none;">
                     <h3 style="margin-top:0;">🗓️ Scheduled Bulk — quiet sends spread over a time window</h3>
-                    <p style="font-size:12px; color:#64748b; margin-top:0;">Each person gets a random time inside the window, at least 20–90 s apart per line, a rotating message + poster, spread across the lines you tick. STOP / declined people are skipped; विरोधी are skipped unless ticked. Safe to restart the server.</p>
+                    <p style="font-size:12px; color:#64748b; margin-top:0;">Each person gets a random time inside the window, at least 20–90 s apart per line, a rotating message + poster, spread across the lines you tick. STOP / declined people are skipped; opponents (virodhi) are skipped unless ticked. Safe to restart the server.</p>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; font-size:12px;">
                         <div>
                             <b>1. Audience</b><br>
                             <textarea id="sc-phones" rows="5" style="width:100%;" placeholder="phone, name, ward (one per line)"></textarea>
                             <label><input type="checkbox" id="sc-contacts"> + saved contacts</label> ward <input id="sc-ward" style="width:46px;"> village <input id="sc-village" style="width:90px;">
-                            <br><label><input type="checkbox" id="sc-virodhi"> include विरोधी</label>
+                            <br><label><input type="checkbox" id="sc-virodhi"> include opponents (virodhi)</label>
                         </div>
                         <div>
                             <b>2. Messages (variants separated by a line with ---)</b><br>
-                            <textarea id="sc-msgs" rows="5" style="width:100%;" placeholder="{राम राम|नमस्ते} {name} जी 🙏 ...&#10;---&#10;दूसरा संदेश ..."></textarea>
+                            <textarea id="sc-msgs" rows="5" style="width:100%;" placeholder="{राम राम|नमस्ते} {name} जी 🙏 ...&#10;---&#10;second message ..."></textarea>
                             <b>Posters / media (rotate)</b><div id="sc-media" style="max-height:110px; overflow:auto; border:1px solid #e2e8f0; padding:4px;"></div>
                         </div>
                     </div>
@@ -193,13 +193,14 @@ const script = () => `
                 function postJson(u, b) { return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(function (r) { return r.json(); }); }
                 function chip(label, n, color) { return '<span style="padding:6px 10px; border-radius:8px; background:' + color + '; font-weight:700;">' + esc(label) + ': ' + n + '</span>'; }
                 var STC = { 'commit': '#bbf7d0', 'समर्थक': '#dcfce7', 'सोच रहे': '#fef9c3', 'विरोधी': '#fee2e2', 'नाराज़': '#fecaca' };
+                var STL = { 'commit': 'Committed', 'समर्थक': 'Supporter', 'सोच रहे': 'Thinking', 'विरोधी': 'Opponent (virodhi)', 'नाराज़': 'Upset' };
                 function loadOverview() {
                     var p = [['stance', el('ov-stance').value], ['line', el('ov-line').value], ['ward', el('ov-ward').value], ['q', el('ov-q').value], ['includeTest', el('ov-test').checked ? '1' : '']].filter(function (x) { return x[1]; }).map(function (x) { return x[0] + '=' + encodeURIComponent(x[1]); }).join('&');
                     return fetch('/api/overview' + (p ? '?' + p : '')).then(function (r) { return r.json(); }).then(function (d) {
                         if (!d || !d.success) return;
                         var t = d.totals || {};
                         var cats = Object.keys(t.samasyaByCategory || {}).map(function (k) { return esc(k) + ' ' + t.samasyaByCategory[k]; }).join(', ');
-                        el('ov-totals').innerHTML = chip('Conversations', t.conversations || 0, '#e2e8f0') + chip('✅ Commit', t.commit || 0, STC.commit) + chip('समर्थक', t['समर्थक'] || 0, STC['समर्थक']) + chip('सोच रहे', t['सोच रहे'] || 0, STC['सोच रहे']) + chip('विरोधी', t['विरोधी'] || 0, STC['विरोधी']) + chip('नाराज़', t['नाराज़'] || 0, STC['नाराज़']) + chip('📋 Samasya', (t.samasyaTotal || 0) + (cats ? ' (' + cats + ')' : ''), '#e0f2fe') + chip('🤝 Mulaqat', t.mulaqatTotal || 0, '#ede9fe');
+                        el('ov-totals').innerHTML = chip('Conversations', t.conversations || 0, '#e2e8f0') + chip('✅ Commit', t.commit || 0, STC.commit) + chip('🟢 Supporter', t['समर्थक'] || 0, STC['समर्थक']) + chip('🟡 Thinking', t['सोच रहे'] || 0, STC['सोच रहे']) + chip('🔴 Opponent (virodhi)', t['विरोधी'] || 0, STC['विरोधी']) + chip('😠 Upset', t['नाराज़'] || 0, STC['नाराज़']) + chip('📋 Samasya', (t.samasyaTotal || 0) + (cats ? ' (' + cats + ')' : ''), '#e0f2fe') + chip('🤝 Mulaqat', t.mulaqatTotal || 0, '#ede9fe');
                         el('ov-good').innerHTML = (d.good || []).map(function (g) { return '<div>• ' + esc(g.name || g.phone) + ' — ' + esc(g.why) + '</div>'; }).join('') || '<i>—</i>';
                         el('ov-bad').innerHTML = (d.bad || []).map(function (g) { return '<div>• ' + esc(g.name || g.phone) + ' — ' + esc(g.why) + '</div>'; }).join('') || '<i>—</i>';
                         el('ov-mulaqat').innerHTML = (d.mulaqatScheduled || []).map(function (m) { return '<div>• ' + esc(m.name || m.phone) + ' — ' + esc(m.status) + ' — ' + esc(m.when || m.date || 'time?') + ' — ' + esc(m.place || 'place?') + (m.ward ? ' (ward ' + esc(m.ward) + ')' : '') + '</div>'; }).join('') || '<i>none yet</i>';
@@ -208,7 +209,7 @@ const script = () => `
                             var when = r.lastAt ? new Date(r.lastAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
                             var sm = (r.samasya || []).map(function (s) { return esc(s.category) + ' (' + esc(s.status) + ')'; }).join('<br>');
                             var mq = (r.mulaqat || []).map(function (m) { return esc(m.status) + ' ' + esc(m.when) + ' ' + esc(m.place); }).join('<br>');
-                            return '<tr style="border-bottom:1px solid #e2e8f0;' + (r.test ? ' background:#fef9c3;' : '') + '"><td style="padding:5px;"><b>' + esc(r.name || '—') + '</b><br>' + esc(r.phone) + '</td><td>' + esc(r.line) + '</td><td>' + esc(r.ward) + '</td><td><span style="padding:2px 6px; border-radius:6px; background:' + (STC[r.stance] || '#e2e8f0') + ';">' + esc(r.stance) + '</span>' + (r.mode && r.mode !== 'normal' ? '<br><span style="font-size:11px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#5b21b6;">' + ({ aggressive: '🔥 ज़ोरदार', chill: '😌 आराम से', gentle: '🕊️ नरम' }[r.mode] || esc(r.mode)) + '</span>' : '') + (r.brief ? ' 🔐' : '') + (r.optedOut ? '<br>🚫 STOP' : '') + '</td><td>' + esc(when) + '</td><td>' + esc(r.summary) + '</td><td>' + sm + '</td><td>' + mq + '</td></tr>';
+                            return '<tr style="border-bottom:1px solid #e2e8f0;' + (r.test ? ' background:#fef9c3;' : '') + '"><td style="padding:5px;"><b>' + esc(r.name || '—') + '</b><br>' + esc(r.phone) + '</td><td>' + esc(r.line) + '</td><td>' + esc(r.ward) + '</td><td><span style="padding:2px 6px; border-radius:6px; background:' + (STC[r.stance] || '#e2e8f0') + ';">' + esc(STL[r.stance] || r.stance) + '</span>' + (r.mode && r.mode !== 'normal' ? '<br><span style="font-size:11px;padding:1px 6px;border-radius:8px;background:#ede9fe;color:#5b21b6;">' + ({ aggressive: '🔥 Assertive', chill: '😌 Relaxed', gentle: '🕊️ Gentle (virodhi)' }[r.mode] || esc(r.mode)) + '</span>' : '') + (r.brief ? ' 🔐' : '') + (r.optedOut ? '<br>🚫 STOP' : '') + '</td><td>' + esc(when) + '</td><td>' + esc(r.summary) + '</td><td>' + sm + '</td><td>' + mq + '</td></tr>';
                         }).join('');
                         el('ov-list').innerHTML = '<table style="width:100%; border-collapse:collapse;"><tr style="text-align:left; background:#f1f5f9;"><th>Voter</th><th>Line</th><th>Ward</th><th>Stance</th><th>Last msg</th><th>What was talked about</th><th>Samasya</th><th>Mulaqat</th></tr>' + (rows || '<tr><td colspan="8" style="padding:10px;">No conversations.</td></tr>') + '</table>';
                     }).catch(function () {});

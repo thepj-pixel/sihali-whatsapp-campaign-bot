@@ -16,7 +16,7 @@ const FILE = process.env.OPERATOR_CONTROL_FILE || path.join(__dirname, 'operator
 const MODES = ['normal', 'aggressive', 'chill', 'gentle'];
 const VOTE_ASK = ['auto', 'every', 'every2', 'rarely'];
 const FOLLOWUP = ['off', 'daily', 'every2days'];
-const MODE_LABEL = { normal: '⚖️ सामान्य', aggressive: '🔥 ज़ोरदार', chill: '😌 आराम से', gentle: '🕊️ नरम (विरोधी)' };
+const MODE_LABEL = { normal: '⚖️ Normal', aggressive: '🔥 Assertive', chill: '😌 Relaxed', gentle: '🕊️ Gentle (virodhi)' };
 
 let state = null;
 function load() {
