@@ -937,9 +937,12 @@ async function startSession(sessionObj) {
                         isFollowUpDetails
                     );
 
+                    // Answers to our own slip questions (ward asked / family card offered) skip the NLU (slip_flow.preempt)
+                    let slipPre = null;
+                    if (!imageAnalysis) { try { slipPre = slipFlow.preempt(body, user); } catch (e) { slipPre = null; } }
                     // NLU v5: understand the message (LLM JSON, ~4s, rules fallback) before routing
                     let nluPlan = null;
-                    if (!imageAnalysis && !isMediaToken && !isPosterGenQuery && !isVideoQuery && process.env.NLU !== 'off') {
+                    if (!slipPre && !imageAnalysis && !isMediaToken && !isPosterGenQuery && !isVideoQuery && process.env.NLU !== 'off') {
                         try {
                             const llmOn = process.env.NLU_LLM !== 'off' && aiService.aiStatus().anyLLM;
                             const n = await nluMod.understand(body, user, { callLLM: llmOn ? (sys, prompt, budget) => aiService.callLLMCascade(sys, [], prompt, null, budget) : null });
@@ -950,8 +953,8 @@ async function startSession(sessionObj) {
                     }
                     if (nluPlan && nluPlan.reply && (isPhotoQuery)) nluPlan.reply = null;
 
-                    let slipPlan = null;
-                    if (!imageAnalysis && !isPosterGenQuery && !isVideoQuery && !isPhotoQuery && !(nluPlan && nluPlan.reply)) {
+                    let slipPlan = slipPre || null;
+                    if (!slipPre && !imageAnalysis && !isPosterGenQuery && !isVideoQuery && !isPhotoQuery && !(nluPlan && nluPlan.reply)) {
                         const slipOpts = nluPlan && nluPlan.slipOpts ? { ...nluPlan.slipOpts, blocked: false }
                             : { slipIntent: isVoterSlipIntent && !(nluPlan && nluPlan.noSlip), searchText: effectiveSearchText, blocked: inBrainFlow || isSelfIntro, noSlip: !!(nluPlan && nluPlan.noSlip) };
                         try { slipPlan = slipFlow.decide(body, user, slipOpts); }
@@ -1054,9 +1057,19 @@ async function startSession(sessionObj) {
                         const targetVoter = slipPlan.voter || null;
                         // keep the conversation memory growing on slip turns too (name/ward/concerns said alongside)
                         try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: 'voter_slip', topic: null }); } catch (e) {}
-                        if (slipPlan.kind === 'deliver' && targetVoter) {
+                        if (slipPlan.kind === 'family' && targetVoter) {
+                            const fam = slipPlan.members || [targetVoter];
+                            replyText = `🏠 आपके परिवार की मतदाता पर्ची — वार्ड ${targetVoter.ward}, मकान नं. ${targetVoter.house_no} (${fam.length} मतदाता)।\n\n16 नवंबर को पूरा परिवार साथ चलकर वोट डालिएगा 🙏 किसी का नाम छूट गया हो तो उनका नाम और पिता/पति का नाम भेज दीजिए।`;
+                            let famBuf = null;
+                            try { famBuf = await voterCardGen.generateFamilyCard(targetVoter, fam); } catch (e) { console.error(`[${sessionObj.id}] family card error:`, e.message); }
+                            if (famBuf) await sendSafeMessage(sock, replyJid, { image: famBuf, caption: replyText });
+                            else { replyText += '\n\n' + fam.map((m, i) => `${i + 1}. ${m.name_hi} — क्रमांक ${m.sr_no}`).join('\n'); await sendSafeMessage(sock, replyJid, { text: replyText }); }
+                            mediaTypeSent = famBuf ? 'familySlipCard' : 'familySlip';
+                            try { const m = require('./voter_memory.js').ensure(user); m.familyCardSent = { ward: Number(targetVoter.ward), house: targetVoter.house_no, n: fam.length, at: new Date().toISOString() }; } catch (e) {}
                             userMemory.save();
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.FAMILY_TAIL;
+                        } else if (slipPlan.kind === 'deliver' && targetVoter) {
+                            userMemory.save();
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + (slipPlan.other ? slipFlow.FAMILY_TAIL : slipFlow.familyTail(user, targetVoter, false));
                             let cardBuffer = null;
                             try { cardBuffer = await voterCardGen.generateVoterCard(targetVoter); }
                             catch (cardErr) { console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message); }
@@ -1516,7 +1529,7 @@ app.post('/api/operator-slip', async (req, res) => {
             u.ward = Number(v.ward) || u.ward; if (!u.assignedLine) u.assignedLine = lineId;
             u.identityConfirmedBy = { by: req.dashUser ? req.dashUser.username : 'team', at: new Date().toISOString(), key: voterKey(v) };
             slipFlow.deliverTo(u, v, false);
-            text = voterEngine.formatShortSlipResponse(v) + slipFlow.FAMILY_TAIL;
+            text = voterEngine.formatShortSlipResponse(v) + slipFlow.familyTail(u, v, false);
             let cardBuffer = null;
             try { cardBuffer = await voterCardGen.generateVoterCard(v); } catch (e) { console.error('operator slip card:', e.message); }
             sent = cardBuffer ? await sendSafeMessage(sess.sock, jid, { image: cardBuffer, caption: text }) : await sendSafeMessage(sess.sock, jid, { text });

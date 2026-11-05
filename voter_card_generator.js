@@ -319,4 +319,59 @@ async function generateVoterCard(voter) {
     return finalJpg;
 }
 
-module.exports = { generateVoterCard, clearCardCache, CARD_CACHE_DIR };
+
+/** One card for a household (same ward + house no.): name, father/husband, age, Sr No, booth. No EPIC numbers. */
+async function generateFamilyCard(head, members) {
+    const esc = x => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const RL = require('./relation_label');
+    const list = (members && members.length ? members : [head]).slice(0, 10).sort((a, b) => Number(a.sr_no) - Number(b.sr_no));
+    const width = 1080, rowH = 118, top = 360;
+    const height = top + list.length * rowH + 230;
+    const fontStyle = `<style>${FONT_B64 ? `@font-face{font-family:'Noto Sans Devanagari';src:url('data:font/truetype;charset=utf-8;base64,${FONT_B64}') format('truetype');font-weight:700;}` : ''} text{font-family:'Noto Sans Devanagari','Lohit Devanagari','Gargi','Nirmala UI','Mangal',sans-serif;}</style>`;
+    const rows = list.map((v, i) => {
+        const y = top + i * rowH;
+        const age = parseInt(v.age || v.a || 0) || '';
+        const booth = String(v.booth || '').replace(/^रा\.उ\.मा\.वि\.\s*सिहाली खुर्द\s*/, '').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+        return `<rect x="55" y="${y}" width="970" height="${rowH - 12}" rx="14" fill="${i % 2 ? '#ffffff' : '#f8fafc'}" stroke="#e2e8f0" stroke-width="1.5"/>
+      <circle cx="105" cy="${y + 53}" r="30" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="105" y="${y + 63}" font-size="28" font-weight="900" fill="#b45309" text-anchor="middle">${i + 1}</text>
+      <text x="155" y="${y + 46}" font-size="32" font-weight="900" fill="#0f172a">${esc(v.name_hi || v.name)}</text>
+      <text x="155" y="${y + 86}" font-size="21" font-weight="700" fill="#475569">${esc(RL.relLabel(v))}: ${esc(v.rel_name_hi || '')}${age ? '  •  आयु ' + age : ''}</text>
+      <text x="1000" y="${y + 46}" font-size="26" font-weight="900" fill="#1e3a8a" text-anchor="end">क्रमांक ${esc(v.sr_no)}</text>
+      <text x="1000" y="${y + 86}" font-size="19" font-weight="700" fill="#15803d" text-anchor="end">${esc(booth)}</text>`;
+    }).join('\n');
+    const yEnd = top + list.length * rowH;
+    const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <defs>${fontStyle}<linearGradient id="cb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#1e293b"/></linearGradient></defs>
+      <rect width="100%" height="100%" fill="#f1f5f9"/>
+      <rect x="0" y="0" width="100%" height="16" fill="#ea580c"/>
+      <rect x="30" y="35" width="1020" height="${height - 65}" fill="#ffffff" rx="24" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="540" y="80" font-size="28" font-weight="900" fill="#0f172a" text-anchor="middle">ग्राम पंचायत सिहाली खुर्द • पंचायत आम चुनाव 2026</text>
+      <text x="540" y="112" font-size="20" font-weight="800" fill="#ea580c" text-anchor="middle">★ परिवार की मतदाता पर्ची (FAMILY VOTER SLIP) ★</text>
+      <rect x="55" y="135" width="970" height="150" fill="url(#cb)" rx="18"/>
+      <circle cx="140" cy="210" r="60" fill="#1e293b" stroke="#f59e0b" stroke-width="4"/>
+      <text x="225" y="180" font-size="20" font-weight="800" fill="#f59e0b">सरपंच पद प्रत्याशी</text>
+      <text x="225" y="226" font-size="40" font-weight="900" fill="#ffffff">अभय सिंह <tspan font-size="24" fill="#fed7aa">(मोटी आंगली वाले)</tspan></text>
+      <text x="225" y="262" font-size="16" font-weight="600" fill="#94a3b8">40 वर्षों की निष्कलंक समाज सेवा • अटूट भाईचारा</text>
+      <text x="60" y="335" font-size="24" font-weight="900" fill="#334155">वार्ड नं. ${esc(head.ward)}  •  मकान नं. ${esc(head.house_no || head.h)}  •  ${list.length} मतदाता</text>
+      ${rows}
+      <rect x="55" y="${yEnd + 12}" width="970" height="80" fill="#f0fdf4" rx="12" stroke="#bbf7d0" stroke-width="1.5"/>
+      <text x="540" y="${yEnd + 62}" font-size="24" font-weight="900" fill="#166534" text-anchor="middle">मतदान: सोमवार, 16 नवम्बर 2026 • प्रातः 7:30 से सायं 5:30 बजे तक</text>
+      <rect x="55" y="${yEnd + 108}" width="970" height="76" fill="#ea580c" rx="16"/>
+      <text x="540" y="${yEnd + 156}" font-size="24" font-weight="900" fill="#ffffff" text-anchor="middle">★ थारी आंगली से मोटी आंगली वाले के आगे मुहर लगाओ! ★</text>
+    </svg>`;
+    const comps = [{ input: Buffer.from(svg), top: 0, left: 0 }];
+    if (fs.existsSync(BABA_PHOTO_PATH)) {
+        const size = 116, tw = 110;
+        const meta = await sharp(BABA_PHOTO_PATH).metadata();
+        const th = Math.round(meta.height * (tw / meta.width));
+        const baba = await sharp(BABA_PHOTO_PATH).resize(tw, th).toBuffer();
+        const mask = Buffer.from(`<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`);
+        const round = await sharp({ create: { width: size, height: size, channels: 4, background: { r: 30, g: 41, b: 59, alpha: 1 } } })
+            .composite([{ input: baba, top: Math.round((size - th) / 2) + 9, left: Math.round((size - tw) / 2) }, { input: mask, blend: 'dest-in' }]).png().toBuffer();
+        comps.push({ input: round, top: 210 - size / 2, left: 140 - size / 2 });
+    }
+    return sharp({ create: { width, height, channels: 4, background: { r: 241, g: 245, b: 249, alpha: 1 } } }).composite(comps).jpeg({ quality: 90 }).toBuffer();
+}
+
+module.exports = { generateFamilyCard, generateVoterCard, clearCardCache, CARD_CACHE_DIR };

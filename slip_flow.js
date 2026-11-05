@@ -179,13 +179,14 @@ const NOT_FOUND = q => `*${q}* नाम से सूची में पक्
 
 function setPending(user, kind, payload, who) {
     if (!user) return;
-    delete user.pendingParchiCandidate; delete user.disambiguationMatches;
+    delete user.pendingParchiCandidate; delete user.disambiguationMatches; delete user.slipAwaitWard;
     if (kind === 'confirm') user.pendingParchiCandidate = payload;
     if (kind === 'choose') user.disambiguationMatches = payload;
     user.slipPendingAt = new Date().toISOString();
     user.slipPendingWho = who || 'self';
 }
 function deliverTo(user, v, other = false) {
+    if (user) { delete user.slipAwaitWard; delete user.slipAwaitWardPrev; delete user.slipWardAsks; }
     if (user && other) {
         delete user.pendingParchiCandidate; delete user.disambiguationMatches; delete user.slipPendingAt;
         try {
@@ -220,6 +221,72 @@ function deliverTo(user, v, other = false) {
  * @param {object} opts { slipIntent: the server's own "this is a slip ask" verdict, searchText, blocked: e.g. inside a samasya flow }
  * @returns null | { kind: 'deliver'|'confirm'|'choose'|'ask_name'|'not_found', text?, voter?, matches? }
  */
+// ---- ward first (Prince, 5 Nov): several people with this name -> ask the ward before listing; then confirm father/husband ----
+const WARD_MAX = 11;
+const DONT_KNOW_WARD = /(पता\s*नहीं|नहीं\s*पता|मालूम\s*नहीं|pata\s*nahi|nahi\s*pata|pta\s*nhi|nhi\s*pta|maloom\s*nahi|malum\s*nahi|don'?t\s*know|^(?:सूची|लिस्ट|list)(?:\s+(?:भेजो|bhejo|do|दो|dikhao|दिखाओ))?$|(?<!(?:voter|वोटर)\s*)\b(?:list|सूची|लिस्ट)\s+(?:भेजो|bhejo|dikhao|दिखाओ|de do|दे दो)|naam\s*bhejo|नाम\s*भेजो)/i;
+function wardAnswer(text) {
+    const w = wardIn(text); if (w) return w;
+    const m = String(text || '').trim().match(/^(?:मेरा|mera|हमारा|hamara)?\s*(?:वार्ड|ward)?\s*(?:नं\.?|no\.?|number|नंबर)?\s*(\d{1,2})\s*(?:है|hai|h|में|me|mein|वार्ड|ward)?\s*[।.!🙏]*$/i);
+    return m && Number(m[1]) >= 1 && Number(m[1]) <= WARD_MAX ? Number(m[1]) : null;
+}
+function askWardText(matches, shown, other, en) {
+    const n = matches.length;
+    if (matches[0] && matches[0].name_hi && /[a-z]/i.test(shown || '') && matches.every(m => m.name_hi === matches[0].name_hi)) shown = matches[0].name_hi;
+    else if (/^[a-z\s]+$/i.test(shown || '') && voterEngine.translit) shown = String(shown).split(/\s+/).map(w => voterEngine.translit(w)).join(' ');
+    const wards = Array.from(new Set(matches.map(m => Number(m.ward)))).sort((a, b) => a - b).join(', ');
+    if (askWardText.user && askWardText.user.slipWardAsks > 1) {
+        const i = askWardText.user.slipWardAsks;
+        const altHi = [`जी, *${shown}* की ही पर्ची ढूँढ रही हूँ 🙏 ये नाम वार्ड ${wards} में है—${other ? 'वो' : 'आप'} कौन से वार्ड ${other ? 'में रहते हैं' : 'से हैं'}? बस नंबर लिख दीजिए।`,
+                       `${n} *${shown}* हैं, इसलिए गलत पर्ची न जाए 🙏 ${other ? 'उनके' : 'अपने'} पिता/पति का नाम या वार्ड नंबर बता दीजिए।`,
+                       `समझ गई जी 🙏 *${shown}* का वार्ड नंबर नहीं पता तो "सूची" लिख दीजिए—मैं सारे नाम भेज दूँगी, उनमें से चुन लीजिए।`];
+        const altEn = [`Ji, *${shown}* ki hi parchi dhoondh rahi hoon 🙏 Ye naam ward ${wards} me hai—${other ? 'wo' : 'aap'} kaun se ward ${other ? 'me rehte hain' : 'se hain'}? Bas number likh dijiye.`,
+                       `${n} *${shown}* hain, isliye galat parchi na jaye 🙏 ${other ? 'Unke' : 'Apne'} pita/pati ka naam ya ward number bata dijiye.`,
+                       `Samajh gayi ji 🙏 *${shown}* ka ward number nahi pata to "list" likh dijiye—saare naam bhej dungi, unme se chun lijiye.`];
+        altHi.push(`माफ़ कीजिए, बार-बार पूछ रही हूँ 🙏 पर *${shown}* नाम के ${n} लोग हैं। ${other ? 'उनके' : 'आपके'} पिता/पति का नाम क्या है?`, `ठीक है जी 🙏 *${shown}* ${other ? 'के' : 'आपके'} घर के किसी बड़े (पिता/पति) का नाम या वार्ड नंबर लिख दीजिए, फिर पक्की पर्ची तुरंत भेजती हूँ।`);
+        altEn.push(`Maaf kijiye, baar-baar pooch rahi hoon 🙏 par *${shown}* naam ke ${n} log hain. ${other ? 'Unke' : 'Aapke'} pita/pati ka naam kya hai?`, `Theek hai ji 🙏 *${shown}* ke ghar ke kisi bade (pita/pati) ka naam ya ward number likh dijiye, phir pakki parchi turant bhejti hoon.`);
+        return (en ? altEn : altHi)[(i - 2) % altHi.length];
+    }
+    if (en) return other ? `*${shown}* naam ke ${n} voter list me hain 🙏 Sahi parchi ke liye bataiye—wo kis *ward* me rehte hain? (Ward na pata ho to unke pita/pati ka naam likh dijiye)`
+        : `*${shown}* naam ke ${n} voter list me hain 🙏 Sahi parchi ke liye bataiye—aap kis *ward* se hain? (Ward na pata ho to apne pita/pati ka naam likh dijiye)`;
+    return other ? `*${shown}* नाम के ${n} वोटर सूची में हैं 🙏 सही पर्ची के लिए बताइए—वो किस *वार्ड* में रहते हैं? (वार्ड न पता हो तो उनके पिता/पति का नाम लिख दीजिए)`
+        : `*${shown}* नाम के ${n} वोटर सूची में हैं 🙏 सही पर्ची के लिए बताइए—आप किस *वार्ड* से हैं? (वार्ड न पता हो तो अपने पिता/पति का नाम लिख दीजिए)`;
+}
+function needWard(matches, text) {
+    if (!Array.isArray(matches) || matches.length < 2 || wardIn(text)) return false;
+    return new Set(matches.map(v => Number(v.ward))).size > 1;
+}
+// ---- family card offer (same ward + same house no.) ----
+function familyOf(v) {
+    const h = String(v.house_no || v.h || '').trim();
+    if (!h || /^(0+|-|--|na)$/i.test(h)) return [];
+    const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
+    const fam = all.filter(x => Number(x.ward) === Number(v.ward) && String(x.house_no || x.h || '').trim() === h && Number(x.sr_no) !== Number(v.sr_no));
+    return fam.length >= 1 && fam.length <= 9 ? fam : []; // a very common house no. (e.g. "1") is not one family
+}
+const FAMILY_RX = /^(?:हाँ|हां|haan|han|ha|ji|जी|ok|okay)?\s*,?\s*(?:परिवार|पूरे परिवार|सब|सबकी|सभी|parivar|pariwar|family|sabki|sab ki|sabhi|ghar wal\w*|घर वाल\w*)(?:\s+(?:की|ki|का|ka|के|ke|वालों|walo\w*))?(?:\s+(?:पर्ची|parchi|card|कार्ड))?(?:\s+(?:भेज\w*|bhej\w*|chahiye|चाहिए|do|दो|de do|दे दो|dijiye|दीजिए))*\s*[।.!🙏]*$/i;
+function familyTail(user, v, en) {
+    const fam = familyOf(v);
+    if (!fam.length) return FAMILY_TAIL;
+    if (user) { user.familyOffer = { ward: Number(v.ward), sr: Number(v.sr_no), at: new Date().toISOString() }; }
+    return en ? `\n\n🏠 Aapke ghar (makan no. ${v.house_no}, ward ${v.ward}) se ${fam.length} aur voter list me hain. Sabki parchi ek card me chahiye to *parivar* likhiye 🙏`
+        : `\n\n🏠 आपके घर (मकान नं. ${v.house_no}, वार्ड ${v.ward}) से ${fam.length} और वोटर सूची में हैं। सबकी पर्ची एक कार्ड में चाहिए तो *परिवार* लिखिए 🙏`;
+}
+/** Runs BEFORE the NLU: answers to our own slip questions (ward asked, family offered) never go elsewhere. */
+function preempt(text, user) {
+    if (!user || !text) return null;
+    const t = String(text).trim();
+    if (user.familyOffer && Date.now() - Date.parse(user.familyOffer.at) < 6 * 3600 * 1000 && FAMILY_RX.test(t)) {
+        const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
+        const head = all.find(x => Number(x.ward) === user.familyOffer.ward && Number(x.sr_no) === user.familyOffer.sr);
+        if (head) { delete user.familyOffer; return { kind: 'family', voter: head, members: [head].concat(familyOf(head)) }; }
+    }
+    if (user.slipAwaitWard && fresh(user, 'disambiguationMatches') && t.split(/\s+/).length <= 8) {
+        const list = user.disambiguationMatches || [];
+        if (wardAnswer(t) || DONT_KNOW_WARD.test(t) || list.some(v => fatherGiven(t, v))) return decide(t, user, { slipIntent: true, fromPreempt: true });
+    }
+    return null;
+}
+
 function decide(body, user, opts = {}) {
     const text = String(body || '').trim();
     if (!text) return null;
@@ -242,7 +309,26 @@ function decide(body, user, opts = {}) {
     // 1. a numbered list is pending
     if (fresh(user, 'disambiguationMatches') && Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length) {
         const list = user.disambiguationMatches;
-        const idx = choiceIndex(text, list.length);
+        if (user.slipAwaitWard) {
+            const who = pendingOther ? 'other' : 'self';
+            let nm = (list[0] && list.every(m => m.name_hi === list[0].name_hi) && list[0].name_hi) || (pendingOther && user.slipTarget && user.slipTarget.nameHi) || user.lastSlipQuery || '';
+            if (/^[a-z\s]+$/i.test(nm) && voterEngine.translit) nm = nm.split(/\s+/).map(w => voterEngine.translit(w)).join(' ');
+            const byRel0 = list.filter(v => fatherGiven(fatherText, v));
+            const w = wardAnswer(text);
+            const pool = w ? byRel0.filter(v => Number(v.ward) === w) : byRel0;
+            if (pool.length === 1) { delete user.slipAwaitWard; return deliverTo(user, pool[0], pendingOther); }
+            if (w) {
+                delete user.slipAwaitWard;
+                const inW = list.filter(v => Number(v.ward) === w);
+                if (inW.length === 1) { setPending(user, 'confirm', inW[0], who); return { kind: 'confirm', voter: inW[0], text: pendingOther ? confirmOther(inW[0], en) : confirmText(inW[0], en) }; }
+                if (inW.length > 1) { setPending(user, 'choose', inW, who); return { kind: 'choose', matches: inW, text: pendingOther ? listOther(inW, nm, en) : listText(inW, nm, en) }; }
+                setPending(user, 'choose', list, who);
+                return { kind: 'choose', matches: list, text: (en ? `Ward ${w} me *${nm}* naam se koi nahi mila 🙏 Ye log mile hain—\n\n` : `वार्ड ${w} में *${nm}* नाम से कोई नहीं मिला 🙏 ये लोग मिले हैं—\n\n`) + (pendingOther ? listOther(list, nm, en) : listText(list, nm, en)) };
+            }
+            if (DONT_KNOW_WARD.test(text)) { setPending(user, 'choose', list, who); return { kind: 'choose', matches: list, text: (en ? 'Koi baat nahi 🙏 ' : 'कोई बात नहीं 🙏 ') + (pendingOther ? listOther(list, nm, en) : listText(list, nm, en)) }; }
+            if (byRel0.length > 1) { delete user.slipAwaitWard; setPending(user, 'choose', byRel0, who); return { kind: 'choose', matches: byRel0, text: pendingOther ? listOther(byRel0, nm, en) : listText(byRel0, nm, en) }; }
+        }
+        const idx = user.slipAwaitWard ? -1 : choiceIndex(text, list.length);
         if (idx >= 0) return deliverTo(user, list[idx], pendingOther);
         const byRel = list.find(v => fatherGiven(fatherText, v));
         if (byRel) return deliverTo(user, byRel, pendingOther);
@@ -293,6 +379,12 @@ function decide(body, user, opts = {}) {
     if (other) {
         const withRel = matches.find(v => fatherGiven(fatherText, v));
         if (withRel) return deliverTo(user, withRel, true);
+        if (matches.length > 1 && needWard(matches, opts.searchText || text)) {
+            const asks = (user && user.slipAwaitWardPrev ? user.slipWardAsks || 0 : 0) + 1;
+            setPending(user, 'choose', matches, 'other'); if (user) { user.slipAwaitWard = true; user.slipAwaitWardPrev = true; user.slipWardAsks = asks; }
+            askWardText.user = user; const t0 = askWardText(matches, shown, true, en); askWardText.user = null;
+            return { kind: 'choose', matches, text: t0 };
+        }
         if (matches.length > 1) {
             const prevList = user && fresh(user, 'disambiguationMatches') && pendingOther && Array.isArray(user.disambiguationMatches) ? user.disambiguationMatches : null;
             const same = prevList && prevList.length === matches.length && prevList.every((v, i) => (v.id || v.epic) === (matches[i].id || matches[i].epic));
@@ -324,6 +416,11 @@ function decide(body, user, opts = {}) {
         const withRel = matches.find(v => fatherGiven(fatherText, v));
         if (withRel) return deliverTo(user, withRel);
         setPending(user, 'choose', matches, 'self');
+        if (needWard(matches, opts.searchText || text)) {
+            user.slipWardAsks = (user.slipAwaitWardPrev ? user.slipWardAsks || 0 : 0) + 1; user.slipAwaitWard = true; user.slipAwaitWardPrev = true;
+            askWardText.user = user; const t1 = askWardText(matches, shown, false, en); askWardText.user = null;
+            return { kind: 'choose', matches, text: t1 };
+        }
         return { kind: 'choose', matches, text: listText(matches, query, en) };
     }
     const v = matches[0];
@@ -333,4 +430,4 @@ function decide(body, user, opts = {}) {
 }
 
 const FAMILY_TAIL = '\n\n👨‍👩‍👧 परिवार के किसी और सदस्य की पर्ची चाहिए तो उनका नाम और पिता/पति का नाम भेज दीजिए 🙏';
-module.exports = { setPending, deliverTo, fatherGiven, decide, confirmOther, listOther, ASK_OTHER, NOT_FOUND_OTHER, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };
+module.exports = { preempt, familyTail, familyOf, wardAnswer, setPending, deliverTo, fatherGiven, decide, confirmOther, listOther, ASK_OTHER, NOT_FOUND_OTHER, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };

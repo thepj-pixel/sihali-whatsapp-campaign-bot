@@ -119,12 +119,12 @@ async function ownerTranscript(label, llm) {
     check(/प्रवीण कुमार/.test(r.reply) && !BAD.test(r.reply), `${label} T9 pareven -> प्रवीण कुमार`);
     { const bots = user.history.filter(x => x.role === 'bot').map(x => x.text); check(new Set(bots.slice(-5)).size === 5, `${label} no identical reply in the last 5 turns`); }
 
-    // the voter picks number 2 from the प्रवीण list -> that slip (another person's) goes out
+    // ward asked first (5 Nov): the voter answers with entry 2's father/husband name + ward -> that slip goes out
     const list = user.disambiguationMatches || [];
     if (list.length >= 2) {
-        r = await turn(user, phone, '2', llm);
+        r = await turn(user, phone, `pita ${list[1].rel_name_hi} ward ${list[1].ward}`, llm);
         console.log(' B9b:', r.reply.split('\n').slice(0, 4).join(' | '));
-        check(r.kind === 'slip_deliver' && r.voter && r.voter.name_hi === list[1].name_hi && r.voter.rel_name_hi === list[1].rel_name_hi, `${label} T9b picks entry 2 of प्रवीण list`);
+        check(r.kind === 'slip_deliver' && r.voter && r.voter.name_hi === list[1].name_hi && r.voter.rel_name_hi === list[1].rel_name_hi, `${label} T9b father+ward picks entry 2 of प्रवीण list`);
         check(user.memory.name === 'कृष्ण कुमार', `${label} T9b own memory name untouched by family slip`);
     } else check(false, `${label} T9b list expected`);
 
