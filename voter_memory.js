@@ -404,6 +404,7 @@ function cardObject(user) {
     if (m.commitment && m.commitment.soft) o.commitment = (o.commitment || 'committed') + ' (soft, via emoji)';
     if (Array.isArray(m.interests) && m.interests.length) o.interests = m.interests.slice(0, 8);
     if (m.relName) o.fatherOrHusband = m.relName;
+    if (m.scriptPref) o.replyScript = m.scriptPref === 'hinglish' ? 'hinglish (Roman letters)' : 'hindi (Devanagari)';
     if (m.operatorNotes) o.operatorNotes = String(m.operatorNotes).slice(0, 240);
         if (m.slip && m.slip.relName) o.slip = `${m.slip.name} (${m.slip.relation} ${m.slip.relName}, voter-list ward ${m.slip.ward})`;
     return o;

@@ -880,6 +880,7 @@ async function startSession(sessionObj) {
                         userMemory.save();
                         replyText = `राम राम ${user.name || 'भाई जी'}! 🙏\nहम बाबा अभय सिंह (मोटी आंगली वाले) के साथ जुड़े हैं।\nकृपया यह नंबर 'बाबा अभय सिंह' नाम से ज़रूर सेव कर लें ताकि मतदाता पर्ची आप तक आसानी से पहुँच सके! 📲\n\nआप बातचीत हिंदी (देवनागरी) में पसंद करेंगे या Hinglish (English अक्षरों) में?\n1️⃣ Hinglish (ABC format)\n2️⃣ Hindi (देवनागरी)\n\n*(या सीधे अपनी वोटर पर्ची देखने के लिए अपना शुभ नाम लिखकर भेजें! 🚩)*`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
+                        try { require('./voter_memory.js').ensure(user).scriptAskedAt = new Date().toISOString(); } catch (e) {} // language asked here; the brain won't ask again
                         userMemory.recordMessage(senderPhone, 'bot', replyText, 'consent_ack', sessionObj.name);
                         logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: replyText, status: 'CONSENT_ACCEPTED' });
                         continue;
@@ -888,7 +889,7 @@ async function startSession(sessionObj) {
                     // Dynamic Language Preference Choice
                     if (user && user.conversationStage === 'ASKED_LANGUAGE') {
                         if (lower === '1' || lower === '1.' || lower.includes('hinglish') || lower.includes('english')) {
-                            user.languagePreference = 'hinglish';
+                            replyBrain.setScriptPref(user, 'hinglish', 'voter');
                             user.conversationStage = 'ASKED_OCCUPATION';
                             userMemory.save();
                             replyText = `Bahut badhiya ${user.name || 'bhai ji'}! Ab se aapse Hinglish (ABC format) me hi baat hogi. 😊\nAap kya karte ho — student, kisan, army, police ya apna koi kaam? 🚩`;
@@ -896,7 +897,7 @@ async function startSession(sessionObj) {
                             userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_choice', sessionObj.name);
                             continue;
                         } else if (lower === '2' || lower === '2.' || lower.includes('hindi') || lower.includes('हिंदी')) {
-                            user.languagePreference = 'hi';
+                            replyBrain.setScriptPref(user, 'hindi', 'voter');
                             user.conversationStage = 'ASKED_OCCUPATION';
                             userMemory.save();
                             replyText = `बहुत बढ़िया ${user.name || 'भैया'}! अब से आपसे हिंदी (देवनागरी) में बातचीत होगी। 😊\nआप क्या करते हैं — पढ़ाई, किसानी, फौज, पुलिस या अपना कोई काम? 🚩`;
@@ -907,18 +908,19 @@ async function startSession(sessionObj) {
                     }
 
                     // On-the-fly Language Switch
-                    if (lower.includes('hinglish me') || lower.includes('english me')) {
-                        user.languagePreference = 'hinglish';
+                    // script preference switch (5 Nov): saved as memory.scriptPref and honoured by every later reply
+                    if ((lower.includes('hinglish me') || lower.includes('english me') || lower.includes('roman me')) && body.trim().split(/\s+/).length <= 10) {
+                        replyBrain.setScriptPref(user, 'hinglish', 'voter');
                         userMemory.save();
-                        replyText = `Theek hai bhaiya! Ab se aapse Hinglish (ABC format) me hi baat karenge. 😊 Bataiye, aaj gaon me kya mahol hai? 🚩`;
+                        replyText = `Zaroor ji 🙏 Ab se Hinglish (Roman) me hi baat karungi. Bataiye, kya madad karun—parchi, booth ya gaon ka koi kaam?`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_switch', sessionObj.name);
                         continue;
                     }
-                    if (lower.includes('hindi me') || lower.includes('हिंदी में')) {
-                        user.languagePreference = 'hi';
+                    if ((lower.includes('hindi me') || lower.includes('हिंदी में') || lower.includes('हिन्दी में')) && body.trim().split(/\s+/).length <= 10) {
+                        replyBrain.setScriptPref(user, 'hindi', 'voter');
                         userMemory.save();
-                        replyText = `जी बिल्कुल भैया! अब से आपसे हिंदी (देवनागरी) में बातचीत होगी। 😊 बताइए, आज गाँव में क्या माहौल है? 🚩`;
+                        replyText = `ज़रूर जी 🙏 अब से हिंदी में ही बात करूँगी। बताइए, क्या मदद करूँ—पर्ची, बूथ या गाँव का कोई काम?`;
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         userMemory.recordMessage(senderPhone, 'bot', replyText, 'lang_switch', sessionObj.name);
                         continue;

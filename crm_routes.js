@@ -103,6 +103,7 @@ function buildProfile(user, deps) {
         interests: topics.join(', '),
         commitment: m.commitment && m.commitment.status ? (m.commitment.status + (m.commitment.soft ? ' (soft, emoji)' : '') + (m.commitment.quote ? ' — "' + String(m.commitment.quote).slice(0, 60) + '"' : '')) : '',
         notes: m.operatorNotes || '',
+        scriptPref: m.scriptPref || '',
         summary: (m.summaryLines || []).slice(-3).join(' | '),
         optedOut: !!(user.broadcastOptOut || user.consentStatus === 'REJECTED'),
         line: user.assignedLine || '',
@@ -134,6 +135,10 @@ function saveProfile(user, body = {}) {
     if (body.familyVotes !== undefined) { const n = Number(body.familyVotes); if (n >= 1 && n <= 40) m.familyVotes = n; else if (String(body.familyVotes).trim() === '') m.familyVotes = null; }
     const interests = clean(body.interests);
     if (interests !== undefined) m.interests = interests.split(/[,;]/).map(s => s.trim()).filter(Boolean).slice(0, 10);
+    if (body.scriptPref !== undefined) {
+        if (['hindi', 'hinglish'].includes(body.scriptPref)) require('./reply_brain.js').setScriptPref(user, body.scriptPref, 'operator');
+        else if (body.scriptPref === '') { m.scriptPref = null; }
+    }
     const notes = clean(body.notes);
     if (notes !== undefined) m.operatorNotes = notes;
     op.updatedAt = new Date().toISOString();

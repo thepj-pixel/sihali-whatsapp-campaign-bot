@@ -30,9 +30,41 @@ const hasDevanagari = t => /[\u0900-\u097F]/.test(String(t || ''));
 const emojiSense = require('./emoji_sense.js');
 const MEDIA_RX = /^\[(voice note|audio|sticker|photo|फोटो[^\]]*|video|वीडियो|document|location|लोकेशन|contact card|gif)\]$/i;
 
+// Script preference (owner, 5 Nov): default reply script is Hindi (Devanagari) even when the voter types Roman.
+// memory.scriptPref = 'hindi' | 'hinglish' (asked once early, changeable any time). DEFAULT_SCRIPT=auto restores the
+// old "follow the voter's script" behaviour (used by the legacy content suites).
+const SCRIPT_ASK_HI = 'वैसे, आप हिंदी में बात करना पसंद करेंगे या Hinglish (Roman) में? 🙏';
+const SCRIPT_ASK_RX = /हिंदी में बात करना पसंद करेंगे या Hinglish/;
+const SCRIPT_SWITCH_RX = /((hinglish|roman|english|abc)\s*(me|mein|mai|में|letters|akshar|format)?\s*(hi\s*)?(baat|bol|likh|likho|karo|kijiye|chalega|बात|लिख|बोल))|((hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी)\s*(me|mein|mai|में)\s*(hi\s*|ही\s*)?(baat|bol|likh|likho|karo|kijiye|बात|लिख|बोल|करो))/i;
+const SCRIPT_ANS_HINDI = /^(hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी|1|1️⃣)[\s\p{L}\p{M}!.,🙏👍]{0,25}$/iu;
+const SCRIPT_ANS_HINGLISH = /^(hinglish|roman|english|abc|2|2️⃣)[\s\p{L}\p{M}!.,🙏👍]{0,25}$/iu;
+function scriptPrefOf(user) {
+    const m = user && user.memory;
+    if (m && (m.scriptPref === 'hindi' || m.scriptPref === 'hinglish')) return m.scriptPref;
+    if (user && user.languagePreference === 'hinglish') return 'hinglish';
+    if (user && user.languagePreference === 'hi') return 'hindi';
+    return null;
+}
+function setScriptPref(user, pref, by = 'voter') {
+    if (!user || !['hindi', 'hinglish'].includes(pref)) return;
+    const m = voterMemory.ensure(user);
+    m.scriptPref = pref; m.scriptPrefBy = by; m.scriptPrefAt = new Date().toISOString();
+    if (!m.scriptAskedAt) m.scriptAskedAt = m.scriptPrefAt;
+    user.languagePreference = pref === 'hinglish' ? 'hinglish' : 'hi';
+}
+function scriptMismatch(out, l) {
+    const t = String(out || '');
+    const dev = (t.match(/[\u0900-\u097F]/g) || []).length, lat = (t.match(/[a-z]/gi) || []).length;
+    if (l === 'hi' && lat > dev) return 'wrong_script';
+    if (l === 'en' && dev > 3) return 'wrong_script';
+    return null;
+}
+
 function lang(text, user) {
-    if (user && user.languagePreference === 'hinglish') return 'en';
-    if (user && user.languagePreference === 'hi') return 'hi';
+    const sp = scriptPrefOf(user);
+    if (sp === 'hinglish') return 'en';
+    if (sp === 'hindi') return 'hi';
+    if (process.env.DEFAULT_SCRIPT !== 'auto') return 'hi';
     const m = user && user.memory;
     if (MEDIA_RX.test(String(text || '').trim())) return m && m.language === 'en' ? 'en' : 'hi';
     if (emojiSense.analyze(text).emojiOnly) return m && m.language === 'en' ? 'en' : 'hi';
@@ -200,6 +232,12 @@ function classify(text, user = {}) {
     const topic = detectTopic(t);
     const out = (intent, extra = {}) => ({ intent, topic, ...extra });
     if (!t) return out('unclear');
+    // script preference: explicit switch any time, or a short answer to our one-time question
+    if (SCRIPT_SWITCH_RX.test(t) && t.split(/\s+/).length <= 10) return out('script_pref', { script: /(hinglish|roman|english|abc)/i.test(t) && !/(hindi|हिंदी|हिन्दी|devanagari|देवनागरी)\s*(me|mein|में)/i.test(t) ? 'hinglish' : 'hindi' });
+    if (SCRIPT_ASK_RX.test(lastBotText(user)) && t.split(/\s+/).length <= 5) {
+        if (/(hinglish|roman|english|abc)/i.test(t) || SCRIPT_ANS_HINGLISH.test(t)) return out('script_pref', { script: 'hinglish' });
+        if (/(hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी)/i.test(t) || SCRIPT_ANS_HINDI.test(t)) return out('script_pref', { script: 'hindi' });
+    }
     // emoji-only replies (5 Nov): 👍/✅/🙏/❤️ after our vote ask = soft commit; otherwise a short human emoji reply by mood
     const emo = emojiSense.analyze(t);
     if (emo.emojiOnly) {
@@ -469,6 +507,12 @@ function compose(cls, ctx) {
             const skLine = sk && !mem.toldItems.includes(sk.id) ? S(' आगे का संकल्प भी यही है: ', ' Aage ka sankalp bhi yahi hai: ') + kb.render(sk, l) : '';
             if (skLine && sk) used.push(sk.id);
             return { text: S(`पक्की तारीख़ का वादा मैं नहीं करूँगी${H} 🙏 आपकी ${c && c.ward ? 'वार्ड ' + c.ward + ' की ' : ''}${label} वाली बात रजिस्टर में दर्ज है और अभय सिंह जी तक पहुँच चुकी है।`, `Pakki tareekh ka vaada main nahi karungi${H} 🙏 Aapki ${c && c.ward ? 'ward ' + c.ward + ' ki ' : ''}${label} wali baat register me darj hai aur Abhay Singh ji tak pahunch chuki hai.`) + skLine, ask: false, used };
+        }
+        case 'script_pref': {
+            const pref = cls.script === 'hinglish' ? 'hinglish' : 'hindi';
+            setScriptPref(user, pref, 'voter');
+            ctx.l = pref === 'hinglish' ? 'en' : 'hi';
+            return { text: pref === 'hinglish' ? 'Zaroor ji 🙏 Ab se Hinglish (Roman) me hi baat karungi. Bataiye, kya madad karun—parchi, booth ya gaon ka koi kaam?' : 'ज़रूर जी 🙏 अब से हिंदी में ही बात करूँगी। बताइए, क्या मदद करूँ—पर्ची, बूथ या गाँव का कोई काम?', ask: false };
         }
         case 'emoji': {
             const k = cls.emoji || 'other';
@@ -1160,21 +1204,39 @@ async function respond(message, user = {}, opts = {}) {
             const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' 2026 16 7:30 5:30 40 1';
             let why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user, intent: cls.intent });
             if (!why && t.pendingQ && /\?/.test(String(out))) why = 'extra_question';
+            if (!why) why = scriptMismatch(out, t.l);
             if (!why) { text = String(out).trim(); source = 'llm'; }
             else { source = 'template(llm_rejected:' + why + ')'; rejected = { why, out: String(out || '').slice(0, 300) }; }
         } catch (e) { source = 'template(llm_error)'; }
     }
-    if (!t.flowResult && user && replyQuality.isRepeated(text, user)) {
+    if (cls.intent === 'script_pref') t.l = cls.script === 'hinglish' ? 'en' : 'hi';
+    if (!t.flowResult && cls.intent !== 'script_pref' && user && replyQuality.isRepeated(text, user)) {
         const alt = redirectVariants(user, t.l, message).find(v => !replyQuality.isRepeated(v, user));
         text = alt || text;
         source += '+redirect';
     }
     if (t.pendingQ) text += ' ' + t.pendingQ;
     if (source !== 'llm') text = dialectize(text, user, t.l);
+    text = maybeAskScript(text, user, cls, t);
     text = text.charAt(0).toUpperCase() + text.slice(1);
     if (user) voterMemory.markTold(user, t.c.used || []);
     if (t.c.needsAdmin && user) user.needsAdmin = { at: new Date().toISOString(), text: String(message).slice(0, 200), intent: cls.intent };
     return { text, intent: cls.intent, topic: cls.topic, stage: t.stage, previousStage: t.previousStage, needsAdmin: !!t.c.needsAdmin, source, rejected, honorific: t.hon, gender: t.person.gender, facts: t.ctx.items.map(i => i.id), used: t.c.used || [], samasyaId: t.flowResult && t.flowResult.samasyaId, mulaqatId: t.flowResult && t.flowResult.mulaqatId };
+}
+
+/** One-time, early "Hindi or Hinglish?" question (1st or 2nd bot reply). Ignored -> stays Hindi, never asked again. */
+function maybeAskScript(text, user, cls, t) {
+    if (!user || process.env.SCRIPT_ASK === 'off') return text;
+    const m = voterMemory.ensure(user);
+    if (m.scriptPref || m.scriptAskedAt || scriptPrefOf(user) || cls.intent === 'script_pref') return text;
+    const botTurns = (user.history || []).filter(h => h.role === 'bot').length;
+    if (botTurns >= 2) { m.scriptAskedAt = m.scriptAskedAt || 'skipped'; return text; }
+    const sensitive = ['abuse', 'condolence', 'wrong_number', 'corruption', 'grievance', 'opposed', 'emoji'].includes(cls.intent) || (cls.intent === 'emoji' && cls.emoji === 'upset');
+    const busy = /\?/.test(text) || (t && t.flowResult) || flows.inFlow(user) || sensitive;
+    if (busy && botTurns === 0) return text; // ask in the 2nd reply instead
+    if (sensitive || (t && t.flowResult) || flows.inFlow(user)) { m.scriptAskedAt = 'skipped'; return text; }
+    m.scriptAskedAt = new Date().toISOString();
+    return text + (text.length > 160 ? '\n\n' : ' ') + SCRIPT_ASK_HI;
 }
 
 /** Strip model artefacts: <think> blocks, wrapping quotes, "Reply:" labels, markdown. */
@@ -1223,4 +1285,4 @@ function buildPersuasionNudge(user = {}, goal = {}, now = new Date()) {
 
 const SNIPPETS = {};
 const KB_TOPIC = {};
-module.exports = { validateAgainstDraft, cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };
+module.exports = { scriptPrefOf, setScriptPref, scriptMismatch, maybeAskScript, SCRIPT_ASK_HI, validateAgainstDraft, cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };

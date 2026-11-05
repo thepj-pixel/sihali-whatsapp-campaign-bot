@@ -112,10 +112,14 @@ function script() {
     setInterval(pollChat, 8000);
 
     // ---------- profile & memory ----------
-    var F = [['name', 'नाम'], ['relName', 'पिता/पति'], ['ward', 'वार्ड'], ['booth', 'बूथ (auto)', 1], ['gender', 'लिंग (M/F)'], ['age', 'आयु / उम्र'], ['stance', 'रुख़'], ['familyVotes', 'घर के वोट'], ['interests', 'रुचि / मुद्दे']];
+    var F = [['name', 'नाम'], ['relName', 'पिता/पति'], ['ward', 'वार्ड'], ['booth', 'बूथ (auto)', 1], ['gender', 'लिंग (M/F)'], ['age', 'आयु / उम्र'], ['stance', 'रुख़'], ['familyVotes', 'घर के वोट'], ['interests', 'रुचि / मुद्दे'], ['scriptPref', 'जवाब की लिपि']];
     function renderProfile(p) {
         var el = document.getElementById('crm-profile-panel'); if (!el) return;
         var g = F.map(function (f) {
+            if (f[0] === 'scriptPref') {
+                var so = [['', '— (डिफ़ॉल्ट हिंदी)'], ['hindi', 'हिंदी (देवनागरी)'], ['hinglish', 'Hinglish (Roman)']];
+                return '<div><label>' + f[1] + '</label><select data-pf="scriptPref">' + so.map(function (o) { return '<option value="' + o[0] + '"' + ((p.scriptPref || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
+            }
             if (f[0] === 'stance') {
                 var opts = [['unknown', '⚪ पता नहीं'], ['undecided', '🟡 सोच रहे'], ['leaning', '🟢 झुकाव'], ['committed', '✅ पक्का'], ['opposed', '🔴 विरोधी']];
                 return '<div><label>' + f[1] + '</label><select data-pf="stance">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (p.stance === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>';
