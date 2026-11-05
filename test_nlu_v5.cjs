@@ -18,12 +18,15 @@ function check(cond, label) { if (cond) pass++; else { fail++; failures.push(lab
 const STUB = {
     'acha koin hu m aur mera voter id abhi tak nahi aaya': { intent: 'voter_card_issue', target_person: 'self', refers_to: 'self name', wants_slip: false, wants_contact: false, sentiment: 'concerned', script: 'roman' },
     'baba ke 100 vote kam h sihali me ..': { intent: 'political_talk', target_person: null, person_name_hi: 'कृष्ण', wants_slip: false, sentiment: 'concerned', script: 'roman' },
-    'babal yadav kie': { intent: 'slip_request', target_person: 'other', person_name_hi: 'बबल यादव', person_name_roman: 'babal yadav kie', wants_slip: true, script: 'roman' },
+    // live finding: the model shrugged at this one -> the rules must win
+    'babal yadav kie': { intent: 'chitchat', target_person: null, wants_slip: false, script: 'roman' },
     'babal yadav kie bhi parchi de do': { intent: 'slip_request', target_person: 'other', person_name_hi: 'बबल यादव', person_name_roman: 'babal yadav', wants_slip: true, script: 'roman' },
     'parveen kumar': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', wants_slip: true, script: 'roman' },
-    'are bhai bataya naa naam voter id me': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', refers_to: 'pending slip for Parveen Kumar', wants_slip: true, script: 'roman' },
+    // live finding: the model copied a father's name out of the list -> must be dropped (ungrounded), never deliver
+    'are bhai bataya naa naam voter id me': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', father_name: 'लाल सिंह', refers_to: 'pending slip for Parveen Kumar', wants_slip: true, script: 'roman' },
+    'are parveen kumar kie voter list chaiye thi_': {},
     'are parveen kumar kie voter list chaiye thi': { intent: 'slip_request', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', wants_slip: true, script: 'roman' },
-    'nahi uski voter list id de doo': { intent: 'slip_request', target_person: 'other', person_name_hi: null, refers_to: 'Parveen Kumar', wants_slip: true, script: 'roman' },
+    'nahi uski voter list id de doo': { intent: 'slip_request', target_person: 'other', person_name_hi: 'प्रवीण कुमार', father_name: 'हुकुम लाल', refers_to: 'Parveen Kumar', wants_slip: true, script: 'roman' },
     'are pareven kumar h naam h uska': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'pareven kumar', wants_slip: true, script: 'roman' },
     'tumhar contact details do': { intent: 'contact_request', wants_contact: true, script: 'roman' },
     'राम राम अभय सिंह जी, हम आपके साथ nhai हैं': { intent: 'opposition', sentiment: 'concerned', script: 'hindi' }
@@ -170,6 +173,9 @@ function units() {
     const j = nlu.parseJson('<think>x</think> ```json {"intent":"slip_request","wants_slip":true,} ```');
     check(j && j.intent === 'slip_request', 'robust JSON parse');
     check(nlu.parseJson('no json here') === null, 'parse null');
+    check(!nlu.grounded('लाल सिंह', 'are bhai bataya naa naam voter id me'), 'ungrounded father dropped');
+    check(nlu.grounded('प्रवीण कुमार', 'are pareven kumar h naam h uska'), 'grounded variant name');
+    check(nlu.grounded('भवानी राम', 'bhawani ram'), 'grounded father bhawani');
     const c = nlu.clean({ intent: 'weird', person_name_hi: 'बबल यादव की', ward: 44 });
     check(c.intent === 'unclear' && c.person_name_hi === 'बबल यादव' && c.ward === null, 'clean whitelists');
     const m = nlu.merge(nlu.rules('baba ke 100 vote kam h', {}), nlu.clean({ intent: 'slip_answer', wants_slip: true, person_name_hi: 'कृष्ण' }), 'baba ke 100 vote kam h');
@@ -179,6 +185,8 @@ function units() {
     const u = { history: [{ role: 'bot', text: 'क्या आपके पिता का नाम अभय सिंह है? पर्ची' }], pendingParchiCandidate: v, slipPendingAt: new Date().toISOString() };
     check(slipFlow.decide('baba ke 100 vote kam h sihali me', u, { slipIntent: false }) === null || slipFlow.decide('baba ke 100 vote kam h sihali me', u, { slipIntent: false }).kind !== 'deliver', 'baba != father name');
     check(router.plan(nlu.rules('tumhar contact details do', {}), {}, { lineDisplay: 'X' }).reply.contactCard === true, 'contact plan');
+    const ur = { memory: { name: 'Krishan Kumar' }, history: [] };
+    check(/आप कृष्ण कुमार जी हैं/.test(router.plan(nlu.rules('koin hu m', ur), ur, {}).reply.text), 'Roman memory name shown in Devanagari');
 }
 
 (async () => {

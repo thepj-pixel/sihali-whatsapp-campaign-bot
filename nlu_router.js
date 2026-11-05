@@ -25,8 +25,15 @@ function pick(user, key, arr) {
 }
 function ownName(user) {
     const m = (user && user.memory) || {};
-    const n = m.name || (m.slip && m.slip.name) || '';
-    return String(n || '').trim();
+    let n = String(m.name || (m.slip && m.slip.name) || '').trim();
+    // Hindi replies show a Roman-typed name in Devanagari ("Krishan Kumar" -> "कृष्ण कुमार")
+    if (n && /^[a-z\s.]+$/i.test(n) && !scriptEn(user)) {
+        const words = n.split(/\s+/).filter(Boolean);
+        const dv = nlu.toDevanagari(words);
+        if (/^[\u0900-\u097F\s]+$/.test(dv)) n = dv;
+        else n = n.replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return n;
 }
 const ji = n => (n ? `${n} जी` : '');
 

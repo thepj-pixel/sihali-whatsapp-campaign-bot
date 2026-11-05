@@ -233,9 +233,58 @@ function clean(j) {
     return o;
 }
 
+/** Is this name actually in the message (any token, Roman/Devanagari/variant)? Stops the LLM copying a name or a
+ *  father's name out of the history/list ("are bhai bataya naa" -> father "लाल सिंह" would deliver a slip). */
+let HI2EN = null;
+function hiToEn() {
+    // Devanagari name word -> Roman spellings, learned from the roll itself (भवानी -> bhavani)
+    if (HI2EN) return HI2EN;
+    HI2EN = new Map();
+    try {
+        const V = require(process.env.VOTERS_PATH || './voters_cleaned.json');
+        const add = (hi, en) => {
+            const h = String(hi || '').split(/\s+/), e = String(en || '').toLowerCase().split(/\s+/);
+            if (h.length !== e.length) return;
+            h.forEach((w, i) => { if (!HI2EN.has(w)) HI2EN.set(w, new Set()); HI2EN.get(w).add(e[i]); });
+        };
+        for (const v of V) { add(v.name_hi, v.name_en || v.ne); add(v.rel_name_hi, v.rel_name_en || v.re); }
+    } catch (e) {}
+    return HI2EN;
+}
+function grounded(name, text, user) {
+    if (!name) return false;
+    const sk = x => String(x || '').toLowerCase().replace(/[aeiouy]/g, '').replace(/w/g, 'v').replace(/(.)\1+/g, '$1');
+    const tt = tokens(text).map(w => w.toLowerCase());
+    const forms = new Set();
+    for (const w of tt) {
+        forms.add(w);
+        if (NAME_TRANSLIT[w]) NAME_TRANSLIT[w].forEach(x => forms.add(x));
+        if (voterEngine.translit && /[a-z]/.test(w)) forms.add(String(voterEngine.translit(w)).toLowerCase());
+    }
+    const generic = /^(kumar|singh|devi|lal|ram|yadav|कुमार|सिंह|देवी|लाल|राम|यादव)$/i;
+    const nt = tokens(name).map(w => w.toLowerCase()).filter(w => !generic.test(w));
+    if (!nt.length) return false;
+    const romanMatch = w => /^[a-z]{3,}$/.test(w) && tt.some(x => /^[a-z]{3,}$/.test(x) && x[0] === w[0] && sk(x) === sk(w));
+    return nt.some(w => forms.has(w) || romanMatch(w) || (/[\u0900-\u097F]/.test(w) && [...(hiToEn().get(w) || [])].some(romanMatch)));
+}
+const sameAsTarget = (name, user) => {
+    const st = user && user.slipTarget;
+    if (!st || !name) return false;
+    const n = String(name).toLowerCase().trim();
+    return [st.nameHi, st.nameRoman, st.name].filter(Boolean).some(x => String(x).toLowerCase().trim() === n);
+};
+
 /** Merge: LLM leads, rules guard (privacy + obvious patterns). */
-function merge(r, l, text) {
+function merge(r, l, text, user) {
     if (!l) return r;
+    // the LLM shrugged but the rules saw something specific: trust the rules
+    if (['unclear', 'chitchat', 'other', 'greeting', 'thanks'].includes(l.intent) && !['unclear', 'chitchat', 'greeting', 'thanks', 'question'].includes(r.intent) && r.confidence >= 0.55) {
+        return { ...r, source: 'rules', llm_intent: l.intent };
+    }
+    // names must come from the message itself (or be the person already being searched)
+    if (l.father_name && !grounded(l.father_name, text, user)) l.father_name = null;
+    if (l.person_name_hi && !grounded(l.person_name_hi, text, user) && !sameAsTarget(l.person_name_hi, user)) l.person_name_hi = null;
+    if (l.person_name_roman && !grounded(l.person_name_roman, text, user) && !sameAsTarget(l.person_name_roman, user)) l.person_name_roman = null;
     const o = { ...r, ...l, source: 'llm', rules_intent: r.intent, confidence: 0.85 };
     o.script = l.script || r.script;
     // guard-rails
@@ -262,7 +311,7 @@ async function understand(text, user, opts = {}) {
     if (process.env.NLU_LLM === 'off' || !opts.callLLM) return r;
     const raw = await llm(text, user, opts);
     if (!raw) return { ...r, llm_failed: true };
-    return merge(r, clean(raw), String(text || ''));
+    return merge(r, clean(raw), String(text || ''), user);
 }
 
 /** Search text for slip_flow from an NLU verdict (Devanagari first, else Roman). */
@@ -272,4 +321,4 @@ function searchTextOf(n) {
     return [name, n.father_name ? `pita ${n.father_name}` : '', n.ward ? `ward ${n.ward}` : ''].filter(Boolean).join(' ').trim();
 }
 
-module.exports = { understand, rules, nameWords, toDevanagari, parseJson, clean, merge, searchTextOf, NAME_TRANSLIT, CANDIDATE_RX, SYSTEM, INTENTS };
+module.exports = { grounded, understand, rules, nameWords, toDevanagari, parseJson, clean, merge, searchTextOf, NAME_TRANSLIT, CANDIDATE_RX, SYSTEM, INTENTS };
