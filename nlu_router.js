@@ -69,6 +69,12 @@ function plan(n, user, ctx = {}) {
 
     switch (n.intent) {
         case 'contact_request': {
+            // v7 (live): "baba se milna h" / "ghar pe aa jayenge kya" were read as a contact ask and got the number twice.
+            // A meeting / visit ask goes to the brain's mulaqat flow; the number card only for a real number/contact ask.
+            if (n.rules_intent && n.rules_intent !== 'contact_request') {
+                let bc = null; try { bc = require('./reply_brain.js').classify(ctx.text || '', user || {}); } catch (e) {}
+                if ((bc && bc.intent === 'meeting') || !/(number|nambar|नंबर|contact|kontact|संपर्क|कॉन्टैक्ट|phone|fone|mobile|मोबाइल|फ़ोन|फोन)/i.test(ctx.text || '')) return { nlu: n, noSlip: true };
+            }
             const disp = ctx.lineDisplay || '';
             out.reply = { intent: 'contact_request', contactCard: true, text: S(
                 `जी ज़रूर 🙏 अभय सिंह जी की टीम का यही WhatsApp नंबर है${disp ? ': ' + disp : ''}। संपर्क कार्ड भेज रही हूँ—सेव कर लीजिए, कोई भी काम हो तो यहीं लिखिए।`,
@@ -118,7 +124,21 @@ function plan(n, user, ctx = {}) {
             return out;
         }
         case 'political_talk':
+        case 'support':
         case 'opposition': {
+            // brain v7 (5 Nov live): these canned lines fired on anything with "vote/jeet/saath" — a bribe ask ("vote ke kitne
+            // paise doge") got "हर एक वोट कीमती है", "jeet ke koi nahi aata" and "vote pakka" got "मुँह में घी-शक्कर", an opponent
+            // remark got "दोस्तों से बात करेंगे?". The reply brain has a specific answer for those (bribe, opponent, commit,
+            // grievance, works...), so it answers them; the lines below are only for plain talk about the contest.
+            let bc = null;
+            try { bc = require('./reply_brain.js').classify(ctx.text || '', user || {}); } catch (e) { bc = null; }
+            const GENERIC = new Set(['unclear', 'short_reply', 'positive', 'greeting', 'thanks', 'topic_mention', 'daily_life', 'emoji', 'wellbeing_reply']);
+            const tx = String(ctx.text || '');
+            const voteCount = /(\d+\s*(vote|vot|वोट)|(vote|वोट)[^?]{0,15}(kam|कम|kat|ghat|घट|jyada|zyada|ज़्यादा|ज्यादा)|\b(haar|harenge|हार)\b|takkar|टक्कर|mahaul|mahol|माहौल)/i.test(tx);
+            const winWish = /(jeet|jit|जीत|jitenge|jeetenge|jitega|jeetega|jitwa|जिताएँगे|जिताएंगे)/i.test(tx) && !/(nahi|nhi|नहीं|koi|कोई|baad|बाद)/i.test(tx);
+            const negSupport0 = /(nahi|nhi|nhai|नहीं|nahin)/i.test(tx) && /(saath|sath|साथ)/i.test(tx);
+            if (bc && !GENERIC.has(bc.intent) && !(negSupport0 && bc.intent === 'opposed')) return { nlu: n, noSlip: true };
+            if (!voteCount && !winWish && !negSupport0 && n.intent !== 'opposition') return { nlu: n, noSlip: true };
             const concerned = n.sentiment === 'concerned' || n.sentiment === 'angry' || n.intent === 'opposition';
             const negSupport = /(nahi|nhi|nhai|नहीं|nahin)/i.test(ctx.text || '') && /(saath|sath|साथ)/i.test(ctx.text || '');
             if (negSupport || n.intent === 'opposition') {
@@ -129,7 +149,7 @@ function plan(n, user, ctx = {}) {
                 out.reply = { intent: 'political_talk', text: pick(user, 'pol', [
                     S('आपने खुलकर बताया, बहुत धन्यवाद जी 🙏 सच है, हर एक वोट कीमती है। क्या आप अपने परिवार और दोस्तों से अभय सिंह जी के लिए बात करेंगे?', 'Aapne khulkar bataya, bahut dhanyavaad ji 🙏 Sach hai, har ek vote keemti hai. Kya aap apne parivar aur doston se Abhay Singh ji ke liye baat karenge?'),
                     S('आपकी फ़िक्र जायज़ है जी 🙏 हर एक वोट मायने रखता है। आपके हिसाब से किन लोगों से बात करनी चाहिए—आप साथ देंगे तो बात आगे बढ़ेगी।', 'Aapki fikr jaayaz hai ji 🙏 Har ek vote maayne rakhta hai. Aapke hisaab se kin logon se baat karni chahiye—aap saath denge to baat aage badhegi.')]) };
-            } else if (/(jeet|jit|जीत|jeeteng|jitwa|pakka|पक्का|support|सपोर्ट|saath|sath|साथ)/i.test(ctx.text || '')) {
+            } else if (winWish) {
                 out.reply = { intent: 'political_positive', text: pick(user, 'polpos', [
                     S('आपके मुँह में घी-शक्कर जी 🙏 आपका साथ और आशीर्वाद ही असली ताकत है—अपने परिवार और पड़ोस में भी बात कीजिएगा।', 'Aapke munh me ghee-shakkar ji 🙏 Aapka saath aur aashirwad hi asli taakat hai—apne parivar aur pados me bhi baat kijiyega.'),
                     S('बहुत धन्यवाद जी 🙏 आप जैसे लोगों के भरोसे से ही हौसला है। घर-परिवार के वोट भी साथ रहें, बस यही गुज़ारिश है।', 'Bahut dhanyavaad ji 🙏 Aap jaise logon ke bharose se hi hausla hai. Ghar-parivar ke vote bhi saath rahein, bas yahi guzarish hai.')]) };
@@ -164,6 +184,13 @@ function plan(n, user, ctx = {}) {
         return out;
     }
     if (NO_SLIP_INTENTS.has(n.intent)) out.noSlip = true;
+    // brain v7 (5 Nov live): "kab hai vote dalna" (LLM: other) fell through to the name search and answered
+    // "*dalna* नाम से … नहीं मिला". When the model read the message as something other than a slip and the rules agree,
+    // the slip search stays out of it — except a short answer while our own list / yes-no question is open ("2", "हाँ").
+    const pendingOpen = user && ((Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length) || user.pendingParchiCandidate);
+    const shortTxt = String(ctx.text || '').trim().split(/\s+/).length <= 4;
+    if (n.source === 'llm' && !['slip_request', 'slip_answer', 'unclear'].includes(n.intent) && !['slip_request', 'slip_answer'].includes(n.rules_intent) && !(pendingOpen && shortTxt)) out.noSlip = true;
+    if (n.intent === 'question' && !(pendingOpen && shortTxt)) out.noSlip = true;
     return out;
 }
 

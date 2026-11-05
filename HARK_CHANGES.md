@@ -1,3 +1,24 @@
+# HARK_CHANGES — brain v7 (5 Nov 2026 evening: 35 messy live conversations on the VM)
+
+Live battery (self-test, real NVIDIA LLM): 35 conversations, 195 turns of village-style Hinglish/Hindi/Haryanvi/English. Fixes:
+
+| Failure seen live | Fix | Files |
+|---|---|---|
+| "meri mummy ki parchi", "wife", "papa", "parivar", "booth", "dalna", "namaskar raha" searched as NAMES | relation/family/voice-typing words are never names; relative without a name -> "आपकी माताजी का पूरा नाम?"; explicit "naam X hai" wins; father/husband segment cut from the name | `slip_flow.js` (`nameQuery`, `relationAsked`), `nlu.js` |
+| PRIVACY: "sandip kumr ki parchi" delivered संदीप पिता सतीश कुमार (typo matched father's surname); "vijay singh nahi, sandeep kumar" used the negated name as father | surnames compared by skeleton, the person's own name words never count as father, corrections keep only their tail | `slip_flow.js` (`fatherGiven`, `correctionTail`) |
+| "ha"/"ha yahi"/"sahi" after a delivered slip re-listed 14 namesakes; same father again -> second card | post-delivery acks (`preempt`), "already sent above" instead of a duplicate card | `slip_flow.js`, `server.js` |
+| rajesh devi (relative) slip had no family offer; "parivar" then failed | family offer also after a relative's slip ("उनके घर …") | `slip_flow.js`, `server.js` |
+| "kab hai vote dalna", "ye booth kaha", "kitne baje" -> name search | LLM non-slip verdict blocks the slip search (except short answers to an open list); implicit name path never on questions; booth/time answered from the slip just sent | `nlu_router.js`, `slip_flow.js`, `reply_brain.js` |
+| bribe ask, "jeet ke koi nahi aata", "vote pakka", opponent remark, "vaade hi karte ho", "baba ke karega" all got the canned "हर एक वोट कीमती / घी-शक्कर" lines | router's political lines only for plain contest talk; everything specific goes to the brain | `nlu_router.js` |
+| "baba se milna h" -> phone-number card twice | meeting/visit asks go to the mulaqat flow | `nlu_router.js`, `reply_brain.js` |
+| samasya "kis gali?" answer swallowed by an older slip ward-ask; village name ignored as ward | ward preempt only right after our own ward question; Haraheri/Sihali Kalan/Khurd narrow the wards | `slip_flow.js` |
+| father mismatch repeated the same confirm; "parchi" x3 identical | mismatch said + EPIC hint; varied name asks; b/v spelling (umrav ~ उमराब); "bhim raj" ~ भीमराज | `slip_flow.js` |
+| generic "अच्छा 🙏 कोई काम या सवाल…" for "or kuch", "usne kya kiya", "kab tak theek hoga", "sorry gussa tha", "kab", "kya", "sab neta ek jaise", "gaarnti do", "chal nahi paati", "vote ki baat mat karo", "namste", "ok thanks" | new intents/templates: works-more, pronoun works, concern_when, apology, polling short, what_q (re-ask our question), cynic grievance, guarantee (honest no), mobility help (team note), no_politics | `reply_brain.js` |
+| abuse argued back ("पर…ज़रूरी है"); script question stacked on abuse/bribe | insults never go to the LLM; script ask skipped on sensitive turns | `reply_brain.js` |
+| LLM "आज मतदान केंद्र पर आकर…", Devanagari digits "४०" | validator rejects wrong-poll-day and Devanagari digits | `reply_brain.js` |
+| "mujhe message mat karo" not honoured | polite wrappers around an opt-out phrase are opt-outs | `engagement_policy.js` |
+
+Tests: `npm run test:brainlive` (`test_brain_live_fixes.cjs`, in `test:all`): 60 checks mirroring server routing with the live model's bad verdicts stubbed.
 # HARK_CHANGES — bulk day 6 Nov 2026: import → scheduled bulk → Status posts (first real 100–200 voters)
 
 New: `contact_import.js`, `status_posts.js`, `status_routes.js`, `test_bulk_6nov.cjs` (`npm run test:bulk`, in `test:all`). Changed: `scheduled_campaigns.js`, `ops_routes.js`, `contacts_manager.js`, `campaign_agenda.js`, `server.js`. Runtime file `status_posts.json` (gitignored).

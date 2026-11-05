@@ -79,8 +79,17 @@ function normalizeShortReply(text) {
     return String(text || '').toLowerCase().replace(/[!।.,?🙏🚩\s]+/g, ' ').trim();
 }
 
+// brain v7 (5 Nov live): "mujhe message mat karo" got a generic reply. Polite wrappers around an opt-out phrase
+// (mujhe/hume/ab/please/bhai ... ji) are still an opt-out; the core must be a whole opt-out phrase.
+const OPT_OUT_WRAP_HEAD = /^((mujhe|muje|mujhko|mujko|mereko|mere ko|hume|humein|hamein|hame|humko|ab|abhi|plz|pls|please|bhai|bhaiya|ji|is number pe|is number par|मुझे|मुझको|हमें|हमको|अब|भाई|जी|कृपया)\s+)+/;
+const OPT_OUT_WRAP_TAIL = /(\s+(please|plz|pls|ji|bhai|bhaiya|yaar|jee|जी|भाई|कृपया))+$/;
+const OPT_OUT_EXTRA = /^((message|messages|massage|msg|msgs|sms|मैसेज|संदेश)\s+(mat|mt|na|nahi|मत|ना)\s+(karo|kro|kariye|karna|bhejo|bhejna|bhejiye|करो|भेजो|भेजिए|करें)|(message|messages|msg|मैसेज|संदेश)\s+(band|बंद)\s+(karo|kro|kar do|kardo|करो|कर दो)|(mat|मत)\s+(bhejo|bhejna|भेजो))$/;
 function isOptOutMessage(text) {
-    return OPT_OUT_TERMS.includes(normalizeShortReply(text));
+    const v = normalizeShortReply(text);
+    if (OPT_OUT_TERMS.includes(v)) return true;
+    const core = v.replace(OPT_OUT_WRAP_HEAD, '').replace(OPT_OUT_WRAP_TAIL, '').trim();
+    if (core === v) return false;
+    return OPT_OUT_TERMS.includes(core) && !/^(ruko|रुको|band|बंद|बन्द)$/.test(core) || OPT_OUT_EXTRA.test(core);
 }
 
 function isOptInMessage(text) {

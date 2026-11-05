@@ -945,7 +945,7 @@ async function startSession(sessionObj) {
                     // sadak" -> a slip again). It now counts only as a short answer right after our own slip prompt.
                     const lastBotForSlip = ((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '';
                     const isFollowUpDetails = (lower.includes('ye hie') || lower.includes('yahi') || lower.includes('yehi') || lower.includes('itna hi') || lower.includes('nahi pata')) &&
-                        /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && body.trim().split(/\s+/).length <= 5;
+                        /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && body.trim().split(/\s+/).length <= 5 && !/(डिजिटल मतदाता पर्ची|परिवार की मतदाता पर्ची)/.test(lastBotForSlip);
                     let effectiveSearchText = body;
                     if (isFollowUpDetails && user && user.lastSearchedQuery) {
                         effectiveSearchText = user.lastSearchedQuery;
@@ -1105,7 +1105,7 @@ async function startSession(sessionObj) {
                             userMemory.save();
                         } else if (slipPlan.kind === 'deliver' && targetVoter) {
                             userMemory.save();
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + (slipPlan.other ? slipFlow.FAMILY_TAIL : slipFlow.familyTail(user, targetVoter, false));
+                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.familyTail(user, targetVoter, !!(user.memory && user.memory.scriptPref === 'hinglish'), !!slipPlan.other);
                             let cardBuffer = null;
                             try { cardBuffer = await voterCardGen.generateVoterCard(targetVoter); }
                             catch (cardErr) { console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message); }

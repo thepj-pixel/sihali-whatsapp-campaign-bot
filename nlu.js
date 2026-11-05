@@ -57,7 +57,7 @@ const COMPLAINT_RX = /(naali|nali|sadak|paani|pani|bijli|light|toot|tuti|kharab|
 const ABUSE_RX = /(kutt|kamin|harami|bsdk|bhosd|madarc|chutiy|nalayak|कुत्त|कमीन|हरामी|नालायक)/i;
 const GREET_RX = /^(ram\s*ram|raam\s*raam|राम\s*राम|namaste|namaskar|नमस्ते|नमस्कार|pranam|प्रणाम|hi+|hello|hey|jai shree ram|जय श्री राम|radhe radhe)\b/i;
 const THANKS_RX = /^(thanks?|thank you|shukriya|dhanyawad|dhanyavad|धन्यवाद|शुक्रिया)\b/i;
-const FATHER_RX = /(?:pita|pitaji|papa|father|baap|pati|husband|पिता|पिताजी|पापा|पति|s\/o|w\/o)\s*(?:ji|जी)?\s*(?:ka|का)?\s*(?:naam|नाम)?\s*(?:h|hai|है|:)?\s*([a-z\u0900-\u097F]+(?:\s+[a-z\u0900-\u097F]+)?)/i;
+const FATHER_RX = /(?:pita|pitaji|papa|papaji|father|baap|bapu|bapuji|babuji|dad|daddy|abba|pati|husband|gharwala|पिता|पिताजी|पापा|बापू|बाबूजी|पति|s\/o|w\/o|f\/o)\s*(?:ji|जी)?\s*(?:ka|का)?\s*(?:naam|नाम)?\s*(?:h|hai|है|:)?\s*([a-z\u0900-\u097F]+(?:\s+[a-z\u0900-\u097F]+)?)/i;
 
 function scriptOf(t) { return /[\u0900-\u097F]/.test(t) ? 'hindi' : (/[a-z]/i.test(t) ? 'roman' : null); }
 
@@ -66,6 +66,8 @@ function tokens(text) { return String(text || '').split(/[^a-zA-Z\u0900-\u097F]+
 /** Strip Hinglish filler -> the name words ("babal yadav kie bhi parchi de do" -> "babal yadav"). */
 function nameWords(text) {
     let t = String(text || '');
+    // v7: corrections keep their tail, the father/husband segment and voice-typing filler go, an explicit "naam X" wins
+    try { const sf = require('./slip_flow.js'); t = sf.nameQuery(t); } catch (e) {}
     t = t.replace(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?)?\s*\d{1,2}/ig, ' ');
     t = t.replace(FATHER_RX, ' ');
     return tokens(t).filter(w => w.length >= 2 && !FILLER.has(w.toLowerCase()) && !FILLER_HI.has(w) && !CANDIDATE_RX.test(w)
@@ -110,7 +112,7 @@ function rules(text, user) {
     const low = lowerOf(t);
     const out = { intent: 'unclear', target_person: null, person_name_hi: null, person_name_roman: null, father_name: null, ward: null,
         sentiment: 'neutral', refers_to: null, wants_slip: false, wants_contact: false, complaint: null, script: scriptOf(t), short_summary: '', confidence: 0.5, source: 'rules' };
-    const wm = t.match(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?)?\s*(\d{1,2})\b/i);
+    const wm = t.match(/(?:ward|वार्ड)\s*(?:no\.?|नं\.?|number|nambar|नंबर)?\s*(\d{1,2})\b/i);
     if (wm && Number(wm[1]) >= 1 && Number(wm[1]) <= 11) out.ward = Number(wm[1]);
     const fm = t.match(FATHER_RX);
     if (fm && !CANDIDATE_RX.test(fm[1])) out.father_name = fm[1];
