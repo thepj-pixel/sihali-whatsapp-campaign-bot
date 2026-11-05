@@ -120,8 +120,14 @@ class VisionService {
         const keys = (CONFIG.nvidia_keys || []).filter(Boolean);
         if (!keys.length || process.env.VISION_NVIDIA === 'off') return null;
         const small = await this._shrink(base64Data);
-        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['meta/llama-3.2-11b-vision-instruct', 'microsoft/phi-3.5-vision-instruct', 'meta/llama-3.2-90b-vision-instruct']);
-        const budgetMs = opts.timeoutMs || 9000;
+        // NVIDIA hosts its vision models on ai.api.nvidia.com (gr/vlm paths); integrate.api.nvidia.com serves the newer VL models
+        const ENDPOINT = {
+            'meta/llama-3.2-11b-vision-instruct': 'https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-11b-vision-instruct/chat/completions',
+            'meta/llama-3.2-90b-vision-instruct': 'https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-90b-vision-instruct/chat/completions',
+            'microsoft/phi-3.5-vision-instruct': 'https://ai.api.nvidia.com/v1/vlm/microsoft/phi-3_5-vision-instruct'
+        };
+        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['meta/llama-3.2-11b-vision-instruct', 'nvidia/llama-3.1-nemotron-nano-vl-8b-v1', 'microsoft/phi-3.5-vision-instruct']);
+        const budgetMs = opts.timeoutMs || 12000;
         const started = Date.now();
         const tried = [];
         for (const model of models) {
@@ -129,9 +135,9 @@ class VisionService {
                 const left = budgetMs - (Date.now() - started);
                 if (left < 1500) { this.lastNvidia = { ok: false, tried, reason: 'budget' }; return null; }
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), Math.min(left, 8000));
+                const timer = setTimeout(() => controller.abort(), Math.min(left, 9000));
                 try {
-                    const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                    const res = await fetch(ENDPOINT[model] || 'https://integrate.api.nvidia.com/v1/chat/completions', {
                         method: 'POST',
                         signal: controller.signal,
                         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, Accept: 'application/json' },
@@ -142,7 +148,7 @@ class VisionService {
                         })
                     });
                     clearTimeout(timer);
-                    if (!res.ok) { tried.push(model + ':' + res.status); continue; }
+                    if (!res.ok) { tried.push(model + ':' + res.status); if (res.status === 404 || res.status === 400 || res.status === 422) break; continue; }
                     const data = await res.json();
                     const raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
                     const jm = raw.match(/\{[\s\S]*\}/);
