@@ -766,7 +766,7 @@ function compose(cls, ctx) {
                 body += S(' पर्ची चाहिए तो अपना पूरा नाम और पिता/पति का नाम भेज दीजिए।', ' Parchi chahiye to apna poora naam aur pita/pati ka naam bhej dijiye.');
                 mem.told.slipOffer = true; ask = false;
             } else if (!mem.told.ballotTip) {
-                body += S(` एक बात याद रखिएगा: मतपत्र में क्रम संख्या 1 पर अभय सिंह जी का नाम है, और मुहर के बाद मतपत्र सिर्फ़ लंबाई में मोड़िएगा।`, ` Ek baat yaad rakhiyega: matpatra me kram sankhya 1 par Abhay Singh ji ka naam hai, aur mohar ke baad matpatra sirf lambai me modiyega.`);
+                body += S(` एक बात याद रखिएगा: मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर मुहर लगाइए, और मुहर के बाद मतपत्र सिर्फ़ लंबाई में मोड़िएगा।`, ` Ek baat yaad rakhiyega: matpatra me Abhay Singh ji (Moti Aangli wale) ka naam dekhkar mohar lagaiye, aur mohar ke baad matpatra sirf lambai me modiyega.`);
                 mem.told.ballotTip = true; ask = false;
             }
             break;
@@ -930,12 +930,11 @@ function compose(cls, ctx) {
             break;
         case 'ballot': {
             if (mem.told.ballotTip && !cls.symbolAsked) {
-                body = /(mod|मोड़|मोड)/i.test(message) ? S('मुहर लगाकर मतपत्र को लंबाई में, यानी ऊपर से नीचे की तरफ़ मोड़िए—आड़ा मोड़ने से मुहर दूसरे खाने में छप सकती है और वोट ख़राब हो सकता है 🙏', 'Mohar lagakar matpatra ko lambai me, yaani upar se neeche ki taraf modiye—aada modne se mohar doosre khaane me chhap sakti hai aur vote kharab ho sakta hai 🙏') : S(`${jiOnly ? 'जी' : hon}, मतपत्र में अभय सिंह जी क्रम संख्या 1 पर हैं—नाम के आगे मुहर, फिर मतपत्र लंबाई में मोड़कर डालिएगा।`, `${jiOnly ? 'Ji' : hon}, matpatra me Abhay Singh ji kram sankhya 1 par hain—naam ke aage mohar, phir matpatra lambai me modkar daaliyega.`);
+                body = /(mod|मोड़|मोड)/i.test(message) ? S('मुहर लगाकर मतपत्र को लंबाई में, यानी ऊपर से नीचे की तरफ़ मोड़िए—आड़ा मोड़ने से मुहर दूसरे खाने में छप सकती है और वोट ख़राब हो सकता है 🙏', 'Mohar lagakar matpatra ko lambai me, yaani upar se neeche ki taraf modiye—aada modne se mohar doosre khaane me chhap sakti hai aur vote kharab ho sakta hai 🙏') : S(`${jiOnly ? 'जी' : hon}, मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए, फिर मतपत्र लंबाई में मोड़कर डालिएगा 🙏`, `${jiOnly ? 'Ji' : hon}, matpatra me Abhay Singh ji (Moti Aangli wale) ka naam dekhkar unke aage mohar lagaiye, phir matpatra lambai me modkar daaliyega 🙏`);
                 ask = false;
                 break;
             }
-            body = (cls.symbolAsked ? S(`${jiOnly ? 'जी' : hon}, मतपत्र में अभय सिंह जी का नाम क्रम संख्या 1 पर है—बस उनके नाम के आगे मुहर लगाइएगा।`, `${jiOnly ? 'Ji' : hon}, matpatra me Abhay Singh ji ka naam kram sankhya 1 par hai—bas unke naam ke aage mohar lagaiyega.`)
-                : S(`${jiOnly ? 'जी' : hon}, मतपत्र में क्रम संख्या 1 पर अभय सिंह जी का नाम है—उनके नाम के आगे मुहर लगाइएगा।`, `${jiOnly ? 'Ji' : hon}, matpatra me kram sankhya 1 par Abhay Singh ji ka naam hai—unke naam ke aage mohar lagaiyega.`))
+            body = S(`${jiOnly ? 'जी' : hon}, मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए 🙏`, `${jiOnly ? 'Ji' : hon}, Matpatra me Abhay Singh ji (Moti Aangli wale) ka naam dekhkar unke aage mohar lagaiye 🙏`)
                 + ' ' + S(P.fold_hi, P.fold_en);
             mem.told.ballotTip = true;
             ask = false;
@@ -1179,6 +1178,8 @@ const OPPONENT_ATTACK = /(उनके (झूठ|चोर)|वो (चोर|�
 const MONEY = /(₹|रुपये|रुपए|लाख|करोड़|\blakh\b|crore|rupees?|rupaye|budget|बजट|लागत)/i;
 const FAKE_DELIVERY = /(पर्ची भेज दी|parchi bhej di|slip bhej di)/i;
 const WORK_COUNT = /(\d+\s*\+?\s*(काम|कार्य|संकल्प|सड़कें|kaam|sankalp|works))/i;
+// Prince 5 Nov 19:04: never state a ballot serial number (क्रम संख्या 1 / क्रमांक 1 / "number 1 par") voter-facing
+const BALLOT_NUMBER = /((क्रम\s*संख्या|क्रमांक|क्रम\s*सं\.?|kram\s*sankhya|kramank|serial\s*(number|no\.?)?)\s*[:\-]?\s*(नं\.?\s*)?[0-9०-९]|(number|nambar|no\.?|नंबर|नम्बर)\s*[0-9०-९]\s*(par|pe|पर|पे|wale|वाले)|(पहले|first|pehle)\s*(नंबर|number)\s*(पर|par))/i;
 const SYMBOL = /(चुनाव चिन्ह|चिन्ह|चिह्न|स्वस्तिक|卐|निशान पर|symbol|chunav chinh|nishan par|swastik)/i;
 const PROMISED_DATE = /(\d+\s*(din|दिन|hafte|हफ्ते|हफ़्ते|mahine|महीने)\s*(me|में|ke andar|के अंदर)|jald(i)?\s*(hi\s*)?(ban|ho|lag|thik|theek)\s*(jayegi|jayega|jaegi|jaega)|जल्द(ी)?\s*(ही\s*)?(बन|हो|लग|ठीक)\s*(जाएगी|जाएगा|जायेगी|जायेगा)|pakka (ban|ho|lag) jayeg|पक्का (बन|हो|लग) जाएग|guarantee|गारंटी|chunav ke baad turant|चुनाव के बाद तुरंत)/i;
 
@@ -1194,6 +1195,7 @@ function validateLLM(reply, { allowedText, user, l } = {}) {
     if (WORK_COUNT.test(r)) return 'work_count';
     if (SYMBOL.test(r)) return 'symbol_claim';
     if (PROMISED_DATE.test(r)) return 'promised_date';
+    if (BALLOT_NUMBER.test(r)) return 'ballot_number';
     if (/(स्टेडियम|stadium)/i.test(r) && !/(प्रयास|prayas|संकल्प|sankalp)/i.test(r)) return 'stadium_claim';
     if (/(सरोवर|sarovar)/i.test(r) && /(बन गया|बन चुका|बनवाया गया|पूरा हो गया|पूरा हुआ|तैयार हो|ban gaya|ban chuka|banwaya gaya|poora ho gaya|pura ho gaya)/i.test(r)) return 'sarovar_claim';
     if (/(आज|aaj)\s*(ही\s*|hi\s*)?(मतदान|वोट|matdan|vote|polling|booth|बूथ)/i.test(r)) return 'wrong_poll_day';
@@ -1463,6 +1465,7 @@ async function respond(message, user = {}, opts = {}) {
     }
     if (t.pendingQ) text += ' ' + t.pendingQ;
     if (!t.flowResult) text = capVoteAsk(text, user, t.stage);
+    if (BALLOT_NUMBER.test(text)) text = text.split(/(?<=[।?!.])\s+/).filter(x => !BALLOT_NUMBER.test(x)).join(' ').trim() || 'मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए 🙏';
     if (source !== 'llm') text = dialectize(text, user, t.l);
     text = maybeAskScript(text, user, cls, t);
     text = text.charAt(0).toUpperCase() + text.slice(1);
@@ -1532,4 +1535,4 @@ function buildPersuasionNudge(user = {}, goal = {}, now = new Date()) {
 
 const SNIPPETS = {};
 const KB_TOPIC = {};
-module.exports = { scriptPrefOf, setScriptPref, scriptMismatch, maybeAskScript, SCRIPT_ASK_HI, validateAgainstDraft, cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };
+module.exports = { BALLOT_NUMBER, scriptPrefOf, setScriptPref, scriptMismatch, maybeAskScript, SCRIPT_ASK_HI, validateAgainstDraft, cleanLLM, dialectize, buildPersuasionNudge, respond, respondSync, classify, personOf, honorific, nameFor, nextStage, boothForWard, validateLLM, pickCloser, buildLLMPrompt, think, inFlow: flows.inFlow, STAGES, SNIPPETS, KB_TOPIC, BANNED, SARPANCH_CLAIM, SYMBOL, PROMISED_DATE, MEDIA_RX };

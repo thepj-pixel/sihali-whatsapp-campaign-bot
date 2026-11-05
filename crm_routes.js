@@ -299,8 +299,8 @@ function install(app, deps) {
                 const plan = slipFlow.decide('पर्ची', user, { slipIntent: true, searchText: b.name || undefined });
                 if (!plan) return res.status(422).json({ success: false, error: 'No slip step available' });
                 if (plan.kind === 'deliver' && plan.voter) {
-                    text = voterEngine.formatShortSlipResponse(plan.voter) + slipFlow.FAMILY_TAIL;
                     let card = null; try { card = await voterCardGen.generateVoterCard(plan.voter); } catch (e) {}
+                    text = card ? slipFlow.deliverCaption(user, plan.voter, false, !!plan.other) : voterEngine.formatShortSlipResponse(plan.voter) + slipFlow.FAMILY_TAIL;
                     if (card) { await say({ image: card, caption: text }); mediaType = 'voterSlipCard'; } else { await say({ text }); mediaType = 'voterSlip'; }
                 } else {
                     text = plan.text; await say({ text });

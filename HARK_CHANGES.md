@@ -25,7 +25,11 @@ Live: 31 conversations on the VM (10 new: replies to a bulk intro, family cards,
 | Prince 18:54: slip ask "gets in a loop" — "ram ram" mid-slip got the greeting; a ward typed after the father-confirm went to the brain (vote ask), then "haan" became a vote commit; "pata nahi ward" before a name repeated the ask; "slip nahi aayi" searched *tula*, "phir se bhejo" → generic | `preempt`: greeting while a slip question is open re-asks that question ("राम राम जी 🙏 पर्ची वाली बात पूरी कर लेते हैं—…"); a ward after the confirm keeps the confirm; "pata nahi ward"/bare ward before a name = "वार्ड ज़रूरी नहीं" / ward noted; resend phrases resend the last card | `slip_flow.js` (`openSlipQuestion`, `RESEND_RX`) |
 | LLM "मैं आपको अपडेट करती हूँ" | rejected (the bot never starts a message) | `reply_brain.js` |
 
-Tests: `test_brain_live_fixes.cjs` +52 checks (123, incl. Prince's 5 loop scripts), `test_broadcast_engine.cjs` +2.
+| Prince 19:04: never state the ballot serial number | removed from replies (ballot tip, `ballot` intent → "मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए 🙏", fold rule kept), `parcha_facts.json` ballot_hi/en (no `ballotSerial`), `campaign_profile.json` LLM fact, posters, the `direct_appeal` template; `BALLOT_NUMBER` rejects model text and strips any sentence from brain / legacy replies | `reply_brain.js`, `rag_vault/parcha_facts.json`, `campaign_profile.json`, `poster_engine.js`, `server.js` |
+| Prince 19:04: slip delivery too wordy | card + one caption line ("🗳️ आपकी डिजिटल मतदाता पर्ची 🙏") + one family line when the house has more voters; full text only if the card can't be made; short ward question and father confirm; same for operator quick-send and CRM slip action; family card caption one line | `slip_flow.js` (`deliverCaption`), `server.js`, `crm_routes.js` |
+| "give me prince yadav voter id" searched *give प्रिंस यादव* | English filler words are not names | `slip_flow.js` |
+
+Tests: `test_brain_live_fixes.cjs` +62 checks (133, incl. Prince's 5 loop scripts, ballot number, caption length), `test_broadcast_engine.cjs` +2.
 
 # HARK_CHANGES — brain v7 (5 Nov 2026 evening: 35 messy live conversations on the VM)
 

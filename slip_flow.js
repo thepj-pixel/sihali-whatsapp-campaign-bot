@@ -42,7 +42,7 @@ const NON_NAME = new Set(('haa haan han hn ha ji jee arre arey are aree abhi mai
     'dhanyavad dhanyawad dhanyavaad dhanywad dhanyabad shukriya sukriya thanks thank thankyou thanku thnx thx tq ty welcome achha acha accha badhiya shabash sahi mast good nice ' +
     'mil mila milegi milega jayegi jaegi jayega jaega jaayegi jaye sakti sakta sakte hogi hoga kya kab kaise kyu diya diye du doon dun kie kii ni is my the of can you send please or aur wo woh vo ye yeh h he hai hain pata pta patta maloom malum maaloom number nambar wala wali vala ' +
     // brain v7 (5 Nov live): relation / family words and voice-typing filler are never a person's name ("mummy", "wife", "parivar", "namaskar raha")
-    'karu karun karoon kru krun karna fir phir abhi ab batao bataiye school skool paas pass mandir gali chowk chauk sadak road nali naali kuan kua talab johad dukan near samne peeche ' + RELATION_WORDS + ' parivar pariwar family sab sabki sabhi saari sari sare ghar gharwale gharwalo walo wale hamare hamara hamari humare humara humari hamre parchiyan parchiya bhejo bhej namaskar namaskaar namste namastey pranam raha rahi rha rhi bol bolta bolti hoon hun hu sihali khurd kalan haraheri hadahedi gaon gaam ' +
+    'give gimme me send show get want need find plz pls voter id card slip kindly karu karun karoon kru krun karna fir phir abhi ab batao bataiye school skool paas pass mandir gali chowk chauk sadak road nali naali kuan kua talab johad dukan near samne peeche ' + RELATION_WORDS + ' parivar pariwar family sab sabki sabhi saari sari sare ghar gharwale gharwalo walo wale hamare hamara hamari humare humara humari hamre parchiyan parchiya bhejo bhej namaskar namaskaar namste namastey pranam raha rahi rha rhi bol bolta bolti hoon hun hu sihali khurd kalan haraheri hadahedi gaon gaam ' +
     'vote booth bootha kahan kaha kidhar kab kitne baje tak time date tarikh dalna daalna dena matdan nahi nahin nhi galat matlab mtlab ruko pehle ek baat acha accha achha batao bata du kya').split(/\s+/));
 const NON_NAME_HI = /^(निकाल|निकालो|निकाल दो|दे|दो|कर|करो|भेज|परिवार|मम्मी|माँ|मां|माता|माताजी|पापा|पिताजी|पिता|पति|पत्नी|घरवाली|घरवाले|भाई|बहन|बेटा|बेटी|बहू|दादी|दादा|नानी|नाना|चाचा|चाची|ताऊ|ताई|सास|ससुर|बूथ|वोट|कब|कहाँ|कहां|मेरा|मतलब|गलत|नहीं|हाँ|हां|अरे|अभी|मैंने|बताया|मेरा|मेरी|मुझे|नाम|है|हूँ|भी|भेज|भेजो|भेजिए|दो|दीजिए|चाहिए|पर्ची|वोटर|स्लिप|कार्ड|वाला|नंबर|सही|यही|भाई|ना|तो|की|का|के|को|अपनी|अपना|सिर्फ|लिस्ट|में|से|पर|निकालो|दिखाओ|जी|जल्दी|धन्यवाद|शुक्रिया|अच्छा|बढ़िया|ठीक|मिल|मिलेगी|मिलेगा|जाएगी|जायेगी|जाएगा|सकती|सकता|होगी|होगा|क्या|कब|कैसे)$/;
 
@@ -187,8 +187,8 @@ const fresh = (user, key) => user && user[key] && (!user.slipPendingAt || Date.n
 
 function confirmText(v, en) {
     const rel = relLabel(v);
-    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${relLabel(v, true)} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
-    return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या आपके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है?\n\nसही हो तो बस *'हाँ'* लिख दीजिए—पर्ची तुरंत भेज दूँगी 🙏\n*(अगर ये आप नहीं हैं, तो अपना पूरा नाम और पिता/पति का नाम लिखिए)*`;
+    if (en) return `Voter list me *${v.name_hi || v.name}* mile 📋 Aapke ${relLabel(v, true)}: *${v.rel_name_hi || '—'}* (ward ${v.ward})—sahi hai? *haan* likhiye 🙏`;
+    return `वोटर लिस्ट में *${v.name_hi || v.name}* मिले 📋 आपके ${rel}: *${v.rel_name_hi || '—'}* (वार्ड ${v.ward})—सही है? *हाँ* लिखिए 🙏`;
 }
 const SHOW = 5;
 function listText(matches, q, en) {
@@ -203,8 +203,8 @@ function listText(matches, q, en) {
 }
 function confirmOther(v, en) {
     const rel = relLabel(v, en);
-    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya unke ${rel} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai? Sahi ho to *'haan'* likh dijiye—unki parchi bhej dungi 🙏`;
-    return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या उनके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है? सही हो तो *'हाँ'* लिख दीजिए—उनकी पर्ची भेज दूँगी 🙏`;
+    if (en) return `Voter list me *${v.name_hi || v.name}* mili 📋 Unke ${rel}: *${v.rel_name_hi || '—'}* (ward ${v.ward})—sahi hai? *haan* likhiye 🙏`;
+    return `वोटर लिस्ट में *${v.name_hi || v.name}* मिले 📋 उनके ${rel}: *${v.rel_name_hi || '—'}* (वार्ड ${v.ward})—सही है? *हाँ* लिखिए 🙏`;
 }
 function listOther(matches, q, en) {
     const rel = m => relLabel(m, en);
@@ -315,10 +315,8 @@ function askWardText(matches, shown, other, en) {
         altEn.push(`Maaf kijiye, baar-baar pooch rahi hoon 🙏 par *${shown}* naam ke ${n} log hain. ${other ? 'Unke' : 'Aapke'} pita/pati ka naam kya hai?`, `Theek hai ji 🙏 *${shown}* ke ghar ke kisi bade (pita/pati) ka naam ya ward number likh dijiye, phir pakki parchi turant bhejti hoon.`);
         return (en ? altEn : altHi)[(i - 2) % altHi.length];
     }
-    if (en) return other ? `*${shown}* naam ke ${n} voter list me hain 🙏 Sahi parchi ke liye bataiye—wo kis *ward* me rehte hain? (Ward na pata ho to unke pita/pati ka naam likh dijiye)`
-        : `*${shown}* naam ke ${n} voter list me hain 🙏 Sahi parchi ke liye bataiye—aap kis *ward* se hain? (Ward na pata ho to apne pita/pati ka naam likh dijiye)`;
-    return other ? `*${shown}* नाम के ${n} वोटर सूची में हैं 🙏 सही पर्ची के लिए बताइए—वो किस *वार्ड* में रहते हैं? (वार्ड न पता हो तो उनके पिता/पति का नाम लिख दीजिए)`
-        : `*${shown}* नाम के ${n} वोटर सूची में हैं 🙏 सही पर्ची के लिए बताइए—आप किस *वार्ड* से हैं? (वार्ड न पता हो तो अपने पिता/पति का नाम लिख दीजिए)`;
+    if (en) return other ? `*${shown}* naam ke ${n} voter hain 🙏 Wo kis *ward* me rehte hain? (ya pita/pati ka naam)` : `*${shown}* naam ke ${n} voter hain 🙏 Aap kis *ward* se hain? (ya pita/pati ka naam)`;
+    return other ? `*${shown}* नाम के ${n} वोटर हैं 🙏 वो किस *वार्ड* में रहते हैं? (या पिता/पति का नाम)` : `*${shown}* नाम के ${n} वोटर हैं 🙏 आप किस *वार्ड* से हैं? (या पिता/पति का नाम)`;
 }
 function needWard(matches, text) {
     if (!Array.isArray(matches) || matches.length < 2 || wardIn(text)) return false;
@@ -342,6 +340,15 @@ function familyTail(user, v, en, other = false) {
         : `\n\n🏠 उनके घर (मकान नं. ${v.house_no}, वार्ड ${v.ward}) से ${fam.length} और वोटर सूची में हैं। सबकी पर्ची एक कार्ड में चाहिए तो *परिवार* लिखिए 🙏`;
     return en ? `\n\n🏠 Aapke ghar (makan no. ${v.house_no}, ward ${v.ward}) se ${fam.length} aur voter list me hain. Sabki parchi ek card me chahiye to *parivar* likhiye 🙏`
         : `\n\n🏠 आपके घर (मकान नं. ${v.house_no}, वार्ड ${v.ward}) से ${fam.length} और वोटर सूची में हैं। सबकी पर्ची एक कार्ड में चाहिए तो *परिवार* लिखिए 🙏`;
+}
+/** Prince 19:04: the slip goes out as the card with ONE short caption line (+ one short family line when the house has more voters). */
+function deliverCaption(user, v, en, other = false) {
+    const nm = String(v.name_hi || v.name || '').replace(/^कृ\s+/, '');
+    const head = other ? (en ? `🗳️ *${nm}* ji ki digital matdata parchi 🙏` : `🗳️ *${nm}* जी की डिजिटल मतदाता पर्ची 🙏`) : (en ? '🗳️ Aapki digital matdata parchi 🙏' : '🗳️ आपकी डिजिटल मतदाता पर्ची 🙏');
+    const fam = familyOf(v);
+    if (!fam.length) return head;
+    if (user) user.familyOffer = { ward: Number(v.ward), sr: Number(v.sr_no), at: new Date().toISOString() };
+    return head + (en ? `\n🏠 ${other ? 'Unke ghar' : 'Ghar'} ke ${fam.length} aur naam bhi hain—sabki parchi ke liye *parivar* likhiye.` : `\n🏠 ${other ? 'उनके घर' : 'घर'} के ${fam.length} और नाम भी हैं—सबकी पर्ची के लिए *परिवार* लिखिए।`);
 }
 // v7: a village name answers "which ward?" ("hum haraheri wale h" -> wards 9-11)
 function villageWards(text) {
@@ -684,4 +691,4 @@ function decide0(body, user, opts = {}) {
 }
 
 const FAMILY_TAIL = '\n\n👨‍👩‍👧 परिवार के किसी और सदस्य की पर्ची चाहिए तो उनका नाम और पिता/पति का नाम भेज दीजिए 🙏';
-module.exports = { relationAsked, villageWards, correctionTail, preempt, familyTail, familyOf, wardAnswer, setPending, deliverTo, fatherGiven, decide, confirmOther, listOther, ASK_OTHER, NOT_FOUND_OTHER, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };
+module.exports = { deliverCaption, openSlipQuestion, relationAsked, villageWards, correctionTail, preempt, familyTail, familyOf, wardAnswer, setPending, deliverTo, fatherGiven, decide, confirmOther, listOther, ASK_OTHER, NOT_FOUND_OTHER, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };

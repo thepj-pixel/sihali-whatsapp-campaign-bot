@@ -64,8 +64,8 @@ async function turn(user, phone, msg) {
     }
     if (!reply && sp) {
         kind = 'slip_' + sp.kind; voter = sp.voter || null;
-        if (sp.kind === 'deliver') reply = voterEngine.formatShortSlipResponse(sp.voter) + slipFlow.familyTail(user, sp.voter, false, !!sp.other);
-        else if (sp.kind === 'family') reply = `🏠 परिवार की मतदाता पर्ची — वार्ड ${sp.voter.ward} (${sp.members.length} मतदाता)`;
+        if (sp.kind === 'deliver') reply = slipFlow.deliverCaption(user, sp.voter, false, !!sp.other); // server: card + this caption
+        else if (sp.kind === 'family') reply = `🏠 आपके परिवार की मतदाता पर्ची (${sp.members.length} मतदाता) 🙏`;
         else reply = sp.text;
     } else if (!reply) {
         const clar = n && n.intent === 'unclear' && ['unclear', 'short_reply'].includes(brain.classify(msg, user).intent) ? router.clarify(user) : null;
@@ -287,6 +287,20 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
         check(L4.out[2].kind === 'slip_ack' && /पर्ची वाली बात/.test(L4.out[2].reply) && !/कुशल-मंगल/.test(L4.out[2].reply), 'loop4: greeting mid-slip continues the slip', L4.out[2].reply);
         const L5 = await convo('loop5', ['parchi', 'tula ram pita nabal singh', 'slip nahi aayi', 'phir se bhejo']);
         check(L5.out[2].kind === 'slip_deliver' && L5.out[3].kind === 'slip_deliver', '"slip nahi aayi" / "phir se bhejo" resend the same card', L5.out.map(o => o.kind).join(','));
+        check(slipFlow.nameQuery('give me prince yadav voter id') === 'prince yadav', '"give me X voter id" searches X (live: "*give प्रिंस यादव*")', slipFlow.nameQuery('give me prince yadav voter id'));
+        // Prince 19:04: no ballot serial number anywhere; slip = card + one short caption line
+        const bn = await convo('ballotNo', ['kaun sa number hai baba ka', 'kram sankhya kya hai', 'chunav chinh kya h']);
+        for (const o of bn.out) check(!/[0-9०-९]/.test(o.reply.replace(/16 नवंबर|7:30|5:30/g, '')) && !brain.BALLOT_NUMBER.test(o.reply), 'ballot question answered without any number', o.reply);
+        check(/नाम देखकर/.test(bn.out[0].reply), '"kaun sa number" -> find his name and stamp', bn.out[0].reply);
+        check(brain.validateLLM('मतपत्र में क्रम संख्या 1 पर अभय सिंह जी का नाम है।', { allowedText: '1', l: 'hi' }) === 'ballot_number' && brain.validateLLM('number 1 par mohar lagana', { allowedText: '1', l: 'en' }) === 'ballot_number', 'LLM ballot serial number rejected');
+        const facts = JSON.stringify(require('./rag_vault/parcha_facts.json')) + JSON.stringify(require('./campaign_profile.json')) + require('fs').readFileSync('./poster_engine.js', 'utf8');
+        check(!/(क्रम\s*संख्या|क्रम सं\.|serial number 1|ballotSerial)/.test(facts), 'facts / LLM profile / posters carry no ballot serial number');
+        const cap = await convo('caption', ['parchi chahiye', 'tula ram', '4', 'haan']);
+        const last = cap.out[3].reply;
+        check(cap.out[3].kind === 'slip_deliver' && last.split('\n').length <= 2 && last.length <= 110 && /पर्ची 🙏/.test(last), 'slip caption = one short line (+ one family line)', last);
+        check(cap.out[1].reply.length <= 120, 'father-confirm question is short', cap.out[1].reply);
+        const wq = await convo('wardq', ['parchi chahiye', 'pooja']);
+        check(wq.out[1].reply.length <= 90, 'ward question is short', wq.out[1].reply);
         // vote-ask frequency: a model-written ask ("…समर्थन देंगे ना?") counts; no second ask in the next replies
         const { u, phone } = freshUser();
         u.history.push({ role: 'user', text: 'ye sab to sarkar ka kaam hai' }, { role: 'bot', text: 'जी, यह बात सही है। आप 16 नवंबर को अभय सिंह जी को अपना वोट देकर समर्थन देंगे ना?' });

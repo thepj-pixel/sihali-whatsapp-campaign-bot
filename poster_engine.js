@@ -109,7 +109,7 @@ class PosterEngine {
 
             <!-- Subtitle & Symbol -->
             <text x="${width / 2}" y="${aspect === '1:1' ? 268 : 375}" font-size="${aspect === '1:1' ? 19 : 24}" font-weight="700" fill="#fbbf24" text-anchor="middle" font-family="'Noto Sans Devanagari', 'Lohit Devanagari', sans-serif">
-                सरपंच पद प्रत्याशी  |  मतपत्र क्रम संख्या: 1  |  मोटी आंगली वाले
+                सरपंच पद प्रत्याशी  |  मोटी आंगली वाले
             </text>
 
             ${hasVoterPhoto ? `
@@ -165,7 +165,7 @@ class PosterEngine {
             <!-- Bottom Urgent Appeal Banner -->
             <rect x="40" y="${height - (aspect === '1:1' ? 130 : 170)}" width="${width - 80}" height="${aspect === '1:1' ? 95 : 125}" fill="url(#saffron)" rx="16" filter="url(#shadow)"/>
             <text x="${width / 2}" y="${height - (aspect === '1:1' ? 75 : 100)}" font-size="${aspect === '1:1' ? 26 : 36}" font-weight="900" fill="#ffffff" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                ★ 16 नवम्बर को क्रम सं. 1 पर बाबा अभय सिंह के आगे मुहर लगाएं! ★
+                ★ 16 नवम्बर को अभय सिंह (मोटी आंगली वाले) के नाम के आगे मुहर लगाएं! ★
             </text>
             <text x="${width / 2}" y="${height - (aspect === '1:1' ? 45 : 62)}" font-size="${aspect === '1:1' ? 16 : 22}" font-weight="800" fill="#fef08a" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
                 मतदान समय: सोमवार प्रातः 7:30 बजे से सायं 5:30 बजे तक
@@ -274,7 +274,7 @@ class PosterEngine {
                 बाबा अभय सिंह
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? 185 : 255}" font-size="${aspect === '1:1' ? 18 : 24}" font-weight="700" fill="#94a3b8" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                सरपंच पद हेतु कर्मठ व निष्पक्ष प्रत्याशी • मतपत्र क्रम संख्या: 1
+                सरपंच पद हेतु कर्मठ व निष्पक्ष प्रत्याशी • मोटी आंगली वाले
             </text>
 
             ${hasVoterPhoto ? `
@@ -320,7 +320,7 @@ class PosterEngine {
             <!-- Footer Action -->
             <rect x="40" y="${height - (aspect === '1:1' ? 130 : 170)}" width="${width - 80}" height="${aspect === '1:1' ? 95 : 125}" fill="url(#neonOrange)" rx="16" filter="url(#glow)"/>
             <text x="${width / 2}" y="${height - (aspect === '1:1' ? 75 : 100)}" font-size="${aspect === '1:1' ? 26 : 36}" font-weight="900" fill="#ffffff" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                ★ 16 नवम्बर को क्रम सं. 1 पर बाबा अभय सिंह को विजयी बनाएं! ★
+                ★ 16 नवम्बर को अभय सिंह (मोटी आंगली वाले) का साथ दें! ★
             </text>
         </svg>
         `;
@@ -414,7 +414,7 @@ class PosterEngine {
                 बाबा अभय सिंह
             </text>
             <text x="${width / 2}" y="${aspect === '1:1' ? 230 : 320}" font-size="${aspect === '1:1' ? 19 : 24}" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                सरपंच पद हेतु विश्वसनीय सेवक • मतपत्र क्रम संख्या: 1
+                सरपंच पद हेतु विश्वसनीय सेवक • मोटी आंगली वाले
             </text>
 
             ${hasVoterPhoto ? `
@@ -447,7 +447,7 @@ class PosterEngine {
             <!-- Bottom Appeal -->
             <rect x="40" y="${height - (aspect === '1:1' ? 130 : 170)}" width="${width - 80}" height="${aspect === '1:1' ? 95 : 125}" fill="url(#maroon)" rx="16"/>
             <text x="${width / 2}" y="${height - (aspect === '1:1' ? 75 : 100)}" font-size="${aspect === '1:1' ? 26 : 36}" font-weight="900" fill="#ffffff" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
-                ★ 16 नवम्बर 2026: क्रम सं. 1 पर बाबा अभय सिंह को अपना आशीर्वाद दें! ★
+                ★ 16 नवम्बर 2026: अभय सिंह (मोटी आंगली वाले) को अपना आशीर्वाद दें! ★
             </text>
             <text x="${width / 2}" y="${height - (aspect === '1:1' ? 45 : 62)}" font-size="${aspect === '1:1' ? 16 : 22}" font-weight="700" fill="#fef3c7" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif">
                 मतदान केंद्र: रा.उ.मा.वि. सिहाली खुर्द (बूथ 95, 96, 97, 98)

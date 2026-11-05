@@ -304,7 +304,7 @@ C.push({ name: 'who-bot-sarpanch-symbol', turns: [
     { m: 'tum kaun ho?', intent: 'who_are_you', has: ['digital saathi'] },
     { m: 'bot ho kya?', intent: 'who_are_you', has: ['AI', 'insaan nahi'] },
     { m: 'kya abhay singh pehle sarpanch the?', intent: 'was_sarpanch', hasAll: ['nahi', 'pratyashi'], not: /pratinidhi/i },
-    { m: 'chunav chinh kya hai?', intent: 'ballot', has: ['kram sankhya 1'] },
+    { m: 'chunav chinh kya hai?', intent: 'ballot', has: ['dekhkar', 'देखकर'], not: /kram sankhya/i },
     { m: 'matpatra kaise modna hai', intent: 'ballot', has: ['lambai'] },
     { m: 'vote kab hai', intent: 'polling', hasAll: ['16 November', '7:30'] }
 ] });
@@ -413,7 +413,7 @@ C.push({ name: 'slip-and-booth', turns: [
     { m: 'booth kaun sa hai', intent: 'polling' },
     { m: 'ward 4', has: ['96'] },
     { m: 'aadhaar lana hai kya?', intent: 'polling', has: ['Aadhaar'] },
-    { m: 'kram sankhya kya hai abhay singh ki', intent: 'ballot', has: ['1'] },
+    { m: 'kram sankhya kya hai abhay singh ki', intent: 'ballot', has: ['dekhkar', 'देखकर'] },
     { m: 'pakka', intent: 'commit' }
 ] });
 

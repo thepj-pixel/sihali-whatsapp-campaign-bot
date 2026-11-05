@@ -1128,7 +1128,7 @@ async function startSession(sessionObj) {
                         try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: 'voter_slip', topic: null }); } catch (e) {}
                         if (slipPlan.kind === 'family' && targetVoter) {
                             const fam = slipPlan.members || [targetVoter];
-                            replyText = `🏠 आपके परिवार की मतदाता पर्ची — वार्ड ${targetVoter.ward}, मकान नं. ${targetVoter.house_no} (${fam.length} मतदाता)।\n\n16 नवंबर को पूरा परिवार साथ चलकर वोट डालिएगा 🙏 किसी का नाम छूट गया हो तो उनका नाम और पिता/पति का नाम भेज दीजिए।`;
+                            replyText = `🏠 आपके परिवार की मतदाता पर्ची (${fam.length} मतदाता) 🙏`;
                             let famBuf = null;
                             try { famBuf = await voterCardGen.generateFamilyCard(targetVoter, fam); } catch (e) { console.error(`[${sessionObj.id}] family card error:`, e.message); }
                             if (famBuf) await sendSafeMessage(sock, replyJid, { image: famBuf, caption: replyText });
@@ -1138,10 +1138,13 @@ async function startSession(sessionObj) {
                             userMemory.save();
                         } else if (slipPlan.kind === 'deliver' && targetVoter) {
                             userMemory.save();
-                            replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.familyTail(user, targetVoter, !!(user.memory && user.memory.scriptPref === 'hinglish'), !!slipPlan.other);
+                            const slipEn = !!(user.memory && user.memory.scriptPref === 'hinglish');
+                            // Prince 19:04: the card + one short caption line (+ one short family line); full text only if the card fails
+                            replyText = slipFlow.deliverCaption(user, targetVoter, slipEn, !!slipPlan.other);
                             let cardBuffer = null;
                             try { cardBuffer = await voterCardGen.generateVoterCard(targetVoter); }
                             catch (cardErr) { console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message); }
+                            if (!cardBuffer) replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.familyTail(user, targetVoter, slipEn, !!slipPlan.other);
                             if (cardBuffer) {
                                 try { fs.writeFileSync(path.join(__dirname, 'media', 'uploads', `parchi_${targetVoter.id || targetVoter.sr_no}.jpg`), cardBuffer); } catch (e) {}
                                 await sendSafeMessage(sock, replyJid, { image: cardBuffer, caption: replyText });
@@ -1171,6 +1174,7 @@ async function startSession(sessionObj) {
 
                         const clar = nluPlan && nluPlan.nlu && nluPlan.nlu.intent === 'unclear' && ['unclear', 'short_reply'].includes(replyBrain.classify(body, user).intent) ? nluRouter.clarify(user) : null; // the brain's own rules (e.g. English "who is this?") win over a bare 'unclear'
                         replyText = clar || await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter, nlu: nluPlan ? nluPlan.nlu : null, noSlip: !!(nluPlan && (nluPlan.noSlip || nluPlan.slipOpts)) });
+                        replyText = stripBallotNumber(replyText);
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getSafeFallback(body, senderPhone);
                         }
@@ -1440,6 +1444,12 @@ function isBroadcastOptedOut(phone) {
     return broadcastEngine.isOptedOut(p) || !!engagementPolicy.broadcastBlockReason(userMemory.users[p]);
 }
 
+/** Prince 5 Nov 19:04: no voter-facing text ever states a ballot serial number — drop any sentence that does. */
+function stripBallotNumber(text) {
+    if (!text || typeof text !== 'string' || !replyBrain.BALLOT_NUMBER.test(text)) return text;
+    const kept = text.split(/(?<=[।?!.])\s+/).filter(x => !replyBrain.BALLOT_NUMBER.test(x)).join(' ').trim();
+    return kept || 'मतपत्र में अभय सिंह जी (मोटी आंगली वाले) का नाम देखकर उनके आगे मुहर लगाइए 🙏';
+}
 function resolveBroadcastAudience(body = {}) {
     let contacts = [];
     const useContacts = body.useContacts === true || body.useContacts === 'true' || body.audience === 'contacts';
@@ -1626,9 +1636,10 @@ app.post('/api/operator-slip', async (req, res) => {
             u.ward = Number(v.ward) || u.ward; if (!u.assignedLine) u.assignedLine = lineId;
             u.identityConfirmedBy = { by: req.dashUser ? req.dashUser.username : 'team', at: new Date().toISOString(), key: voterKey(v) };
             slipFlow.deliverTo(u, v, false);
-            text = voterEngine.formatShortSlipResponse(v) + slipFlow.familyTail(u, v, false);
+            text = slipFlow.deliverCaption(u, v, false, false);
             let cardBuffer = null;
             try { cardBuffer = await voterCardGen.generateVoterCard(v); } catch (e) { console.error('operator slip card:', e.message); }
+            if (!cardBuffer) text = voterEngine.formatShortSlipResponse(v) + slipFlow.familyTail(u, v, false);
             sent = cardBuffer ? await sendSafeMessage(sess.sock, jid, { image: cardBuffer, caption: text }) : await sendSafeMessage(sess.sock, jid, { text });
             kind = cardBuffer ? 'voterSlipCard' : 'voterSlip';
         } else {
@@ -1703,7 +1714,7 @@ app.post('/api/send-message', async (req, res) => {
         } else if (template === 'ground_feedback') {
             messageText = `राम राम ${voterDisplayName}! 😊\n\nबाबा अभय सिंह जनसंपर्क में आपका स्वागत है। आपके वार्ड में इस बार विकास का क्या माहौल लग रहा है भैया? गाँव की सड़क, पानी या अस्पताल से जुड़ी कोई समस्या या सुझाव हो तो जरूर बताइएगा! 🙏🚩`;
         } else if (template === 'direct_appeal') {
-            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को मतपत्र में क्रम संख्या 1 पर अभय सिंह (मोटी आंगली वाले) के नाम के आगे मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nथारी उंगली से... मोटी आंगली वाले के नाम के आगे मुहर लगाइए! 🙏`;
+            messageText = `राम राम ${voterDisplayName}! 🙏🚩\n\nग्राम पंचायत सिहाली खुर्द के सर्वांगीण विकास हेतु 16 नवम्बर 2026 को मतपत्र में अभय सिंह (मोटी आंगली वाले) के नाम के आगे मुहर लगाकर भारी मतों से विजयी बनाएं!\n\nथारी उंगली से... मोटी आंगली वाले के नाम के आगे मुहर लगाइए! 🙏`;
         } else if (template === 'welcome') {
             messageText = `राम राम ${voterDisplayName}! 🙏\n\nबाबा अभय सिंह (मोटी आंगली वाले) जनसंपर्क टीम में आपका स्वागत है।\nगांव के विकास और अपनी वोटर पर्ची की जानकारी के लिए यहाँ कभी भी मैसेज कर सकते हैं! 🚩`;
         } else if (template === 'slogan') {
