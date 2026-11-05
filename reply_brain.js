@@ -878,11 +878,13 @@ function compose(cls, ctx) {
             const askTime = /(baje|बजे|time|टाइम|samay|समय|kab tak|कब तक)/i.test(message);
             const toldPoll = mem.told.pollDate;
             if (ld && askBooth && ld.booth) {
-                body = S(`${ld.other ? `*${ld.name}* जी का` : 'आपका'} बूथ ${ld.booth}${ld.room ? `, कमरा ${ld.room}` : ''} है—राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द 🙏`, `${ld.other ? `${ld.name} ji ka` : 'Aapka'} booth ${ld.booth}${ld.room ? `, room ${ld.room}` : ''} hai—Govt. Sr. Sec. School, Sihali Khurd 🙏`);
+                const bn = String(ld.booth).match(/(\d+)/), rn = String(ld.room || ld.booth).match(/कमरा\s*(?:नं\.?)?\s*(\d+)/) || String(ld.room || '').match(/(\d+)/);
+                const bt = bn ? bn[1] : ld.booth, rt = rn ? rn[1] : null;
+                body = S(`${ld.other ? `*${ld.name}* जी का` : 'आपका'} बूथ ${bt}${rt ? `, कमरा ${rt}` : ''} है—राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द 🙏`, `${ld.other ? `${ld.name} ji ka` : 'Aapka'} booth ${bt}${rt ? `, room ${rt}` : ''} hai—Govt. Sr. Sec. School, Sihali Khurd 🙏`);
                 if (askTime) body += S(' मतदान सुबह 7:30 से शाम 5:30 तक है।', ' Matdaan subah 7:30 se shaam 5:30 tak hai.');
                 ask = false; break;
             }
-            if (toldPoll && askTime && !askBooth) { body = S(`सुबह 7:30 से शाम 5:30 तक${H}—सोमवार, 16 नवंबर 🙏`, `Subah 7:30 se shaam 5:30 tak${H}—Somvar, 16 November 🙏`); ask = false; break; }
+            if ((toldPoll || ld) && askTime && !askBooth) { body = S(`सुबह 7:30 से शाम 5:30 तक${H}—सोमवार, 16 नवंबर 🙏`, `Subah 7:30 se shaam 5:30 tak${H}—Somvar, 16 November 🙏`); ask = false; break; }
             if (toldPoll && askBooth) {
                 const b0 = boothForWard((user && user.ward) || mem.ward);
                 body = b0 ? S(`आपका बूथ ${b0.booth}, कमरा ${b0.room}—राजकीय उच्च माध्यमिक विद्यालय, सिहाली खुर्द 🙏`, `Aapka booth ${b0.booth}, room ${b0.room}—Govt. Sr. Sec. School, Sihali Khurd 🙏`)

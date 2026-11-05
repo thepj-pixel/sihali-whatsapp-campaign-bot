@@ -2706,7 +2706,25 @@ app.get('/api/vision/probe', async (req, res) => {
 app.post('/api/test-records/cleanup', (req, res) => {
     const s1 = samasyaStore.removeWhere(r => !!r.test);
     const s2 = mulaqatStore.removeWhere(r => !!r.test);
-    res.json({ success: true, removed: { samasya: s1, mulaqat: s2 } });
+    // brain v7: a STOP sent during a self-test opts our OWN test line out (bulk list + its record) — undo it here.
+    // Only numbers of our connected lines are touched; real voters' opt-outs are never changed.
+    const ownCleared = [];
+    try {
+        const own = new Set();
+        for (const s of SESSIONS) for (const id of liveSelfTest.identitiesFor(s.id)) if (id && id.length >= 10) own.add(id);
+        for (const id of own) {
+            const keys = [id, id.length === 10 ? '91' + id : id];
+            for (const k of keys) {
+                let hit = false;
+                try { if (broadcastEngine.removeOptOut(k)) hit = true; } catch (e) {}
+                const u = userMemory.users[k];
+                if (u && u.broadcastOptOut) { engagementPolicy.applyOptIn(u); hit = true; }
+                if (hit) ownCleared.push(k);
+            }
+        }
+        if (ownCleared.length) userMemory.save();
+    } catch (e) { console.warn('[cleanup] own-line opt-out reset failed:', e.message); }
+    res.json({ success: true, removed: { samasya: s1, mulaqat: s2 }, ownLineOptOutsCleared: ownCleared });
 });
 function voterPlanRow(u) {
     const vm = require('./voter_memory.js');

@@ -354,9 +354,9 @@ function finalizeMulaqat(ctx, id, lead = '') {
     if (ok(r.preferredWhen)) parts.push(r.preferredWhen);
     if (ok(r.place)) parts.push(r.place.slice(0, 60));
     if (r.ward && !(ok(r.place) && /(ward|वार्ड)\s*\d/i.test(r.place))) parts.push(S(`वार्ड ${r.ward}`, `ward ${r.ward}`));
-    if (ok(r.purpose) && !/^samasya S-/.test(r.purpose)) parts.push(S(`विषय: ${r.purpose.slice(0, 50)}`, `vishay: ${r.purpose.slice(0, 50)}`));
+    if (ok(r.purpose) && !/^samasya S-/.test(r.purpose) && !/^(ok+|okay|theek|thik|haan|ha|ji|जी|हाँ|ठीक)[\s\p{L}]{0,10}$/iu.test(String(r.purpose).trim())) parts.push(S(`विषय: ${r.purpose.slice(0, 50)}`, `vishay: ${r.purpose.slice(0, 50)}`));
     voterMemory.ensure(user).lastMulaqat = { id, at: new Date().toISOString() };
-    if (r.familyMembers) parts.push(S(`परिवार के ${r.familyMembers} लोग`, `parivar ke ${r.familyMembers} log`));
+    { const fm = String(r.familyMembers || '').match(/\d+(\s*-\s*\d+)?/); if (fm) parts.push(S(`परिवार के ${fm[0].replace(/\s+/g, '')} लोग`, `parivar ke ${fm[0].replace(/\s+/g, '')} log`)); }
     const sum = parts.length ? '—' + parts.join(', ') : '';
     if (/^(जी, नोट किया।|Ji, note kiya\.)$/.test(lead)) lead = '';
     const text = (lead ? lead + ' ' : '') + S(`नोट कर लिया ${hon} 🙏${sum}। अभय सिंह जी की टीम समय पक्का करके आपको फ़ोन करेगी। आपके बुलावे के लिए दिल से धन्यवाद!`, `Note kar liya ${hon} 🙏${sum}. Abhay Singh ji ki team samay pakka karke aapko phone karegi. Aapke bulawe ke liye dil se dhanyavad!`);

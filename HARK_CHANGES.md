@@ -18,7 +18,9 @@ Live battery (self-test, real NVIDIA LLM): 35 conversations, 195 turns of villag
 | LLM "आज मतदान केंद्र पर आकर…", Devanagari digits "४०" | validator rejects wrong-poll-day and Devanagari digits | `reply_brain.js` |
 | "mujhe message mat karo" not honoured | polite wrappers around an opt-out phrase are opt-outs | `engagement_policy.js` |
 
-Tests: `npm run test:brainlive` (`test_brain_live_fixes.cjs`, in `test:all`): 60 checks mirroring server routing with the live model's bad verdicts stubbed.
+Round 2: pronoun father answers ("unke papa ka naam X") never re-ask, "ghar wali", whole-roll fallback when a relative name + spouse is not in the list (home ward first), "मेरी पर्ची" = self, booth number formatting, short time answer after a slip, mulaqat summary ("विषय: ok", "5-6 log honge लोग") cleaned, `/api/test-records/cleanup` also clears opt-outs on our OWN lines (a self-test STOP).
+
+Tests: `npm run test:brainlive` (`test_brain_live_fixes.cjs`, in `test:all`): 67 checks mirroring server routing with the live model's bad verdicts stubbed.
 # HARK_CHANGES — bulk day 6 Nov 2026: import → scheduled bulk → Status posts (first real 100–200 voters)
 
 New: `contact_import.js`, `status_posts.js`, `status_routes.js`, `test_bulk_6nov.cjs` (`npm run test:bulk`, in `test:all`). Changed: `scheduled_campaigns.js`, `ops_routes.js`, `contacts_manager.js`, `campaign_agenda.js`, `server.js`. Runtime file `status_posts.json` (gitignored).

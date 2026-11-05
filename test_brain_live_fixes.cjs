@@ -122,7 +122,7 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
         const { out } = await convo('after', ['sunil kumar ki parchi', 'ward 1', 'pita lal singh', 'ha', 'ye booth kaha pe h', 'or kitne baje tak vote', 'pita lal singh']);
         check(out[2].kind === 'slip_deliver', 'A0 delivered', out[2].reply);
         check(out[3].kind === 'slip_ack' && !/वार्ड से हैं|वार्ड में रहते/.test(out[3].reply), 'A1 "ha" after delivery = ack, no re-search', out[3].reply);
-        check(/बूथ\s*\d+/.test(out[4].reply) && !NAME_NOT_FOUND.test(out[4].reply), 'A2 "ye booth kaha" -> that slip\'s booth', out[4].reply);
+        check(/बूथ \d+, कमरा \d+/.test(out[4].reply) && !NAME_NOT_FOUND.test(out[4].reply), 'A2 "ye booth kaha" -> that slip\'s booth', out[4].reply);
         check(/7:30/.test(out[5].reply) && !NAME_NOT_FOUND.test(out[5].reply), 'A3 "kitne baje tak" -> time', out[5].reply);
         check(!/डिजिटल मतदाता पर्ची/.test(out[6].reply), 'A4 same father again -> no second card', out[6].reply);
     }
@@ -131,6 +131,21 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
         check(out[2].kind === 'slip_deliver', '"bapu ka naam ramchandra" delivers', out[2].reply);
         check(out[3].kind === 'slip_ack', '"ha yahi" after delivery = ack', out[3].reply);
         check(!NAME_NOT_FOUND.test(out[4].reply) && /16 नवंबर|7:30/.test(out[4].reply), '"kab hai vote dalna" answered, not a name search', out[4].reply);
+    }
+    console.log('== round 2: pronouns / ghar wali / own slip');
+    {
+        const { out } = await convo('papa', ['mere papa ki parchi', 'unka naam omprakash h', 'unke papa ka naam ghasi ram', 'ha', 'unka booth kaha h']);
+        check(out[2].kind === 'slip_deliver' && out[2].voter.rel_name_hi === 'घासी राम', '"unke papa ka naam ghasi ram" answers the list (not a new relative ask)', out[2].reply);
+        check(out[3].kind === 'slip_ack', '"ha" after it = ack', out[3].reply);
+        check(/बूथ \d+, कमरा \d+/.test(out[4].reply), '"unka booth" = that slip\'s booth', out[4].reply);
+    }
+    {
+        const { out } = await convo('gharwali', ['haan ji namaskar main sihali khurd se bol raha hoon mera naam suresh kumar hai pita ji ka naam madan lal hai ward number 4 meri parchi bhej do', 'haan ji sahi hai', 'aur meri ghar wali ki bhi bhej do', 'naam to bata diya sunita', 'pati suresh kumar']);
+        check(out[1].kind === 'slip_ack', '"haan ji sahi hai" after delivery = ack', out[1].reply);
+        check(/पत्नी/.test(out[2].reply), '"ghar wali" -> asks the wife\'s name', out[2].reply);
+        check(/सुनिता देवी/.test(out[4].reply) && /सुरेश कुमार/.test(out[4].reply), 'सुनीता + pati सुरेश कुमार finds सुनिता देवी (wider search, home ward first)', out[4].reply);
+        const t = await convo('own', ['मेरी पर्ची निकाल दो, नाम कमला देवी']);
+        check(/आप किस \*वार्ड\* से/.test(t.out[0].reply), '"मेरी पर्ची … नाम कमला देवी" is the voter\'s own slip', t.out[0].reply);
     }
     console.log('== voice-typed long message, village as ward, father mismatch, repeated parchi asks');
     {

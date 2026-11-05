@@ -174,6 +174,8 @@ function plan(n, user, ctx = {}) {
                 if (user.slipTarget) n.target_person = user.slipTarget.who;
             }
         } catch (e) {}
+        // v7: "मेरी पर्ची निकाल दो, नाम कमला देवी" is the voter's own slip even if the model said "other"
+        if (/(^|\s)(meri|mera|apni|apna|मेरी|मेरा|अपनी|अपना)\s+(parchi|पर्ची|slip|voter|वोटर)/i.test(ctx.text || '') && !require('./slip_flow.js').relationAsked(ctx.text || '')) n.target_person = 'self';
         setTarget(user, n);
         const st = user && user.slipTarget;
         const who = (st && st.who) || n.target_person || 'self';
