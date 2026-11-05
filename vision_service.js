@@ -48,7 +48,7 @@ class VisionService {
             for (const model of models) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 7000);
+                    const timeoutId = setTimeout(() => controller.abort(), 7000); // gemini (only when a key exists)
 
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiKey}`;
                     const res = await fetch(url, {
@@ -126,8 +126,8 @@ class VisionService {
             'meta/llama-3.2-90b-vision-instruct': 'https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-90b-vision-instruct/chat/completions',
             'microsoft/phi-3.5-vision-instruct': 'https://ai.api.nvidia.com/v1/vlm/microsoft/phi-3_5-vision-instruct'
         };
-        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['nvidia/nemotron-nano-12b-v2-vl', 'meta/llama-4-maverick-17b-128e-instruct', 'meta/llama-3.2-90b-vision-instruct']);
-        const budgetMs = opts.timeoutMs || 12000;
+        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['meta/llama-3.2-90b-vision-instruct']); // verified live 5 Nov (others 404/410 on these keys)
+        const budgetMs = opts.timeoutMs || Number(process.env.VISION_TIMEOUT_MS) || 20000; // 90b answers in ~15s; chat job timeout is 45s
         const started = Date.now();
         const tried = [];
         for (const model of models) {
@@ -135,7 +135,7 @@ class VisionService {
                 const left = budgetMs - (Date.now() - started);
                 if (left < 1500) { this.lastNvidia = { ok: false, tried, reason: 'budget' }; return null; }
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), Math.min(left, opts.perCallMs || 9000));
+                const timer = setTimeout(() => controller.abort(), Math.min(left, opts.perCallMs || 19000));
                 try {
                     const res = await fetch(ENDPOINT[model] || 'https://integrate.api.nvidia.com/v1/chat/completions', {
                         method: 'POST',
@@ -150,7 +150,7 @@ class VisionService {
                         })
                     });
                     clearTimeout(timer);
-                    if (!res.ok) { tried.push(model + ':' + res.status); if (res.status === 404 || res.status === 400 || res.status === 422) break; continue; }
+                    if (!res.ok) { tried.push(model + ':' + res.status); if ([400, 404, 410, 422].includes(res.status)) break; continue; }
                     const data = await res.json();
                     const raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
                     const jm = raw.match(/\{[\s\S]*\}/);
