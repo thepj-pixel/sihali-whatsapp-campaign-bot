@@ -429,6 +429,11 @@ function fakeSock(log, opts = {}) {
             assert.deepStrictEqual(d.slot.mediaFiles, ['poster.jpg']);
             assert.ok(d.preview.samples[0].text.length > 10 && d.preview.samples[0].media === 'poster.jpg');
             const csv = await fetch(`http://127.0.0.1:${port}/api/scheduled/nope/results.csv`); assert.strictEqual(csv.status, 404);
+            scheduler.state.campaigns = { t1: { test: true, status: 'cancelled', items: [] }, t2: { test: true, status: 'running', items: [] }, r1: { test: false, status: 'done', items: [] } };
+            app.post('/api/test-records/cleanup', (req, res) => res.json({ success: true }));
+            const cl = await fetch(`http://127.0.0.1:${port}/api/test-records/cleanup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            assert.strictEqual(cl.headers.get('x-ops-test-campaigns-removed'), '1');
+            assert.deepStrictEqual(Object.keys(scheduler.state.campaigns).sort(), ['r1', 't2']);
         } finally { srv.close(); contactsManager.contacts = []; }
     });
 

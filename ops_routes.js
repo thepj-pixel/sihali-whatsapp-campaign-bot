@@ -117,6 +117,13 @@ function install(app, d) {
             for (const [k, u] of Object.entries(userMemory.users)) if (u && u.opsTest) { delete userMemory.users[k]; n++; }
             if (n) userMemory.save();
         } catch (e) {}
+        // finished own-line TEST campaigns go too (real campaigns are never touched)
+        let tc = 0;
+        try {
+            for (const [id, c] of Object.entries(scheduler.state.campaigns)) if (c && c.test && ['done', 'cancelled'].includes(c.status)) { delete scheduler.state.campaigns[id]; tc++; }
+            if (tc) scheduler.save();
+        } catch (e) {}
+        res.setHeader('X-Ops-Test-Campaigns-Removed', String(tc));
         res.setHeader('X-Ops-Test-Users-Removed', String(n));
         next();
     });
