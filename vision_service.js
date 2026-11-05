@@ -126,7 +126,7 @@ class VisionService {
             'meta/llama-3.2-90b-vision-instruct': 'https://ai.api.nvidia.com/v1/gr/meta/llama-3.2-90b-vision-instruct/chat/completions',
             'microsoft/phi-3.5-vision-instruct': 'https://ai.api.nvidia.com/v1/vlm/microsoft/phi-3_5-vision-instruct'
         };
-        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['meta/llama-3.2-11b-vision-instruct', 'nvidia/llama-3.1-nemotron-nano-vl-8b-v1', 'microsoft/phi-3.5-vision-instruct']);
+        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['nvidia/nemotron-nano-12b-v2-vl', 'meta/llama-4-maverick-17b-128e-instruct', 'meta/llama-3.2-90b-vision-instruct']);
         const budgetMs = opts.timeoutMs || 12000;
         const started = Date.now();
         const tried = [];
@@ -135,7 +135,7 @@ class VisionService {
                 const left = budgetMs - (Date.now() - started);
                 if (left < 1500) { this.lastNvidia = { ok: false, tried, reason: 'budget' }; return null; }
                 const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), Math.min(left, 9000));
+                const timer = setTimeout(() => controller.abort(), Math.min(left, opts.perCallMs || 9000));
                 try {
                     const res = await fetch(ENDPOINT[model] || 'https://integrate.api.nvidia.com/v1/chat/completions', {
                         method: 'POST',
@@ -143,7 +143,9 @@ class VisionService {
                         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, Accept: 'application/json' },
                         body: JSON.stringify({
                             model,
-                            messages: [{ role: 'user', content: promptText + `\n<img src="data:image/jpeg;base64,${small}" />` }],
+                            messages: [{ role: 'user', content: ENDPOINT[model]
+                                ? promptText + `\n<img src="data:image/jpeg;base64,${small}" />`
+                                : [{ type: 'text', text: promptText }, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + small } }] }],
                             max_tokens: 300, temperature: 0.2, stream: false
                         })
                     });

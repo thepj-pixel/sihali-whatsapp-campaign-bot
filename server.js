@@ -2434,7 +2434,11 @@ app.get('/api/vision/probe', async (req, res) => {
         if (!p) return res.json({ success: false, error: 'no approved poster to probe with' });
         visionService.reloadConfig();
         const t0 = Date.now();
-        const r = await visionService.analyzeImage(fs.readFileSync(p.path), 'image/jpeg');
+        let r;
+        if (req.query.models) {
+            const b64 = fs.readFileSync(p.path).toString('base64');
+            r = await visionService.analyzeWithNvidia(b64, 'image/jpeg', 'Describe this image in one short Hindi sentence and classify it. Reply ONLY JSON: {"category":"voter_id|civic_issue|campaign_material|personal_photo|other","summaryHindi":"..."}', { models: String(req.query.models).split(','), timeoutMs: Math.min(Number(req.query.timeout) || 20000, 60000), perCallMs: 20000 }) || { fallback: true };
+        } else r = await visionService.analyzeImage(fs.readFileSync(p.path), 'image/jpeg');
         res.json({ success: !r.fallback, ms: Date.now() - t0, category: r.category, summary: r.summaryHindi, model: r.model || null, provider: r.provider || (r.fallback ? 'none' : 'gemini'), nvidia: visionService.lastNvidia || null });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
