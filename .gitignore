@@ -41,3 +41,5 @@ dashboard_sessions.json.tmp
 dashboard_audit.jsonl
 
 dashboard_pin.json
+status_posts.json
+status_posts.json.tmp

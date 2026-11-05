@@ -1344,11 +1344,12 @@ const broadcastEngine = new BroadcastEngine({
     isSilenced: (ms) => followupPlanner.inSilencePeriod(new Date(ms)),
     quietHoursEnabled: () => require('./outbound_settings.js').quietHoursEnabled(),
     getAssignedLine: (phone) => (userMemory.users[phone] && userMemory.users[phone].assignedLine) || null,
-    onSent: ({ phone, name, text, line, lineName, media, sent }) => {
+    onSent: ({ phone, name, text, line, lineName, media, sent, contactCard }) => {
         const sess = SESSIONS.find(x => x.id === line);
         const jid = (sent && sent.key && sent.key.remoteJid) || `${phone}@s.whatsapp.net`;
         autoSaveContact({ phone, name, lineId: line, sock: sess && sess.sock, jid, source: 'bulk' });
-        if (sess && sess.sock) sendLineContactCardOnce(sess.sock, jid, phone, sess).catch(() => {});
+        // line contact card once per contact per line (Scheduled Bulk can switch it off per campaign)
+        if (sess && sess.sock && contactCard !== false) sendLineContactCardOnce(sess.sock, jid, phone, sess).catch(() => {});
         try { dailyGoal.recordEvent && dailyGoal.recordEvent('reached', { phone, line, ward: (userMemory.users[phone] || {}).ward }); } catch (e) {}
         try {
             const u = userMemory.getUser(phone, name || '');
@@ -1371,7 +1372,10 @@ function resolveBroadcastAudience(body = {}) {
     let contacts = [];
     const useContacts = body.useContacts === true || body.useContacts === 'true' || body.audience === 'contacts';
     if (useContacts) {
-        contacts = contactsManager.getAll({ line: body.contactLine, ward: body.contactWard, village: body.contactVillage, search: body.contactSearch });
+        contacts = contactsManager.getAll({ line: body.contactLine, ward: body.contactWard, village: body.contactVillage, search: body.contactSearch, tag: body.contactTag });
+    } else if (body.contactTag) {
+        // audience by import tag (e.g. "📥 Bulk 6 Nov") without ticking "saved contacts"
+        contacts = contactsManager.getAll({ tag: body.contactTag, ward: body.contactWard, village: body.contactVillage });
     }
     return { phones: body.phones || '', csvText: body.csvText || '', contacts };
 }
@@ -2218,22 +2222,56 @@ app.post('/api/contacts/import-voters', (req, res) => {
     }
 });
 
+// Contact import (6 Nov): CSV (any headers) / XLSX / VCF / pasted lines. dryRun=true → preview only, nothing saved.
+// POST /api/contacts/import {fileName?, fileText? | fileBase64?, text?, tag?, line?, dryRun?}
+const contactImport = require('./contact_import.js');
+function importDeps() {
+    return {
+        contactsManager,
+        isOptedOut: (p) => { try { return isBroadcastOptedOut(p); } catch (e) { return false; } },
+        isVirodhi: (p) => { try { return require('./contact_tags.js').isVirodhi(p) || !!(userMemory.users[p] && userMemory.users[p].virodhi === true); } catch (e) { return false; } },
+        matchVoter: (r) => contactsManager.matchVoter(r)
+    };
+}
+app.post('/api/contacts/import', (req, res) => {
+    try {
+        const b = req.body || {};
+        const parsed = contactImport.parseInput(b);
+        if (!parsed.rows.length) return res.status(400).json({ success: false, error: 'No contacts found in the file / text. Expected columns like Name + Mobile, a .vcf export, or one "name number" per line.' });
+        const a = contactImport.analyze(parsed.rows, importDeps());
+        const tag = contactImport.cleanTag(b.tag) || contactImport.defaultTag(b.date);
+        const out = contactImport.summary(a, { tag, format: parsed.format });
+        if (b.dryRun === true || b.dryRun === 'true') return res.json({ success: true, dryRun: true, ...out });
+        if (!a.valid.length) return res.status(400).json({ success: false, error: 'No valid Indian mobile numbers to import', ...out });
+        const saved = contactImport.commit(a, { contactsManager, tag, line: b.line });
+        res.json({ success: true, dryRun: false, saved, ...out });
+    } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+app.get('/api/contacts/tags', (req, res) => res.json({ success: true, tags: contactImport.tagCounts(contactsManager.contacts) }));
+app.post('/api/contacts/import-batch/delete', (req, res) => {
+    try { res.json({ success: true, ...contactImport.deleteBatch(contactsManager, (req.body || {}).tag) }); }
+    catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+
+// Legacy endpoint (Contacts tab upload) — now uses the same parser; saves straight away.
 app.post('/api/contacts/import-vcf', (req, res) => {
     try {
-        const { vcfText, fileText, fileName } = req.body;
-        const text = fileText || vcfText || '';
-        const isCsv = String(fileName || '').toLowerCase().endsWith('.csv') || !/BEGIN:VCARD/i.test(text);
-        const imported = isCsv ? contactsManager.parseCSV(text) : contactsManager.parseVCF(text);
-        const matched = imported.filter(contact => contact?.voterMatch?.matched).length;
+        const { vcfText, fileText, fileName, fileBase64, tag } = req.body || {};
+        const parsed = contactImport.parseInput({ fileName, fileText: fileText || vcfText || '', fileBase64 });
+        const a = contactImport.analyze(parsed.rows, importDeps());
+        const saved = a.valid.length ? contactImport.commit(a, { contactsManager, tag: contactImport.cleanTag(tag) || contactImport.defaultTag() }) : { created: 0, tagged: 0, tag: '' };
         res.json({
             success: true,
-            format: isCsv ? 'csv' : 'vcf',
-            count: imported.length,
-            matched,
-            unmatched: imported.length - matched
+            format: parsed.format,
+            count: a.valid.length,
+            matched: a.counts.voterMatched,
+            unmatched: a.valid.length - a.counts.voterMatched,
+            invalid: a.counts.invalid,
+            duplicates: a.counts.duplicatesInFile,
+            saved
         });
     } catch (e) {
-        res.status(400).json({ error: e.message });
+        res.status(400).json({ success: false, error: e.message });
     }
 });
 
@@ -2570,6 +2608,8 @@ app.post('/api/mulaqat/delete', (req, res) => {
 const opsRoutes = require('./ops_routes.js');
 const ops = opsRoutes.install(app, { SESSIONS, broadcastEngine, userMemory, liveSelfTest, engagementPolicy, followupPlanner, contactsManager, samasyaStore, mulaqatStore, campaignAgenda, replyBrain, logMessage, onBulkSent: (info) => broadcastEngine.onSent(info), dailyIstDate: () => dailyGoal.currentIstDate(), resolveAudience: resolveBroadcastAudience });
 // CRM (WhatsApp Web Live): full chat, voter profile & memory, AI co-pilot, safe quick actions (crm_routes.js)
+const statusRoutes = require('./status_routes.js');
+const statusPosts = statusRoutes.install(app, { SESSIONS, contactsManager, isOptedOut: (p) => isBroadcastOptedOut(p), lineContacts: engagementPolicy.LINE_CONTACTS });
 const ocRoutes = require('./operator_control_routes.js');
 ocRoutes.install(app, { userMemory, runFollowups: () => runOperatorFollowups() });
 const crmRoutes = require('./crm_routes.js');
@@ -3323,7 +3363,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                     <button id="tab-btn-selftest" class="tab-btn" type="button" data-tab="selftest">🧪 Live Self-Test</button>
                     <button id="tab-btn-samasya" class="tab-btn" type="button" data-tab="samasya">📋 Samasya</button>
                     <button id="tab-btn-mulaqat" class="tab-btn" type="button" data-tab="mulaqat">🤝 Mulaqat</button>
-                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>${opsRoutes.ui.tabButtons()}${ocRoutes.ui.tabButtons()}
+                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>${opsRoutes.ui.tabButtons()}${statusRoutes.ui.tabButtons()}${ocRoutes.ui.tabButtons()}
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -3888,7 +3928,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <!-- Direct Upload CSV / VCF -->
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 12px; font-weight: 700; color: #334155;">📂 Upload VCF / CSV file:</span>
-                            <input type="file" id="vcf-upload-input" accept=".vcf,.csv" style="font-size: 12px;">
+                            <input type="file" id="vcf-upload-input" accept=".vcf,.csv,.xlsx,.txt" style="font-size: 12px;">
                             <button onclick="uploadContactsFile()" style="background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;">
                                 ⬆️ Upload
                             </button>
@@ -4289,7 +4329,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <span id="vp-total" style="color:#475569;"></span>
                     </div>
                     <div id="vp-list" style="font-size:12px; margin-top:10px; max-height:640px; overflow:auto;"></div>
-                </div>${opsRoutes.ui.tabPanes()}${ocRoutes.ui.tabPanes()}
+                </div>${opsRoutes.ui.tabPanes()}${statusRoutes.ui.tabPanes()}${ocRoutes.ui.tabPanes()}
             </div>
 
             <!-- Dashboard JavaScript -->
@@ -5589,20 +5629,20 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 async function uploadContactsFile() {
                     const input = document.getElementById('vcf-upload-input');
                     const file = input.files[0];
-                    if (!file) { alert('Please choose a VCF or CSV file!'); return; }
+                    if (!file) { alert('Please choose a VCF, CSV or Excel (.xlsx) file!'); return; }
 
                     const reader = new FileReader();
                     reader.onload = async function(e) {
-                        const text = e.target.result;
+                        const b64 = String(e.target.result || '').replace(/^data:[^,]*,/, '');
                         try {
                             const res = await fetch('/api/contacts/import-vcf', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ fileText: text, fileName: file.name })
+                                body: JSON.stringify({ fileBase64: b64, fileName: file.name })
                             });
                             const data = await res.json();
                             if (data.success) {
-                                alert('✅ ' + data.count + ' contacts imported • ' + data.matched + ' voter matches • ' + data.unmatched + ' contact-only');
+                                alert('✅ ' + data.count + ' contacts imported (tag ' + ((data.saved && data.saved.tag) || '') + ') • ' + data.matched + ' voter matches • ' + (data.invalid || 0) + ' invalid • ' + (data.duplicates || 0) + ' duplicates');
                                 loadContacts();
                                 input.value = '';
                             } else {
@@ -5610,7 +5650,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             }
                         } catch (err) { alert('Upload error: ' + err.message); }
                     };
-                    reader.readAsText(file);
+                    reader.readAsDataURL(file);
                 }
 
                 function toggleSelectAllContacts(master) {
@@ -6174,7 +6214,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
-            </script>${opsRoutes.ui.script()}${crmUi.script()}${ocRoutes.ui.script()}${dashAuth.ui.script()}
+            </script>${opsRoutes.ui.script()}${statusRoutes.ui.script()}${crmUi.script()}${ocRoutes.ui.script()}${dashAuth.ui.script()}
         </body>
         </html>
     `);

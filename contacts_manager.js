@@ -93,6 +93,10 @@ class ContactsManager {
         if (filter.village && filter.village !== 'all') {
             result = result.filter(c => String(c.village || '').trim() === String(filter.village).trim());
         }
+        if (filter.tag && filter.tag !== 'all') {
+            const tags = String(filter.tag).split('||').map(t => t.trim()).filter(Boolean);
+            result = result.filter(c => Array.isArray(c.tags) && c.tags.some(t => tags.includes(t)));
+        }
         if (filter.search) {
             const q = filter.search.toLowerCase().trim();
             result = result.filter(c => 

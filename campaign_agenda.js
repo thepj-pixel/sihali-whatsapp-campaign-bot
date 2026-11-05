@@ -11,9 +11,9 @@ const DEFAULT_AGENDA = {
     talkingPoints: 'पहले मतदाता की असली समस्या और सही जगह/वार्ड समझें। केवल 4 नवंबर की सत्यापित तथ्य सूची से छोटा, सीधा जवाब दें। पूर्ण कार्य और भावी संकल्प साफ़ अलग रखें; जिस विवरण का सत्यापन बाकी है उसे दावा बनाकर न बोलें।',
     dailySchedule: {
         morning: {
-            timeWindow: '08:30 AM - 10:30 AM',
-            startHour: 8.5,
-            endHour: 10.5,
+            timeWindow: '09:00 AM - 11:30 AM',
+            startHour: 9,
+            endHour: 11.5,
             type: 'poster',
             name: 'सुबह का पोस्टर (Morning Poster & Daily Agenda Hook)',
             hook: 'राम राम भैया! 🙏 आज की ताज़ा सुबह की राम-राम। आपके मोहल्ले और परिवार में सब कुशल-मंगल? इस बार गाँव का क्या माहौल लग रहा है भैया?'
@@ -27,9 +27,9 @@ const DEFAULT_AGENDA = {
             hook: 'नमस्ते भैया! ☀️ दोपहर का समय है, सोचा आज बाबा द्वारा करवाए गए प्रमुख विकास कार्यों की एक झलक आपके साथ साझा करूँ।'
         },
         evening: {
-            timeWindow: '05:30 PM - 07:30 PM',
+            timeWindow: '05:30 PM - 08:00 PM',
             startHour: 17.5,
-            endHour: 19.5,
+            endHour: 20,
             type: 'poster',
             name: 'शाम का संकल्प / स्टेटस पोस्टर (Evening Status Card)',
             hook: 'शुभ संध्या भैया! 🌇 आज शाम का विशेष संकल्प पोस्टर आपके लिए। अपने WhatsApp स्टेटस पर जरूर लगाइएगा!'

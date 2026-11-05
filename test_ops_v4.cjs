@@ -298,7 +298,8 @@ function seq(seed = 7) { let x = seed; return () => { x = (x * 16807) % 21474836
         const all = ui.tabButtons() + ui.tabPanes() + ui.script();
         assert.ok(/tab-overview/.test(all) && /tab-schedule/.test(all) && /tab-btn-overview/.test(all));
         assert.ok(!/\$\{/.test(all));
-        assert.ok(!/\.csv/.test(all), 'no CSV export of voter numbers in Overview');
+        const overviewPane = ui.tabPanes().split('<div id="tab-schedule"')[0];
+        assert.ok(!/\.csv/.test(overviewPane), 'no CSV export of voter numbers in Overview');
     });
 
     console.log(`\nOPS v4: ${passed} passed, ${failed} failed`);

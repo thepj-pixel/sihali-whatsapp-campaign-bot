@@ -21,9 +21,12 @@ const { renderMessage, dedupeAndValidate, mediaTypeOf, inQuietHours, istDateKey 
 const contactUtils = require('./contact_utils.js');
 
 const IST_MS = 5.5 * 3600 * 1000;
-const DEFAULTS = { minGapSec: 20, maxGapSec: 90, hourlyCap: 60, dailyCap: 250, graceMin: 60 };
+const DEFAULTS = { minGapSec: 20, maxGapSec: 90, hourlyCap: 50, dailyCap: 250, graceMin: 60 };
+// auto-pause (6 Nov): N send errors in a row on a line, a ban / rate-limit sign, or a line down while sends are due
+const AUTO_PAUSE = { errorStreak: 3, disconnectMs: 2 * 60e3, recentHours: 20 };
+const BAN_RX = /rate-?overlimit|too many|\b429\b|\b403\b|forbidden|not-authori[sz]ed|\b401\b|banned|\bban\b|blocked|restricted|suspended|logged ?out|account.*(locked|disabled)|spam/i;
 const MAX_RECIPIENTS = 500;
-const PRESETS = { morning: [8, 11], evening: [17, 20], dopahar: [13, 16] };
+const PRESETS = { morning: [9, 11.5], evening: [17.5, 20], dopahar: [13, 16] };
 
 /** "2026-11-05T08:00" (IST wall clock) -> epoch ms. Also accepts full ISO with zone. */
 function parseIst(v) {
@@ -80,6 +83,8 @@ function planTimes(recipients, { start, end, lines, minGapSec, maxGapSec, rng = 
     return { items, overflow };
 }
 
+function byReason(list) { const m = {}; for (const b of list || []) m[b.reason] = (m[b.reason] || 0) + 1; return m; }
+
 class ScheduledCampaigns {
     /**
      * @param {object} o
@@ -107,6 +112,7 @@ class ScheduledCampaigns {
         // own-line TEST campaigns wait while a Live Self-Test runs between our lines (never pollute its transcript)
         this.isTestBusy = o.isTestBusy || (() => false);
         this.onSent = o.onSent || (() => {});
+        this.onAutoPause = o.onAutoPause || null;
         this.now = o.now || (() => Date.now());
         this.random = o.random || Math.random;
         this.sleep = o.sleep || (ms => new Promise(r => setTimeout(r, ms)));
@@ -156,6 +162,20 @@ class ScheduledCampaigns {
         return null;
     }
 
+    /** Already messaged by a scheduled campaign in the last 20 h, or waiting in another active one? */
+    recentReason(phone) {
+        const since = this.now() - AUTO_PAUSE.recentHours * 3600e3;
+        for (const c of Object.values(this.state.campaigns)) {
+            if (c.test) continue;
+            for (const it of c.items) {
+                if (it.phone !== phone) continue;
+                if ((it.status === 'sent' || it.status === 'sending') && (it.sentAt || Date.parse(it.at) || 0) >= since) return 'already_sent_today';
+                if (['pending', 'checking', 'sending'].includes(it.status) && ['scheduled', 'running', 'paused'].includes(c.status)) return 'in_other_campaign';
+            }
+        }
+        return null;
+    }
+
     /** Validate + plan. Returns { errors[], campaign? } without saving. */
     build(input = {}) {
         const errors = [];
@@ -202,10 +222,15 @@ class ScheduledCampaigns {
         const blocked = [];
         if (test) {
             const seen = new Set();
-            for (const r of (input.recipients || [])) {
+            // own-line test only: the same own number may be listed up to 6 times (to prove rotation / gaps / pause live)
+            const repeat = Math.max(1, Math.min(6, Number(input.repeat) || 1));
+            const testRows = [];
+            for (const r of (input.recipients || [])) for (let k = 0; k < repeat; k++) testRows.push({ ...r, _k: k });
+            for (const r of testRows) {
                 const d = String(r.phone || '').replace(/\D/g, '');
-                if (seen.has(d)) { duplicates++; continue; }
-                seen.add(d);
+                const key = d + '|' + (r.line || '') + '|' + r._k;
+                if (seen.has(key)) { duplicates++; continue; }
+                seen.add(key);
                 const own = this.ownLineOf(d);
                 if (!own) { errors.push(`Test campaigns may only target our own line numbers (${d} is not one)`); continue; }
                 if (r.line && r.line === own) { errors.push(`${d} is line ${own} itself — send it from another line`); continue; }
@@ -222,9 +247,15 @@ class ScheduledCampaigns {
             valid = built.valid; invalid = built.invalid; duplicates = built.duplicates;
         }
         valid = valid.filter(r => { const why = this.blockReason(r.phone, c0); if (why) { blocked.push({ ...r, reason: why }); return false; } return true; });
+        // never message the same person twice in a day from scheduled bulk (also lets a morning + evening campaign share one tag)
+        const skipRecent = !test && !(input.skipRecent === false || input.skipRecent === 'false');
+        if (skipRecent) valid = valid.filter(r => { const why = this.recentReason(r.phone); if (why) { blocked.push({ ...r, reason: why }); return false; } return true; });
+        const maxRecipients = Math.max(0, Number(input.maxRecipients) || 0);
+        let heldBack = 0;
+        if (maxRecipients && valid.length > maxRecipients) { heldBack = valid.length - maxRecipients; valid = valid.slice(0, maxRecipients); }
         if (!valid.length) errors.push('No recipients left after cleaning (invalid, duplicate, opted-out or opponents (virodhi))');
         if (valid.length > MAX_RECIPIENTS) errors.push(`Too many recipients (${valid.length}); max ${MAX_RECIPIENTS} per scheduled campaign`);
-        if (errors.length) return { errors, counts: { valid: valid.length, invalid: invalid.length, duplicates, blocked: blocked.length } };
+        if (errors.length) return { errors, counts: { valid: valid.length, invalid: invalid.length, duplicates, blocked: blocked.length, skippedByReason: byReason(blocked) } };
 
         const { items, overflow } = planTimes(valid, { start, end, lines, minGapSec, maxGapSec, rng: this.random, lineFor: p => { try { return this.getAssignedLine(p); } catch (_) { return null; } } });
         const msgRot = messages.length ? rotation(items.length, messages.length, this.random) : [];
@@ -242,7 +273,8 @@ class ScheduledCampaigns {
             createdAt: new Date(now).toISOString(), status: 'scheduled', test, includeVirodhi: c0.includeVirodhi,
             quietHours: input.quietHours === true || input.quietHours === 'true',
             windowStart: start, windowEnd: end, minGapSec, maxGapSec, caps, lines, messages, media,
-            source: input.source || 'dashboard', items,
+            source: input.source || 'dashboard', items, contactCard: !(input.contactCard === false || input.contactCard === 'false'), heldBack,
+            audienceLabel: String(input.audienceLabel || input.contactTag || '').slice(0, 60),
             skippedAtPlan: blocked.map(b => ({ phone: b.phone, reason: b.reason })),
             invalidInputs: invalid.length, duplicatesRemoved: duplicates, overflow, perLine
         };
@@ -257,7 +289,21 @@ class ScheduledCampaigns {
             phone: it.phone.slice(0, 4) + '…' + it.phone.slice(-3), line: it.line, at: istLabel(it.dueAt),
             text: it.msgIdx !== null ? renderMessage(c.messages[it.msgIdx], it, this.random) : '', media: it.mediaIdx !== null ? c.media[it.mediaIdx].file : null
         }));
-        return { ok: true, recipients: c.items.length, skipped: c.skippedAtPlan.length, invalid: c.invalidInputs, duplicates: c.duplicatesRemoved, perLine: c.perLine, overflow: c.overflow, window: [istLabel(c.windowStart), istLabel(c.windowEnd)], samples };
+        const warnings = [];
+        const hours = (c.windowEnd - c.windowStart) / 3600e3;
+        const avgGap = (c.minGapSec + c.maxGapSec) / 2;
+        const perLineFit = Math.floor(Math.min(hours * c.caps.hourlyCap, (hours * 3600) / avgGap));
+        for (const [line, n] of Object.entries(c.perLine)) {
+            const used = this.lineUsage(line);
+            const dayLeft = Math.max(0, c.caps.dailyCap - (used.day || 0));
+            if (n > perLineFit) warnings.push(`${line}: ${n} people but the window fits about ${perLineFit} at ${c.caps.hourlyCap}/hour and ${c.minGapSec}–${c.maxGapSec}s gaps — the rest would be skipped as window_passed. Use "max people" (e.g. ${perLineFit}) and send the rest in the next window.`);
+            if (n > dayLeft) warnings.push(`${line}: ${n} people but only ${dayLeft} left of today's daily cap (${c.caps.dailyCap}).`);
+        }
+        if (c.overflow) warnings.push(`${c.overflow} planned send(s) fall after the window end (gaps); they still go within the 60-min grace, else are skipped.`);
+        if (c.heldBack) warnings.push(`${c.heldBack} more people held back by "max people" — they stay available for the next campaign with the same tag.`);
+        const textUse = {}, posterUse = {};
+        for (const it of c.items) { if (it.msgIdx !== null) textUse['T' + (it.msgIdx + 1)] = (textUse['T' + (it.msgIdx + 1)] || 0) + 1; if (it.mediaIdx !== null) posterUse[c.media[it.mediaIdx].file] = (posterUse[c.media[it.mediaIdx].file] || 0) + 1; }
+        return { ok: true, recipients: c.items.length, skipped: c.skippedAtPlan.length, skippedByReason: byReason(c.skippedAtPlan), invalid: c.invalidInputs, duplicates: c.duplicatesRemoved, heldBack: c.heldBack || 0, perLine: c.perLine, overflow: c.overflow, window: [istLabel(c.windowStart), istLabel(c.windowEnd)], caps: c.caps, gapSec: [c.minGapSec, c.maxGapSec], fitsPerLine: perLineFit, textRotation: textUse, posterRotation: posterUse, contactCard: c.contactCard, warnings, samples };
     }
 
     create(input) {
@@ -279,8 +325,8 @@ class ScheduledCampaigns {
     setStatus(id, action) {
         const c = this.get(id);
         if (!c) return { ok: false, status: 404, error: 'No such campaign' };
-        if (action === 'pause') { if (!['scheduled', 'running'].includes(c.status)) return { ok: false, status: 409, error: 'Not active' }; c.prevStatus = c.status; c.status = 'paused'; }
-        else if (action === 'resume') { if (c.status !== 'paused') return { ok: false, status: 409, error: 'Not paused' }; c.status = c.prevStatus || 'scheduled'; }
+        if (action === 'pause') { if (!['scheduled', 'running'].includes(c.status)) return { ok: false, status: 409, error: 'Not active' }; c.prevStatus = c.status; c.status = 'paused'; c.pauseReason = 'manual'; }
+        else if (action === 'resume') { if (c.status !== 'paused') return { ok: false, status: 409, error: 'Not paused' }; c.status = c.prevStatus || 'scheduled'; c.pauseReason = null; c.errStreak = {}; c.downSince = {}; }
         else if (action === 'cancel') {
             if (['done', 'cancelled'].includes(c.status)) return { ok: false, status: 409, error: 'Already finished' };
             const at = new Date(this.now()).toISOString();
@@ -289,6 +335,24 @@ class ScheduledCampaigns {
         } else return { ok: false, status: 400, error: 'Unknown action' };
         this.save();
         return { ok: true, status: 200, campaign: this.summary(c) };
+    }
+
+    /** Danger stop: the campaign pauses and waits for the operator (never resumes by itself). */
+    autoPause(c, reason) {
+        if (!['scheduled', 'running'].includes(c.status)) return;
+        c.prevStatus = c.status; c.status = 'paused'; c.pauseReason = 'auto: ' + String(reason).slice(0, 140); c.autoPausedAt = new Date(this.now()).toISOString();
+        this.log.warn(`[Scheduled] ${c.id} AUTO-PAUSED — ${reason}`);
+        try { this.onAutoPause && this.onAutoPause({ campaignId: c.id, name: c.name, reason: c.pauseReason }); } catch (_) {}
+        this.save();
+    }
+    noteError(c, lineId, msg) {
+        c.errStreak = c.errStreak || {};
+        c.errStreak[lineId] = (c.errStreak[lineId] || 0) + 1;
+        if (BAN_RX.test(String(msg || ''))) {
+            if (this.engine && this.engine.lineStat) { try { const st = this.engine.lineStat(lineId); st.paused = true; st.pausedReason = ('ban_or_rate_limit: ' + msg).slice(0, 120); this.engine.save(); } catch (_) {} }
+            return this.autoPause(c, `possible ban / rate-limit on ${lineId}: ${msg}`);
+        }
+        if (c.errStreak[lineId] >= AUTO_PAUSE.errorStreak) this.autoPause(c, `${c.errStreak[lineId]} send errors in a row on ${lineId}: ${msg}`);
     }
 
     // ---------- scheduler ----------
@@ -327,6 +391,17 @@ class ScheduledCampaigns {
                 const left = c.items.filter(i => i.status === 'pending' || i.status === 'sending' || i.status === 'checking');
                 if (!left.length) { c.status = 'done'; c.finishedAt = new Date(now).toISOString(); changed = true; continue; }
                 if (c.status === 'scheduled' && now >= c.windowStart) { c.status = 'running'; changed = true; }
+                if (c.status === 'running') {
+                    c.downSince = c.downSince || {};
+                    for (const id of c.lines) {
+                        const s = sessions.find(x => x.id === id);
+                        const up = s && s.status === 'CONNECTED' && s.sock;
+                        const due = c.items.some(i => i.status === 'pending' && i.line === id && i.dueAt <= now);
+                        if (up || !due) { if (c.downSince[id]) { delete c.downSince[id]; changed = true; } continue; }
+                        if (!c.downSince[id]) { c.downSince[id] = now; changed = true; }
+                        else if (now - c.downSince[id] >= AUTO_PAUSE.disconnectMs) { this.autoPause(c, `line ${id} disconnected for ${Math.round((now - c.downSince[id]) / 60e3)} min while sends were due`); changed = true; }
+                    }
+                }
                 // window long gone -> the rest is skipped (no surprise sends hours later)
                 const graceEnd = c.windowEnd + DEFAULTS.graceMin * 60e3;
                 if (now > graceEnd) {
@@ -386,6 +461,7 @@ class ScheduledCampaigns {
                 if (it.checks >= 3) { it.status = 'failed'; it.reason = 'whatsapp_check_failed: ' + e.message; it.at = stamp(); }
                 else it.status = 'pending';
                 this.lineNextAt[sess.id] = this.now() + this.gapMs(c);
+                this.noteError(c, sess.id, 'onWhatsApp: ' + (e.message || e));
                 return;
             }
             if (c.status !== 'running') { it.status = c.status === 'cancelled' ? 'skipped' : 'pending'; if (c.status === 'cancelled') { it.reason = 'cancelled'; it.at = stamp(); } return; }
@@ -411,12 +487,15 @@ class ScheduledCampaigns {
             } else content = { text };
             const sent = await sock.sendMessage(jid, content);
             it.status = 'sent'; it.reason = ''; it.at = stamp(); it.sentAt = this.now(); it.msgId = sent?.key?.id || '';
+            it.mediaFile = media ? media.file : '';
+            if (c.errStreak) c.errStreak[sess.id] = 0;
             this.recordLineSend(sess.id);
             this.lineNextAt[sess.id] = this.now() + this.gapMs(c);
-            try { this.onSent({ campaignId: c.id, test: c.test, phone: it.phone, name: it.name, text, line: sess.id, lineName: sess.name, media, sent }); } catch (_) {}
+            try { this.onSent({ campaignId: c.id, test: c.test, phone: it.phone, name: it.name, text, line: sess.id, lineName: sess.name, media, sent, contactCard: c.contactCard !== false }); } catch (_) {}
         } catch (e) {
             it.status = 'failed'; it.reason = String(e.message || e).slice(0, 160); it.at = stamp();
             this.lineNextAt[sess.id] = this.now() + this.gapMs(c);
+            if (!e.retired) this.noteError(c, sess.id, e.message || String(e));
         } finally { this.save(); }
     }
 
@@ -432,14 +511,27 @@ class ScheduledCampaigns {
             window: { start: new Date(c.windowStart).toISOString(), end: new Date(c.windowEnd).toISOString(), startIST: istLabel(c.windowStart), endIST: istLabel(c.windowEnd) },
             lines: c.lines, perLine: c.perLine, messages: c.messages.length, media: c.media.map(m => m.file), gapSec: [c.minGapSec, c.maxGapSec],
             includeVirodhi: c.includeVirodhi, quietHours: c.quietHours, waitingReason: c.waitingReason || null, overflow: c.overflow,
-            counts: this.counts(c), skippedAtPlan: (c.skippedAtPlan || []).length, source: c.source
+            counts: this.counts(c), skippedAtPlan: (c.skippedAtPlan || []).length, skippedByReason: byReason(c.skippedAtPlan), source: c.source,
+            pauseReason: c.pauseReason || null, contactCard: c.contactCard !== false, caps: c.caps, heldBack: c.heldBack || 0, audienceLabel: c.audienceLabel || ''
         };
         const nextDue = c.items.filter(i => i.status === 'pending').map(i => i.dueAt).sort((a, b) => a - b)[0];
         out.nextDueIST = nextDue ? istLabel(nextDue) : null;
         if (items) out.items = c.items.slice().sort((a, b) => a.dueAt - b.dueAt).map(i => ({ phone: i.phone.slice(0, 4) + '…' + i.phone.slice(-3), name: i.name, line: i.line, dueIST: istLabel(i.dueAt), status: i.status, reason: i.reason, sentIST: i.sentAt ? istLabel(i.sentAt) : '', variant: (i.msgIdx !== null && i.msgIdx !== undefined ? 'T' + (i.msgIdx + 1) : '') + (i.mediaIdx !== null && i.mediaIdx !== undefined ? ' P' + (i.mediaIdx + 1) : '') }));
         return out;
     }
+    /** Full results for the operator (full numbers; dashboard login required). */
+    resultsCsv(id) {
+        const c = this.get(id);
+        if (!c) return null;
+        const esc = v => { const s = v === null || v === undefined ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const rows = [['phone', 'name', 'line', 'due_ist', 'status', 'reason', 'sent_ist', 'text_variant', 'poster', 'message_id'].join(',')];
+        for (const i of c.items.slice().sort((a, b) => a.dueAt - b.dueAt)) {
+            rows.push([i.phone, i.name, i.line, istLabel(i.dueAt), i.status, i.reason, i.sentAt ? istLabel(i.sentAt) : '', i.msgIdx !== null && i.msgIdx !== undefined ? 'T' + (i.msgIdx + 1) : '', i.mediaIdx !== null && i.mediaIdx !== undefined ? (c.media[i.mediaIdx] || {}).file : '', i.msgId || ''].map(esc).join(','));
+        }
+        for (const b of c.skippedAtPlan || []) rows.push([b.phone, '', '', '', 'skipped_at_plan', b.reason, '', '', '', ''].map(esc).join(','));
+        return '\uFEFF' + rows.join('\n') + '\n';
+    }
     list() { return Object.values(this.state.campaigns).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map(c => this.summary(c)); }
 }
 
-module.exports = { ScheduledCampaigns, planTimes, rotation, parseIst, windowFromHours, istLabel, PRESETS, DEFAULTS };
+module.exports = { ScheduledCampaigns, planTimes, rotation, parseIst, windowFromHours, istLabel, PRESETS, DEFAULTS, AUTO_PAUSE, BAN_RX };

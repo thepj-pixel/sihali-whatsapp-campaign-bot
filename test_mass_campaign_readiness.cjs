@@ -77,14 +77,14 @@ async function testMassCampaignReadiness() {
     console.log('\n▶ TEST 4: Daily Agenda 4-Time Slots Verification');
     const agenda = campaignAgenda.getAgenda();
     const slots = agenda.dailySchedule;
-    const hasMorning = slots && slots.morning && slots.morning.timeWindow.includes('08:30');
+    const hasMorning = slots && slots.morning && slots.morning.timeWindow.includes('09:00');
     const hasDopahar = slots && slots.dopahar && slots.dopahar.timeWindow.includes('01:30');
     const hasEvening = slots && slots.evening && slots.evening.timeWindow.includes('05:30');
     const hasNight = slots && slots.night && slots.night.timeWindow.includes('08:00');
 
-    console.log(`  - 1. Morning Poster Slot (08:30 AM - 10:30 AM): ${hasMorning ? '✓ [PASS]' : '❌ [FAIL]'}`);
+    console.log(`  - 1. Morning Poster Slot (09:00 AM - 11:30 AM): ${hasMorning ? '✓ [PASS]' : '❌ [FAIL]'}`);
     console.log(`  - 2. Dopahar Work Slot (01:30 PM - 03:30 PM): ${hasDopahar ? '✓ [PASS]' : '❌ [FAIL]'}`);
-    console.log(`  - 3. Evening Status Slot (05:30 PM - 07:30 PM): ${hasEvening ? '✓ [PASS]' : '❌ [FAIL]'}`);
+    console.log(`  - 3. Evening Status Slot (05:30 PM - 08:00 PM): ${hasEvening ? '✓ [PASS]' : '❌ [FAIL]'}`);
     console.log(`  - 4. Night Video Reel Slot (08:00 PM - 09:30 PM): ${hasNight ? '✓ [PASS]' : '❌ [FAIL]'}`);
 
     if (!hasMorning || !hasDopahar || !hasEvening || !hasNight) allPassed = false;
