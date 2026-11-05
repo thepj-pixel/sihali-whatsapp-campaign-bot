@@ -52,9 +52,19 @@ function spin(text, rng = Math.random) {
     return out;
 }
 
-function renderMessage(template, recipient, rng = Math.random, nameFallback = 'भाई जी') {
-    const name = (recipient && recipient.name && String(recipient.name).trim()) || nameFallback;
-    return spin(template, rng).replace(/\{\s*(name|naam|नाम)\s*\}/gi, name).trim();
+// placeholder / non-names saved for unnamed contacts must never reach a voter ("राम राम ग्रामवासी जी")
+const PLACEHOLDER_NAME = /^(ग्रामवासी|गांववासी|गाँववासी|समर्थक|मतदाता|वोटर|voter|contact|unknown|test|self-test|na|n\/a|-+|\+?[\d\s-]+)$/i;
+function renderMessage(template, recipient, rng = Math.random, nameFallback = 'जी') {
+    let name = (recipient && recipient.name && String(recipient.name).trim()) || '';
+    if (PLACEHOLDER_NAME.test(name)) name = '';
+    const PH = /\{\s*(name|naam|नाम)\s*\}/gi;
+    let out = spin(template, rng);
+    if (name) out = out.replace(PH, name);
+    else {
+        // no real name: "{name} जी" -> "जी", otherwise a neutral "जी" (never a gendered "भाई जी")
+        out = out.replace(/\s*\{\s*(name|naam|नाम)\s*\}\s*(?=(जी|ji|jee)(?![a-z]))/gi, ' ').replace(PH, nameFallback);
+    }
+    return out.replace(/[ \t]{2,}/g, ' ').replace(/ ([,!।?.])/g, '$1').trim();
 }
 
 function dedupeAndValidate(rows, isBlocked = () => null) {

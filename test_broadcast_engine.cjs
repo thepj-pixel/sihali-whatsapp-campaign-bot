@@ -69,7 +69,9 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     check('spintax produces both variants', seen.has('नमस्ते भाई') && seen.has('राम राम भाई') && seen.size === 2);
     check('nested spintax resolves', !/[{}|]/.test(spin('{a|{b|c}} x', rng)));
     check('{name} placeholder filled', renderMessage('राम राम {name}!', { name: 'सीता' }, rng) === 'राम राम सीता!');
-    check('{name} fallback when missing', renderMessage('राम राम {name}!', { name: '' }, rng) === 'राम राम भाई जी!');
+    check('{name} fallback when missing (neutral जी)', renderMessage('राम राम {name}!', { name: '' }, rng) === 'राम राम जी!');
+    check('{name} जी with no name -> "राम राम जी"', renderMessage('राम राम {name} जी 🙏', { name: '' }, rng) === 'राम राम जी 🙏');
+    check('placeholder name never used', renderMessage('राम राम {name} जी 🙏', { name: 'ग्रामवासी' }, rng) === 'राम राम जी 🙏');
     check('{name} is not treated as spintax', renderMessage('{name} {हाँ|हां}', { name: 'Ram' }, rng).startsWith('Ram '));
 
     // ---- caps validation ----

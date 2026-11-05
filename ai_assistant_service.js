@@ -195,7 +195,7 @@ function getFastLocalAnswerCore(query, phone = null) {
             return (
                 `Ram Ram ${honorific}! 📜\n` +
                 `Baba Abhay Singh ke aage ke mukhya sankalp:\n` +
-                `• Khel maidan me open gym, running track va mini stadium 🏃\n` +
+                `• Khel maidan me open gym aur running track (mini stadium ka prayas aage ka sankalp) 🏃\n` +
                 `• Mukhya raaston va chaurahon par night-vision CCTV camere 📹\n` +
                 `• Hospital me regular doctor va 24hr emergency ambulance 🏥\n` +
                 `• Gram panchayat me patwar ghar va sasti dawai jan aushadhi kendra 💊\n\n` +
@@ -205,7 +205,7 @@ function getFastLocalAnswerCore(query, phone = null) {
         return (
             `राम राम ${honorific}! 📜\n` +
             `बाबा अभय सिंह के आगामी प्रमुख संकल्प:\n` +
-            `• खेल मैदानों में ओपन जिम, रनिंग ट्रैक व मिनी स्टेडियम का निर्माण 🏃\n` +
+            `• खेल मैदान में ओपन जिम व रनिंग ट्रैक (मिनी स्टेडियम का प्रयास आगे का संकल्प) 🏃\n` +
             `• मुख्य रास्तों व चौराहों पर सुरक्षा हेतु नाइट-विजन CCTV कैमरे 📹\n` +
             `• अस्पताल में नियमित डॉक्टर व 24 घंटे आपातकालीन एम्बुलेंस 🏥\n` +
             `• ग्राम पंचायत में ही पटवार घर व सस्ती जेनेरिक दवाओं का जन औषधि केंद्र 💊\n\n` +
@@ -805,9 +805,8 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
                 if (user) {
                     user.lastSearchedQuery = userMessage;
                     user.lastSearchedName = matches[0].name;
-                    user.lastFoundVoter = matches[0];
+                    user.lastFoundVoter = matches[0]; user.lastFoundVoterSelf = false; // a search hit is not the voter's own identity (gender/name)
                     if (!user.ward && matches[0].ward) user.ward = matches[0].ward;
-                    if (!user.name) user.name = matches[0].name;
                     userMemory.save();
                 }
                 const tv = matches[0];

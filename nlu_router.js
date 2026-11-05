@@ -163,6 +163,15 @@ function plan(n, user, ctx = {}) {
     }
 
     if (n.wants_slip && (n.intent === 'slip_request' || n.intent === 'slip_answer')) {
+        // round 4 (5 Nov live): "ward 3 me hi school ke paas" answering the samasya "किस गली में?" was searched as a name.
+        // While a samasya/mulaqat question is open, only an explicit parchi ask goes to the slip flow.
+        let flowOpen = false; try { flowOpen = require('./reply_brain.js').inFlow(user); } catch (e) {}
+        if (flowOpen && !/(parchi|parchee|parchiy|slip|पर्ची|voter\s*id|epic|वोटर\s*आईडी)/i.test(ctx.text || '')) { out.noSlip = true; return out; }
+        // round 4: the model sometimes copies a name from the chat history ("or wife ka naam?" -> the voter's own name).
+        // A model name counts only if it is in THIS message.
+        const said = String(ctx.text || '').toLowerCase();
+        const inMsg = x => !!x && String(x).toLowerCase().split(/\s+/).filter(w => w.length >= 3).some(w => said.includes(w));
+        if ((n.person_name_hi || n.person_name_roman) && !inMsg(n.person_name_hi) && !inMsg(n.person_name_roman)) { n.person_name_hi = null; n.person_name_roman = null; }
         // a name that is the FATHER of someone in the open list/candidate ("bhawani ram") answers that list
         try {
             const sf = require('./slip_flow.js');

@@ -148,7 +148,7 @@ function metaOf(ctx) {
     const m = voterMemory.ensure(u);
     return {
         phone: (ctx.meta && ctx.meta.phone) || u.phone || null,
-        name: [m.name, u.name, u.lastFoundVoter && (u.lastFoundVoter.name_hi || u.lastFoundVoter.name)].find(n => n && !/^(mera|meri|main|mai|hum|ham|kya|nahi|haan|ji|ok|मेरा|मैं|हम|क्या|नहीं|जी|ग्रामवासी)$/i.test(String(n).trim().split(/\s+/)[0]) && !/self-test|ग्रामवासी/i.test(n)) || null,
+        name: [m.name, u.name, u.lastFoundVoter && u.lastFoundVoterSelf !== false && (u.lastFoundVoter.name_hi || u.lastFoundVoter.name)].find(n => n && !/^(mera|meri|main|mai|hum|ham|kya|nahi|haan|ji|ok|मेरा|मैं|हम|क्या|नहीं|जी|ग्रामवासी)$/i.test(String(n).trim().split(/\s+/)[0]) && !/self-test|ग्रामवासी/i.test(n)) || null,
         village: m.village || null,
         ward: u.ward || m.ward || (u.lastFoundVoter && Number(u.lastFoundVoter.ward)) || null,
         line: (ctx.meta && ctx.meta.line) || u.lastSessionId || u.assignedLine || null,
@@ -448,7 +448,9 @@ function continueFlow(ctx) {
         return null;
     }
 
-    const breaker = BREAKERS.has(cls.intent) && !(f.type === 'samasya' && f.step === 'what' && cls.intent === 'works');
+    // round 4: "raat ko light nahi rehti ward 10" answering "किस वार्ड/गली में?" is the location, not a new 'works' question
+    const wardGiven = f.type === 'samasya' && f.step === 'where' && /(ward|वार्ड)\s*(no\.?|नं\.?|number|नंबर)?\s*\d{1,2}\b/i.test(t) && !isQuestion(t);
+    const breaker = BREAKERS.has(cls.intent) && !(f.type === 'samasya' && f.step === 'what' && cls.intent === 'works') && !wardGiven;
     if (f.type === 'samasya') {
         if (cls.intent === 'meeting') { setFlow(user, null); return startMulaqat(ctx, { purpose: f.recordId ? 'samasya ' + f.recordId : null }); }
         if (f.step === 'what') {
@@ -474,7 +476,7 @@ function continueFlow(ctx) {
         // that message normally and the flow stays open for the next message (max 2 parked messages).
         const park = () => { const n = (f.parked || 0) + 1; setFlow(user, n > 2 ? null : { ...f, parked: n }); return null; };
         if (f.step === 'where') {
-            const loc = ['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention', 'complaint'].includes(cls.intent) && !isQuestion(t) ? parseLocation(t, { loose: true }) : null;
+            const loc = (['short_reply', 'unclear', 'gave_ward', 'introduce', 'topic_mention', 'complaint'].includes(cls.intent) || wardGiven) && !isQuestion(t) ? parseLocation(t, { loose: true }) : null;
             const short = t.split(/\s+/).length <= 8 && !isQuestion(t);
             const otherTopic = kb.primaryTopic(t, null);
             const sinceAns = parseSince(t);

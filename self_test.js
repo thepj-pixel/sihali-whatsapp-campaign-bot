@@ -113,6 +113,8 @@ class LiveSelfTest {
         }
         const u = this.userMemory.getUser(key);
         if (this.run.freshContact && !fresh) { Object.assign(u, { selfTest: this.run.id, autoPilot: true }); return u; }
+        // later turns of the same run keep what the voter did (a STOP stays a STOP: no second confirmation, no reply)
+        if (!fresh) { Object.assign(u, { selfTest: this.run.id }); return u; }
         Object.assign(u, { consented: true, consentStatus: 'ACCEPTED', autoPilot: true, contactCardSent: true, selfTest: this.run.id, assignedLine: this.run.targetLine, broadcastOptOut: false, languagePreference: 'auto', name: u.name || '' });
         // freshContact: behave exactly like a brand-new number (consent prompt + this line's contact card on the first reply)
         if (this.run.freshContact && fresh) Object.assign(u, { consented: null, consentStatus: 'PENDING', contactCardSent: false, contactCardLines: {} });

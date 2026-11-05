@@ -1,3 +1,29 @@
+# HARK_CHANGES — brain v7.4 (5 Nov 2026 night: round 4 live battery + feature QA before the first real bulk)
+
+Live: 31 conversations on the VM (10 new: replies to a bulk intro, family cards, booth/time, mixed Hindi/English; 3 targeted; 18 round-1 re-runs incl. Haryanvi c26 and STOP c24).
+
+| Failure seen live | Fix | Files |
+|---|---|---|
+| Model drafts asked for the vote in its own words ("…समर्थन देंगे ना?", "…मजबूती देंगे ना?") so a closer asked again next turn (3 asks in 4 replies) | broad `VOTE_ASK_ANY`; the operator's vote-ask gap now counts any ask, and a too-soon ask sentence is cut from the final reply (gentle mode: never) | `reply_brain.js` (`capVoteAsk`) |
+| LLM clumsy first person for Baba's work ("…पूरी करवाती हूँ", "विकास कार्य करती हूँ") | rejected as `self_promise` → grounded template | `reply_brain.js` |
+| "stadium ban gaya kya" / "or stadium" / "stadium bhi banega?" listed khel-maidan or library works | stadium questions answer the sankalp: mini stadium = *प्रयास*; LLM text mentioning stadium without प्रयास/संकल्प and "Amrit Sarovar बन गया" are rejected; legacy menu no longer says mini stadium was built | `reply_brain.js`, `ai_assistant_service.js` |
+| "library kab khulegi Haraheri me" got Sihali Khurd's done library | a village + "kab/banega/khulegi" answers that village's own sankalp, no date | `reply_brain.js` |
+| "mere dadi h wo" re-asked the ward without acknowledging | "अच्छा, आपकी दादी जी हैं 🙏 *कमला देवी* जी किस वार्ड में रहती हैं?…" (one question) | `slip_flow.js` |
+| "अच्छा ताई जी" to a male voter: gender/age came from a searched (someone else's) voter record | a bare search hit is never the voter's identity (`lastFoundVoterSelf=false`, no `user.name` from a search); unknown gender stays neutral "जी" | `reply_brain.js` (`selfVoter`), `ai_assistant_service.js`, `conversation_flows.js` |
+| Second STOP in a self-test resent the confirmation (self-test reset the opt-out every turn); STOP ack was Roman for Roman STOP | self-test prepares the record once per run; STOP ack in Hindi unless the voter chose Hinglish | `self_test.js`, `server.js` |
+| Bulk replies "kon" / "ye kiska number h" got "कोई काम या सवाल…" / a mohalla question | who-are-you rules; "kiska number" says it is Abhay Singh (Moti Aangli wale)'s team number | `reply_brain.js` |
+| "naraz hu" → generic + script question | grievance: "किस बात से मन दुखा है?" (no pitch, no vote ask) | `reply_brain.js` |
+| 👍 to the bulk intro → generic | thanks + how to get the slip | `reply_brain.js` |
+| "hamare ghar ki sab parchi bhej do" searched *hamare*; "ghar walo ki bhi bhej do" re-listed namesakes; "parivar" with nobody else in the house → generic | household ask → asks one member's name, then sends the family card directly; FAMILY_RX takes "bhi"; "no other names at this house" reply | `slip_flow.js` |
+| "ward 3" right after a slip re-confirmed it; "thanks a lot" → generic | already-sent ack; thanks variants | `slip_flow.js`, `reply_brain.js` |
+| "ward 3 me hi school ke paas" (samasya location) searched as a name | while a samasya/mulaqat question is open only an explicit parchi ask reaches the slip flow; place words are not names | `nlu_router.js`, `slip_flow.js` |
+| "or wife ka naam?" searched the voter's own name (model copied it from history) | a model-extracted name counts only if it is in the current message | `nlu_router.js` |
+| English "who is this?", "What has Abhay Singh done…", "When is the election?" → "समझ नहीं पाई" | English rules; the router's `unclear` only clarifies when the brain's rules also have nothing | `reply_brain.js`, `server.js` |
+| "kya le ke jana padega" → generic; script question stacked on "अपना वार्ड बताइए" | ID line from the parcha (आधार या वोटर आईडी); script ask treats "अपना … बताइए" as a question; "kya" re-asks it | `reply_brain.js` |
+| Bulk `{name}` with no real name rendered "राम राम ग्रामवासी जी" / gendered "भाई जी" | placeholder names dropped; "{name} जी" → "जी"; neutral fallback | `broadcast_engine.js` |
+
+Tests: `test_brain_live_fixes.cjs` +28 checks (99), `test_broadcast_engine.cjs` +2.
+
 # HARK_CHANGES — brain v7 (5 Nov 2026 evening: 35 messy live conversations on the VM)
 
 Live battery (self-test, real NVIDIA LLM): 35 conversations, 195 turns of village-style Hinglish/Hindi/Haryanvi/English. Fixes:

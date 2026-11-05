@@ -36,7 +36,11 @@ const STUB = {
     'bas vaade hi karte ho': { intent: 'political_talk', sentiment: 'angry', script: 'roman' },
     'baba se milna h': { intent: 'contact_request', wants_contact: true, script: 'roman' },
     'ghar pe aa jayenge kya': { intent: 'contact_request', wants_contact: true, script: 'roman' },
-    'baba jitenge is baar': { intent: 'support', sentiment: 'positive', script: 'roman' }
+    'baba jitenge is baar': { intent: 'support', sentiment: 'positive', script: 'roman' },
+    'or wife ka naam?': { intent: 'slip_request', wants_slip: true, target_person: 'other', person_name_roman: 'manoj kumar', person_name_hi: 'मनोज कुमार', script: 'roman' },
+    'Hello, who is this?': { intent: 'unclear', script: 'roman' },
+    'What has Abhay Singh done for the village?': { intent: 'unclear', script: 'roman' },
+    'When is the election?': { intent: 'unclear', script: 'roman' }
 };
 const stubLLM = async (sys, prompt) => {
     const m = prompt.match(/NEW VOTER MESSAGE: ([\s\S]*?)\n\nJSON:/);
@@ -64,7 +68,7 @@ async function turn(user, phone, msg) {
         else if (sp.kind === 'family') reply = `🏠 परिवार की मतदाता पर्ची — वार्ड ${sp.voter.ward} (${sp.members.length} मतदाता)`;
         else reply = sp.text;
     } else if (!reply) {
-        const clar = n && n.intent === 'unclear' ? router.clarify(user) : null;
+        const clar = n && n.intent === 'unclear' && ['unclear', 'short_reply'].includes(brain.classify(msg, user).intent) ? router.clarify(user) : null;
         reply = clar || await ai.getAIResponse(msg, null, [], phone, { nlu: n, noSlip: !!(p && (p.noSlip || p.slipOpts)) });
     }
     user.history.push({ role: 'bot', text: reply, at: new Date().toISOString() });
@@ -222,6 +226,71 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
     check(brain.validateLLM('उनकी ४० वर्षों की सेवा है जी।', { allowedText: '40', l: 'hi' }) === 'devanagari_digits', 'Devanagari digits rejected');
     check(policy.isOptOutMessage('mujhe message mat karo') && policy.isOptOutMessage('mujhe message mat bhejo please'), '"mujhe message mat karo" = opt-out');
     check(!policy.isOptOutMessage('ruko main batata hoon') && !policy.isOptOutMessage('bhai ruko') && !policy.isOptOutMessage('pata nahi'), 'ordinary sentences are not opt-outs');
+
+    console.log('== round 4 (5 Nov evening live battery)');
+    {
+        const st = await convo('stadium', ['stadium ban gaya kya']);
+        check(/प्रयास/.test(st.out[0].reply) && !/(बन गया|बनवाया गया)/.test(st.out[0].reply), 'mini stadium = प्रयास (sankalp), never built', st.out[0].reply);
+        check(brain.validateLLM('खेल मैदान में मिनी स्टेडियम भी बनवाया गया है।', { allowedText: '', l: 'hi' }) === 'stadium_claim', 'LLM stadium without प्रयास rejected');
+        check(brain.validateLLM('आश्रम में अमृत सरोवर बन गया है।', { allowedText: '', l: 'hi' }) === 'sarovar_claim', 'LLM "Amrit Sarovar बन गया" rejected');
+        check(brain.validateAgainstDraft('आगे का संकल्प है कि जल जीवन मिशन में बाकी बची जल आपूर्ति पूरी करवाती हूँ।', 'आगे का संकल्प', { l: 'hi' }) === 'self_promise', 'clumsy "…पूरी करवाती हूँ" rejected');
+        check(brain.validateAgainstDraft('महिलाओं के लिए सबसे बड़ा विकास कार्य करती हूँ।', 'x', { l: 'hi' }) === 'self_promise', '"विकास कार्य करती हूँ" rejected');
+        const d = await convo('dadi', ['kamla devi ki parchi chahiye', 'mere dadi h wo']);
+        check(/दादी जी/.test(d.out[1].reply) && /वार्ड/.test(d.out[1].reply) && (d.out[1].reply.match(/\?/g) || []).length === 1, '"mere dadi h wo" acknowledged, then ward asked once', d.out[1].reply);
+        check(cls('kon') === 'who_are_you' && cls('ye kiska number h') === 'who_are_you' && cls('aap kaun') === 'who_are_you', '"kon" / "ye kiska number h" = who are you');
+        const k = await convo('kon', ['ye kiska number h']);
+        check(/टीम का नंबर/.test(k.out[0].reply), '"ye kiska number h" says whose number it is', k.out[0].reply);
+        check(cls('naraz hu') === 'grievance', '"naraz hu" = grievance');
+        const nz = await convo('naraz', ['naraz hu']);
+        check(/(मन दुखा|ठेस)/.test(nz.out[0].reply) && !/साथ देंगे/.test(nz.out[0].reply), '"naraz hu" asks what hurt, no vote ask', nz.out[0].reply);
+        const idq = await convo('idq', ['vote kab h', 'kya le ke jana padega']);
+        check(/आधार/.test(idq.out[1].reply), '"kya le ke jana padega" = bring Aadhaar / voter ID', idq.out[1].reply);
+        const fa = await convo('famask', ['hamare ghar ki sab parchi bhej do', 'kamla devi pati moolchand ward 10']);
+        check(/पूरे घर की पर्ची/.test(fa.out[0].reply) && !/hamare/.test(fa.out[0].reply), 'household ask without a name asks one member (never searches "hamare")', fa.out[0].reply);
+        check(fa.out[1].kind === 'slip_family', 'household ask -> first slip found becomes the family card', fa.out[1].kind + ' ' + fa.out[1].reply);
+        const fo = await convo('famother', ['meri mummy ki parchi chahiye', 'naam kamla devi pati moolchand ward 10', 'ghar walo ki bhi bhej do']);
+        check(fo.out[2].kind === 'slip_family', '"ghar walo ki bhi bhej do" after a relative\'s slip = family card', fo.out[2].kind + ' ' + fo.out[2].reply);
+        const fn = await convo('famnone', ['mera naam rupachand pita soonda ram', 'parivar']);
+        check(/और कोई नाम नहीं मिला/.test(fn.out[1].reply), '"parivar" when nobody else is in the house says so', fn.out[1].reply);
+        const mx = await convo('mixed', ['Hello, mujhe apne father ki voter slip chahiye', 'his name is Bal Ram, father Ramakishan', 'ward 3', 'thanks a lot']);
+        check(mx.out[1].kind === 'slip_deliver' && /ऊपर भेज दी/.test(mx.out[2].reply) && !/क्या आपके पिता/.test(mx.out[2].reply), 'bare "ward 3" after the slip = already sent (no re-confirm)', mx.out[2].reply);
+        check(!/कोई काम या सवाल/.test(mx.out[3].reply), '"thanks a lot" = thanks', mx.out[3].reply);
+        const lib = await convo('lib', ['library kab khulegi Haraheri me', 'stadium bhi banega?']);
+        check(/हाड़ाहेड़ी/.test(lib.out[0].reply) && /बनवाई जाएगी/.test(lib.out[0].reply) && !/बनवाई गई/.test(lib.out[0].reply), 'Haraheri library = that village\'s sankalp (not Sihali Khurd\'s done library)', lib.out[0].reply);
+        check(/प्रयास/.test(lib.out[1].reply) && !/लाइब्रेरी/.test(lib.out[1].reply), '"stadium bhi banega?" answers the stadium (प्रयास)', lib.out[1].reply);
+        const sj = await convo('samasyaJump', ['meri mummy ki parchi chaiye', 'naam suman devi h', 'ward 3 me rehte h', 'pati ka naam vijay singh', 'acha ek baat or hamari gali ki sadak tuti padi h', 'ward 3 me hi school ke paas']);
+        check(!/नाम से/.test(sj.out[5].reply) && !/school/i.test(sj.out[5].reply), 'samasya location "ward 3 me hi school ke paas" is not a name search', sj.out[5].kind + ' ' + sj.out[5].reply);
+        const en = await convo('english', ['Hello, who is this?', 'What has Abhay Singh done for the village?', 'When is the election?']);
+        check(/टीम/.test(en.out[0].reply) && !/समझ नहीं पाई/.test(en.out[0].reply), 'English "who is this?" answered (not clarify)', en.out[0].reply);
+        check(!/समझ नहीं पाई|खुलकर बताएँगे/.test(en.out[1].reply), 'English "what has Abhay Singh done" answered with works', en.out[1].reply);
+        check(/16/.test(en.out[2].reply), 'English "when is the election" answered with the date', en.out[2].reply);
+        const wf = await convo('wifeAfterSelf', ['ram ram, meri aur meri wife dono ki parchi chahiye, mera naam manoj kumar pita jagdish, ward 6', 'or wife ka naam?']);
+        check(/पत्नी/.test(wf.out[1].reply) && !/मनोज कुमार\* नाम के/.test(wf.out[1].reply), '"or wife ka naam?" after own slip asks the wife\'s name (model name from history ignored)', wf.out[1].reply);
+        const tj = await convo('topicJump4', ['ram ram', 'parchi chahiye', 'pooja', 'ruko pehle ek baat, bijli ki bahut dikkat h', 'raat ko light nahi rehti ward 10', 'acha ab parchi']);
+        check(/वार्ड 10 नोट/.test(tj.out[4].reply), 'samasya "…ward 10" answer is taken as the location', tj.out[4].reply);
+        check(/वार्ड 10/.test(tj.out[5].reply) && !/कौन से वार्ड/.test(tj.out[5].reply), '"acha ab parchi" uses the ward already told (no re-ask)', tj.out[5].reply);
+        const ww = await convo('women', ['aurto ke liye kya kiya baba ne']);
+        check(/अलग से कोई काम दर्ज नहीं/.test(ww.out[0].reply) && (ww.out[0].reply.match(/\?/g) || []).length === 0, 'women question: honest (no women-only item in the parcha) + one real work', ww.out[0].reply);
+        const nf = await convo('notFound4', ['meri parchi chaiye', 'naam ramesh yadav', 'pita hari ram', 'ward 2', 'fir kya karu']);
+        check(/EPIC/.test(nf.out[4].reply) && !/karu/.test(nf.out[4].reply), '"fir kya karu" after a miss = what to do next (no name search)', nf.out[4].reply);
+        // vote-ask frequency: a model-written ask ("…समर्थन देंगे ना?") counts; no second ask in the next replies
+        const { u, phone } = freshUser();
+        u.history.push({ role: 'user', text: 'ye sab to sarkar ka kaam hai' }, { role: 'bot', text: 'जी, यह बात सही है। आप 16 नवंबर को अभय सिंह जी को अपना वोट देकर समर्थन देंगे ना?' });
+        const r1 = await turn(u, phone, 'usne khud kya kiya');
+        check(!/(साथ देंगे|वोट देंगे|समर्थन देंगे)/.test(r1.reply), 'no vote ask right after a model-written vote ask', r1.reply);
+        // gender: a searched (non-self) record never sets ताई/ताऊ
+        const g1 = freshUser().u; g1.lastFoundVoter = { name_hi: 'कमला देवी', gender: 'महिला', age: 50 }; g1.lastFoundVoterSelf = false;
+        check(brain.honorific(brain.personOf(g1, 'thik h bhai dekhte h'), 'hi') === 'जी', 'searched record never gives ताई जी (neutral जी)');
+        const g2 = freshUser().u; g2.memory = { gender: 'M', genderSource: 'message', age: 55 };
+        check(!/ताई/.test(brain.honorific(brain.personOf(g2, ''), 'hi')), 'male voter never ताई जी');
+        // a second STOP in a self-test run keeps the opt-out (no second confirmation)
+        const { LiveSelfTest } = require('./self_test.js');
+        const stt = new LiveSelfTest({ userMemory, getSessions: () => [], log: { log() {}, warn() {}, error() {} } });
+        stt.run = { id: 'st_x', status: 'running', targetLine: 'sim_636', testerLine: 'canada', preparedKeys: [], keepRecord: false, freshContact: false };
+        const su = stt.prepareRecord('919555999001'); policy.applyOptOut(su);
+        const su2 = stt.prepareRecord('919555999001');
+        check(su2.broadcastOptOut === true, 'self-test keeps a STOP for the rest of the run (second STOP is silent)');
+    }
 
     console.log(`\nbrain live fixes: ${pass} passed, ${fail} failed`);
     if (fail) { console.log('FAILED:\n - ' + failures.join('\n - ')); process.exit(1); }

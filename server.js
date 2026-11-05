@@ -797,7 +797,8 @@ async function startSession(sessionObj) {
                     broadcastEngine.markOptOut(senderPhone, body);
                     operationsTracker.record('opt_out', 'recorded', { lineId: sessionObj.id });
                     if (firstTime) {
-                        const ack = engagementPolicy.buildOptOutAck(engagementPolicy.messageLanguage(body));
+                        // voter-facing text is Hindi unless the voter chose Hinglish
+                        const ack = engagementPolicy.buildOptOutAck(replyBrain.scriptPrefOf(user) === 'hinglish' ? 'hinglish' : 'hi');
                         try {
                             await sendSafeMessage(sock, replyJid, { text: ack });
                             userMemory.recordMessage(senderPhone, 'bot', ack, 'opt_out_ack', sessionObj.name);
@@ -1168,7 +1169,7 @@ async function startSession(sessionObj) {
                             content: h.text
                         }));
 
-                        const clar = nluPlan && nluPlan.nlu && nluPlan.nlu.intent === 'unclear' ? nluRouter.clarify(user) : null;
+                        const clar = nluPlan && nluPlan.nlu && nluPlan.nlu.intent === 'unclear' && ['unclear', 'short_reply'].includes(replyBrain.classify(body, user).intent) ? nluRouter.clarify(user) : null; // the brain's own rules (e.g. English "who is this?") win over a bare 'unclear'
                         replyText = clar || await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter, nlu: nluPlan ? nluPlan.nlu : null, noSlip: !!(nluPlan && (nluPlan.noSlip || nluPlan.slipOpts)) });
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getSafeFallback(body, senderPhone);

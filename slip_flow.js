@@ -42,7 +42,7 @@ const NON_NAME = new Set(('haa haan han hn ha ji jee arre arey are aree abhi mai
     'dhanyavad dhanyawad dhanyavaad dhanywad dhanyabad shukriya sukriya thanks thank thankyou thanku thnx thx tq ty welcome achha acha accha badhiya shabash sahi mast good nice ' +
     'mil mila milegi milega jayegi jaegi jayega jaega jaayegi jaye sakti sakta sakte hogi hoga kya kab kaise kyu diya diye du doon dun kie kii ni is my the of can you send please or aur wo woh vo ye yeh h he hai hain pata pta patta maloom malum maaloom number nambar wala wali vala ' +
     // brain v7 (5 Nov live): relation / family words and voice-typing filler are never a person's name ("mummy", "wife", "parivar", "namaskar raha")
-    RELATION_WORDS + ' parivar pariwar family sab sabki sabhi ghar gharwale walo wale namaskar namaskaar namste namastey pranam raha rahi rha rhi bol bolta bolti hoon hun hu sihali khurd kalan haraheri hadahedi gaon gaam ' +
+    'karu karun karoon kru krun karna fir phir abhi ab batao bataiye school skool paas pass mandir gali chowk chauk sadak road nali naali kuan kua talab johad dukan near samne peeche ' + RELATION_WORDS + ' parivar pariwar family sab sabki sabhi saari sari sare ghar gharwale gharwalo walo wale hamare hamara hamari humare humara humari hamre parchiyan parchiya bhejo bhej namaskar namaskaar namste namastey pranam raha rahi rha rhi bol bolta bolti hoon hun hu sihali khurd kalan haraheri hadahedi gaon gaam ' +
     'vote booth bootha kahan kaha kidhar kab kitne baje tak time date tarikh dalna daalna dena matdan nahi nahin nhi galat matlab mtlab ruko pehle ek baat acha accha achha batao bata du kya').split(/\s+/));
 const NON_NAME_HI = /^(निकाल|निकालो|निकाल दो|दे|दो|कर|करो|भेज|परिवार|मम्मी|माँ|मां|माता|माताजी|पापा|पिताजी|पिता|पति|पत्नी|घरवाली|घरवाले|भाई|बहन|बेटा|बेटी|बहू|दादी|दादा|नानी|नाना|चाचा|चाची|ताऊ|ताई|सास|ससुर|बूथ|वोट|कब|कहाँ|कहां|मेरा|मतलब|गलत|नहीं|हाँ|हां|अरे|अभी|मैंने|बताया|मेरा|मेरी|मुझे|नाम|है|हूँ|भी|भेज|भेजो|भेजिए|दो|दीजिए|चाहिए|पर्ची|वोटर|स्लिप|कार्ड|वाला|नंबर|सही|यही|भाई|ना|तो|की|का|के|को|अपनी|अपना|सिर्फ|लिस्ट|में|से|पर|निकालो|दिखाओ|जी|जल्दी|धन्यवाद|शुक्रिया|अच्छा|बढ़िया|ठीक|मिल|मिलेगी|मिलेगा|जाएगी|जायेगी|जाएगा|सकती|सकता|होगी|होगा|क्या|कब|कैसे)$/;
 
@@ -243,7 +243,17 @@ function setPending(user, kind, payload, who) {
     user.slipPendingAt = new Date().toISOString();
     user.slipPendingWho = who || 'self';
 }
+const FAMILY_ASK_RX = /((ghar|parivar|pariwar|family|gharwal\w*|घर|परिवार|घरवाल\w*)\s*(walo|wale|वालों|वाले)?\s*(ki|ke|ka|का|की|के)?\s*(sab|sabki|sabhi|saari|sari|sare|सब|सबकी|सभी|सारी|सारे)?\s*(ki|की)?\s*(parchi|parchiyan|parchiya|parchiyaan|slip|पर्ची|पर्चियाँ|पर्चियां)|(sab|sabki|sabhi|सबकी|सभी)\s*(ki|की)?\s*(parchi|पर्ची))/i;
 function deliverTo(user, v, other = false) {
+    // the voter asked for the whole household first: the first slip found becomes the family card
+    if (user && user.wantFamilyAt && Date.now() - Date.parse(user.wantFamilyAt) < 3600e3) {
+        const fam = familyOf(v);
+        delete user.wantFamilyAt;
+        if (fam.length) {
+            const r = deliverTo(user, v, other);
+            return { kind: 'family', voter: v, members: [v].concat(fam), other: !!other, viaAsk: r && r.kind };
+        }
+    }
     if (user) { delete user.slipAwaitWard; delete user.slipAwaitWardPrev; delete user.slipWardAsks; user.slipDeliveredAt = new Date().toISOString();
         user.lastSlipDelivered = { name: v.name_hi || v.name, ward: Number(v.ward) || null, booth: v.booth || null, room: v.room || null, boothName: v.booth_name || null, sr: Number(v.sr_no) || null, rel: v.rel_name_hi || null, other: !!other, at: new Date().toISOString() }; }
     if (user && other) {
@@ -257,7 +267,7 @@ function deliverTo(user, v, other = false) {
     }
     if (user) {
         delete user.pendingParchiCandidate; delete user.disambiguationMatches; delete user.slipPendingAt;
-        user.lastFoundVoter = v;
+        user.lastFoundVoter = v; user.lastFoundVoterSelf = true;
         if (user.slipTarget) user.slipTarget.done = true;
         user.ward = user.ward || Number(v.ward) || user.ward;
         // never wipe or overwrite what the voter told us: only fill blanks, and keep the slip facts alongside
@@ -322,7 +332,7 @@ function familyOf(v) {
     const fam = all.filter(x => Number(x.ward) === Number(v.ward) && String(x.house_no || x.h || '').trim() === h && Number(x.sr_no) !== Number(v.sr_no));
     return fam.length >= 1 && fam.length <= 9 ? fam : []; // a very common house no. (e.g. "1") is not one family
 }
-const FAMILY_RX = /^(?:हाँ|हां|haan|han|ha|ji|जी|ok|okay)?\s*,?\s*(?:परिवार|पूरे परिवार|सब|सबकी|सभी|parivar|pariwar|family|sabki|sab ki|sabhi|ghar wal\w*|घर वाल\w*)(?:\s+(?:की|ki|का|ka|के|ke|वालों|walo\w*))?(?:\s+(?:पर्ची|parchi|card|कार्ड))?(?:\s+(?:भेज\w*|bhej\w*|chahiye|चाहिए|do|दो|de do|दे दो|dijiye|दीजिए))*\s*[।.!🙏]*$/i;
+const FAMILY_RX = /^(?:हाँ|हां|haan|han|ha|ji|जी|ok|okay)?\s*,?\s*(?:परिवार|पूरे परिवार|सब|सबकी|सभी|parivar|pariwar|family|sabki|sab ki|sabhi|ghar wal\w*|घर वाल\w*|gharwal\w*|घरवाल\w*)(?:\s+(?:की|ki|का|ka|के|ke|वालों|walo\w*))?(?:\s+(?:भी|bhi))?(?:\s+(?:पर्ची|parchi|card|कार्ड))?(?:\s+(?:भेज\w*|bhej\w*|chahiye|चाहिए|do|दो|de do|दे दो|dijiye|दीजिए))*\s*[।.!🙏]*$/i;
 function familyTail(user, v, en, other = false) {
     const fam = familyOf(v);
     if (!fam.length) return FAMILY_TAIL;
@@ -341,7 +351,7 @@ function villageWards(text) {
     if (/(sihali\s*khurd|chhoti\s*sihali|choti\s*sihali|सिहाली\s*खुर्द|छोटी\s*सिहाली)/i.test(t)) return [1, 2, 3, 4, 5];
     return null;
 }
-const ACK_AFTER_SLIP = /^(ha+n?|haa+|han|hn|ji+|jee|ha ji|haan ji|ji haan|yes|ok+|okay|theek|thik|theek hai|thik hai|thik h|theek h|sahi|sahi hai|sahi h|yahi|yahi hai|yahi h|ha yahi|haan sahi|ha sahi|bilkul|mil gayi|mil gai|mil gaya|aa gayi|aa gai|dhanyavad|dhanyawad|shukriya|thanks|thank you|thanku|👍|🙏|✅|हाँ|हां|जी|ठीक है|सही|सही है|यही|यही है|मिल गई|मिल गयी|धन्यवाद|शुक्रिया)[\s!.,🙏👍]*((ji|जी|bhai|sahi|hai|h|yahi|thanks|dhanyavad|धन्यवाद|है|सही)[\s!.,🙏👍]*){0,3}$/i;
+const ACK_AFTER_SLIP = /^(ha+n?|haa+|han|hn|ji+|jee|ha ji|haan ji|ji haan|yes|ok+|okay|theek|thik|theek hai|thik hai|thik h|theek h|sahi|sahi hai|sahi h|yahi|yahi hai|yahi h|ha yahi|haan sahi|ha sahi|bilkul|mil gayi|mil gai|mil gaya|aa gayi|aa gai|dhanyavad|dhanyawad|shukriya|thanks|thank you|thanku|👍|🙏|✅|हाँ|हां|जी|ठीक है|सही|सही है|यही|यही है|मिल गई|मिल गयी|धन्यवाद|शुक्रिया)[\s!.,🙏👍]*((ji|जी|bhai|sahi|hai|h|yahi|thanks|dhanyavad|धन्यवाद|है|सही|a lot|alot|so much|very much|bahut|बहुत)[\s!.,🙏👍]*){0,3}$/i;
 /** Runs BEFORE the NLU: answers to our own slip questions (ward asked, family offered) never go elsewhere. */
 function preempt(text, user) {
     if (!user || !text) return null;
@@ -362,11 +372,20 @@ function preempt(text, user) {
                 : ['Ji 🙏 16 November ko subah 7:30 se shaam 5:30 ke beech vote daalne zaroor jaiyega. Parivar me kisi aur ki parchi chahiye to unka naam bhej dijiye.', 'Badhiya ji 🙏 Kisi aur ki parchi ya koi aur baat ho to bejhijhak likhiye.'];
             return { kind: 'ack', text: (en ? ro : hi)[(i - 1) % 2] };
         }
+        // a bare ward right after the slip ("ward 3") just confirms what was sent — never a second search/confirm
+        const bw = /^(?:ward|वार्ड|w)?\s*(?:no\.?|नं\.?|number|नंबर)?\s*\d{1,2}\s*(?:hai|h|है|me|में)?\s*[।.!🙏]*$/i.test(t) ? wardAnswer(t) : null;
+        if (bw && bw === d.ward) return { kind: 'ack', text: en ? `Ji, ward ${d.ward} wali *${d.name}* ki parchi upar bhej di hai 🙏 Kisi aur ki chahiye to unka naam likhiye.` : `जी, वार्ड ${d.ward} वाली *${d.name}* की पर्ची ऊपर भेज दी है 🙏 किसी और की चाहिए तो उनका नाम लिखिए।` };
         const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
         const dv = all.find(x => Number(x.ward) === d.ward && Number(x.sr_no) === d.sr);
         if (dv && t.split(/\s+/).length <= 8 && !relationAsked(t) && (new RegExp(REL_MARK, 'i').test(t) && fatherGiven(t, dv))) {
             return { kind: 'ack', text: en ? `Ji, *${d.name}* (${relLabel(dv, true)}: ${d.rel}) ki parchi upar bhej di hai 🙏 Kisi aur ki chahiye to unka naam likhiye.` : `जी, *${d.name}* (${relLabel(dv)}: ${d.rel}) की पर्ची ऊपर भेज दी है 🙏 किसी और की चाहिए तो उनका नाम लिखिए।` };
         }
+    }
+    if (deliveredLast && user.lastSlipDelivered && FAMILY_RX.test(t) && !(user.familyOffer && Date.now() - Date.parse(user.familyOffer.at) < 6 * 3600 * 1000)) {
+        const en = user.memory && user.memory.scriptPref === 'hinglish';
+        const d = user.lastSlipDelivered;
+        return { kind: 'ack', text: en ? `Ji 🙏 Voter list me ${d.other ? 'unke' : 'aapke'} ghar ke makan number se aur koi naam nahi mila. Parivar ke kisi sadasya ki parchi chahiye to unka naam aur pita/pati ka naam bhej dijiye.`
+            : `जी 🙏 वोटर सूची में ${d.other ? 'उनके' : 'आपके'} मकान नंबर से और कोई नाम नहीं मिला। परिवार के किसी सदस्य की पर्ची चाहिए तो उनका नाम और पिता/पति का नाम भेज दीजिए।` };
     }
     if (user.familyOffer && Date.now() - Date.parse(user.familyOffer.at) < 6 * 3600 * 1000 && FAMILY_RX.test(t)) {
         const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
@@ -402,6 +421,17 @@ function decide0(body, user, opts = {}) {
     const asked = isSlipAsk(text);
     const recall = isRecall(text);
     const q = nameQuery(opts.searchText || text);
+    // "hamare ghar ki sab parchi bhej do": remember the household ask; the first slip we find becomes the family card
+    if (user && FAMILY_ASK_RX.test(text) && !q) {
+        const last = user.lastSlipDelivered && Date.now() - Date.parse(user.lastSlipDelivered.at) < 6 * 3600e3 ? user.lastSlipDelivered : null;
+        const all = voterEngine.getAllVoters ? voterEngine.getAllVoters() : [];
+        const dv = last ? all.find(x => Number(x.ward) === last.ward && Number(x.sr_no) === last.sr) : null;
+        if (dv && familyOf(dv).length) return { kind: 'family', voter: dv, members: [dv].concat(familyOf(dv)) };
+        user.wantFamilyAt = new Date().toISOString(); user.slipAskedAt = new Date().toISOString();
+        const sp = user.memory && user.memory.scriptPref;
+        return { kind: 'ask_name', text: sp === 'hinglish' ? 'Zaroor ji 🙏 Poore ghar ki parchi ek card me bhej dungi. Pehle ghar ke kisi ek sadasya ka poora naam aur pita/pati ka naam likh dijiye.'
+            : 'ज़रूर जी 🙏 पूरे घर की पर्ची एक कार्ड में भेज दूँगी। पहले घर के किसी एक सदस्य का पूरा नाम और पिता/पति का नाम लिख दीजिए।' };
+    }
     const slipPromptLast = /(पर्ची|parchi|वोटर लिस्ट|वोटर सूची|voter list)/i.test(lastBot(user));
     // reply in the voter's script (a bare "1" follows their earlier messages)
     const scriptOf = x => (/[\u0900-\u097F]/.test(x) ? 'hi' : (/[a-z]/i.test(x) ? 'en' : null));
@@ -433,7 +463,8 @@ function decide0(body, user, opts = {}) {
             let nm = (list[0] && list.every(m => m.name_hi === list[0].name_hi) && list[0].name_hi) || (pendingOther && user.slipTarget && user.slipTarget.nameHi) || user.lastSlipQuery || '';
             if (/^[a-z\s]+$/i.test(nm) && voterEngine.translit) nm = nm.split(/\s+/).map(w => voterEngine.translit(w)).join(' ');
             const byRel0 = list.filter(v => fatherGiven(fatherText, v));
-            const w = wardAnswer(text);
+            // "acha ab parchi" after the voter told us their ward elsewhere (e.g. in a complaint): use it, never re-ask
+            const w = wardAnswer(text) || (!pendingOther && isSlipAsk(text) && user.memory && Number(user.memory.ward) >= 1 && Number(user.memory.ward) <= WARD_MAX ? Number(user.memory.ward) : null);
             const pool = w ? byRel0.filter(v => Number(v.ward) === w) : byRel0;
             if (pool.length === 1) { delete user.slipAwaitWard; return deliverTo(user, pool[0], pendingOther); }
             if (w) {
@@ -443,6 +474,18 @@ function decide0(body, user, opts = {}) {
                 if (inW.length > 1) { setPending(user, 'choose', inW, who); return { kind: 'choose', matches: inW, text: pendingOther ? listOther(inW, nm, en) : listText(inW, nm, en) }; }
                 setPending(user, 'choose', list, who);
                 return { kind: 'choose', matches: list, text: (en ? `Ward ${w} me *${nm}* naam se koi nahi mila 🙏 Ye log mile hain—\n\n` : `वार्ड ${w} में *${nm}* नाम से कोई नहीं मिला 🙏 ये लोग मिले हैं—\n\n`) + (pendingOther ? listOther(list, nm, en) : listText(list, nm, en)) };
+            }
+            // "mere dadi h wo" / "meri maa hai" while we wait for the ward: acknowledge who it is, then ask the ward once (short)
+            const relW = !w && pool.length !== 1 ? relationAsked(text) : null;
+            if (relW && !relHasName && text.split(/\s+/).length <= 7 && !/\d/.test(text) && !byRel0.length) {
+                user.slipPendingWho = 'other';
+                user.slipTarget = { ...(user.slipTarget || {}), who: 'other', relation: relW.hi, nameHi: nm || (user.slipTarget && user.slipTarget.nameHi) || null, at: new Date().toISOString(), done: false };
+                const fem = !/(पिताजी|पति|भाई|बेटे|दादा जी|नाना जी|चाचा जी|ताऊ जी|ससुर जी)/.test(relW.hi);
+                const wards = Array.from(new Set(list.map(m => Number(m.ward)))).sort((a, b) => a - b).join(', ');
+                setPending(user, 'choose', list, 'other'); user.slipAwaitWard = true;
+                return { kind: 'choose', matches: list, text: en
+                    ? `Achha, aapki ${relW.en} hain 🙏 *${nm}* ji kis ward me ${fem ? 'rehti' : 'rehte'} hain? (ward ${wards} me ye naam hai) Ward na pata ho to unke ${fem ? 'pati' : 'pita'} ka naam likh dijiye.`
+                    : `अच्छा, ${relPos({ ...relW, third: false }, false)} ${relW.hi} हैं 🙏 *${nm}* जी किस वार्ड में ${fem ? 'रहती' : 'रहते'} हैं? (ये नाम वार्ड ${wards} में है) वार्ड न पता हो तो उनके ${fem ? 'पति' : 'पिता'} का नाम लिख दीजिए।` };
             }
             const vw = !w ? villageWards(text) : null;
             if (vw) {
