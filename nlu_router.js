@@ -7,7 +7,7 @@
  */
 const nlu = require('./nlu.js');
 
-const NO_SLIP_INTENTS = new Set(['political_talk', 'support', 'opposition', 'contact_request', 'voter_card_issue', 'recall_self', 'complaint', 'abuse', 'question']);
+const NO_SLIP_INTENTS = new Set(['political_talk', 'support', 'opposition', 'contact_request', 'voter_card_issue', 'recall_self', 'complaint', 'abuse', 'question', 'thanks']);
 
 function scriptEn(user) {
     const m = user && user.memory;

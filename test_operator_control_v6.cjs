@@ -129,6 +129,8 @@ const VOTE_ASK = /(साथ देंगे ना\?|वोट देंगे 
     ok(st2.text.includes('वोटर पर्ची पहुँच गई') || su2.history.some(h => h.role === 'bot' && h.text.includes('वोटर पर्ची पहुँच गई')), 'a calm "achha" turn steers to the locked goal with the operator line: ' + st2.text);
     ok(!/पूछती हूँ/.test(st2.text) || st2.source !== 'llm', 'a steered turn keeps the operator text (no LLM rewrite)');
     ok(require('./nlu.js').rules('meri parchi mil jayegi kya?', {}).person_name_roman === null, '"meri parchi mil jayegi kya" has no name (was searched as "jayegi")');
+    const tp = router.plan(require('./nlu.js').rules('dhanyavad ji', {}), mk({ slipTarget: { who: 'self', done: false } }), { text: 'dhanyavad ji' });
+    ok(tp.noSlip && !tp.slipOpts, '"dhanyavad ji" after a slip prompt is thanks, never a name search (live: listed धन सिंह...)');
     oc.setDay(today, { locked: false });
     ok(!oc.lockedToday() && oc.dayMediaFor(mk({ memory: {} }), { intent: 'positive', userTurns: 3 }) === null, 'unlocked day: no steer, no media');
     oc.setDay(today, { locked: true });
