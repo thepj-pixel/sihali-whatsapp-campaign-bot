@@ -386,6 +386,8 @@ function pickCloser(stage, l, user, concern = null) {
     // vote-ask frequency follows the operator's mode / setting (normal: at most every other bot message)
     const gap = opCtl.voteAskGap(user);
     if (gap === Infinity) return null;
+    // chill: relationship first — no vote ask in the first few exchanges at all
+    if (opCtl.effectiveMode(user) === 'chill' && (user.history || []).filter(h => h.role === 'user').length < 5 && stage !== 'committed') return null;
     const askedRecently = gap > 0 && VOTE_ASK_RX.test(recentBotText(user, gap));
     if (askedRecently && stage !== 'committed') return null;
     if (gap === 0 && opts.length && stage !== 'committed' && VOTE_ASK_RX.test(recentBotText(user, 1)) && AGGR_EXTRA[l]) opts.unshift(...AGGR_EXTRA[l]); // persistent mode: vary the ask
@@ -988,7 +990,9 @@ function compose(cls, ctx) {
             break;
         case 'wellbeing_reply':
             body = vary(user, [S(`बहुत बढ़िया${H}, भगवान सबको राज़ी-ख़ुशी रखें 🙏`, `Bahut badhiya${H}, Bhagwan sabko raazi-khushi rakhein 🙏`), S(`सुनकर अच्छा लगा${H} 🙏`, `Sunkar achha laga${H} 🙏`)]);
-            if (!mem.concerns.length && !mem.told.mahaulAsk) { body += S(' आपके मोहल्ले में इस बार चुनाव का क्या माहौल है?', ' Aapke mohalle me is baar chunav ka kya mahaul hai?'); mem.told.mahaulAsk = true; ask = false; }
+            const relFirst = ['chill', 'gentle'].includes(opCtl.effectiveMode(user)) || opCtl.hasBrief(user);
+            if (relFirst && !mem.told.lifeAsk) { body += S(' और सुनाइए, घर में बच्चे सब ठीक हैं?', ' Aur sunaiye, ghar me bachche sab theek hain?'); mem.told.lifeAsk = true; ask = false; }
+            else if (!mem.concerns.length && !mem.told.mahaulAsk) { body += S(' आपके मोहल्ले में इस बार चुनाव का क्या माहौल है?', ' Aapke mohalle me is baar chunav ka kya mahaul hai?'); mem.told.mahaulAsk = true; ask = false; }
             break;
         default: {
             const words = String(message || '').trim().split(/\s+/).length;
