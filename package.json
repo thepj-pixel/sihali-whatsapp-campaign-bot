@@ -19,7 +19,8 @@
     "test:tabs": "node test_dashboard_tabs.cjs",
     "test:brainv2": "node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_brain_v2_conversations.cjs')\"",
     "test:brainv3": "node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_brain_v3_conversations.cjs')\"",
-    "test:ops": "node test_ops_v4.cjs"
+    "test:ops": "node test_ops_v4.cjs",
+    "test:ui": "python3 test_dashboard_ui.py"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

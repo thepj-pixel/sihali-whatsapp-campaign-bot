@@ -232,7 +232,7 @@ app.use((req, res, next) => {
         <head>
             <meta charset="utf-8">
             <title>🔒 Security Gate - Sihali Khurd 2026</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
             <style>
                 * { box-sizing: border-box; }
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
@@ -2690,7 +2690,8 @@ app.get('/', (req, res) => {
         <head>
             <meta charset="utf-8">
             <title>Sihali Khurd Campaign Assistant - Command Tower</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+            <link rel="icon" href="data:,">
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
             <style>
                 * { box-sizing: border-box; }
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 15px; color: #0f172a; }
@@ -2713,8 +2714,9 @@ app.get('/', (req, res) => {
                 .btn-add:active { transform: scale(0.98); }
 
                 /* Tab Navigation */
-                .tabs { display: flex; gap: 8px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; overflow-x: auto; }
-                .tab-btn { background: none; border: none; padding: 10px 16px; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer; border-radius: 8px; white-space: nowrap; }
+                .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; position: relative; z-index: 5; }
+                .tab-btn { background: #ffffff80; border: 1px solid #e2e8f0; padding: 10px 14px; min-height: 40px; font-size: 13px; font-weight: 700; color: #475569; cursor: pointer; border-radius: 8px; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+                .tab-btn:hover { background: #fff; color: #1d4ed8; }
                 .tab-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
 
                 /* Cards & Tables */
@@ -2737,6 +2739,22 @@ app.get('/', (req, res) => {
                 @media (max-width: 850px) {
                     .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
                     .header-bar { flex-direction: column; align-items: flex-start; }
+                }
+                /* Mobile-first: wrap tabs into a tap grid, scroll wide tables, 16px inputs (no iOS zoom) */
+                .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+                img, video, canvas { max-width: 100%; height: auto; }
+                @media (max-width: 700px) {
+                    body { padding: 8px; }
+                    .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+                    .tab-btn { white-space: normal; text-align: left; min-height: 48px; font-size: 13px; padding: 10px 10px; line-height: 1.2; }
+                    .card { padding: 14px !important; border-radius: 10px; overflow-x: auto; }
+                    table { min-width: 560px; }
+                    .table-responsive table, .card > table { display: table; }
+                    input, select, textarea { font-size: 16px !important; max-width: 100%; }
+                    button, .btn { min-height: 44px; }
+                    .wa-wrapper { flex-direction: column; height: auto; }
+                    .wa-left { width: 100%; max-height: 360px; border-right: none; border-bottom: 1px solid #e2e8f0; }
+                    [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
                 }
                 .voter-list { max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
                 .voter-item { padding: 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background 0.15s; }
@@ -4011,16 +4029,29 @@ app.get('/', (req, res) => {
                 }
 
                 function switchTab(tabId, btn) {
-                    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-                    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+                    if (!tabId) return;
+                    document.querySelectorAll('.tab-content').forEach(function (el) { el.style.display = 'none'; });
+                    document.querySelectorAll('.tab-btn').forEach(function (el) { el.classList.remove('active'); el.setAttribute('aria-selected', 'false'); });
                     const target = document.getElementById('tab-' + tabId);
                     if (target) target.style.display = 'block';
                     const activeBtn = btn || document.getElementById('tab-btn-' + tabId);
-                    if (activeBtn) activeBtn.classList.add('active');
-                    if (tabId === 'voters') loadVoters();
-                    if (tabId === 'contacts') loadContacts();
-                    if (tabId === 'playground' && typeof loadCampaignAgendaUI === 'function') loadCampaignAgendaUI();
+                    if (activeBtn) { activeBtn.classList.add('active'); activeBtn.setAttribute('aria-selected', 'true'); }
+                    try { if (window.history && history.replaceState) history.replaceState(null, '', '#' + tabId); } catch (e) {}
+                    try {
+                        if (tabId === 'voters') loadVoters();
+                        if (tabId === 'contacts') loadContacts();
+                        if (tabId === 'media' && typeof window.hkLoadMedia === 'function') window.hkLoadMedia();
+                        if (tabId === 'playground' && typeof loadCampaignAgendaUI === 'function') loadCampaignAgendaUI();
+                    } catch (e) { console.warn('tab loader failed', tabId, e); }
                 }
+                // One delegated handler for every tab button (old onclick= and new data-tab=):
+                // tabs keep working even if a feature module fails to initialise.
+                document.addEventListener('click', function (e) {
+                    var b = e.target && e.target.closest ? e.target.closest('.tab-btn') : null;
+                    if (!b || b.hasAttribute('onclick')) return;
+                    var id = b.getAttribute('data-tab') || String(b.id || '').replace('tab-btn-', '');
+                    if (id && !b.classList.contains('active')) switchTab(id, b);
+                }, true);
 
                 function toggleCustomText(val) {
                     const grp = document.getElementById('custom-text-group');
@@ -4478,10 +4509,10 @@ app.get('/', (req, res) => {
                 function applyVoterFilters(query) {
                     const searchInput = document.getElementById('voter-search');
                     const lower = String(query === undefined ? (searchInput ? searchInput.value : '') : query).toLowerCase();
-                    const line = document.getElementById('crm-line-filter')?.value || 'all';
+                    const line = (document.getElementById('crm-line-filter') || {}).value || 'all';
                     const filtered = allVoters.filter(function(v) {
                         const lineMatch = line === 'all' || v.lastSessionId === line || v.assignedLine === line;
-                        const stageSel = document.getElementById('crm-stage-filter')?.value || 'all';
+                        const stageSel = (document.getElementById('crm-stage-filter') || {}).value || 'all';
                         const stageMatch = stageSel === 'all' || (stageSel === 'needsAdmin' ? !!v.needsAdmin : (v.persuasionStage || 'unknown') === stageSel);
                         const nameMatch = v.name && v.name.toLowerCase().indexOf(lower) !== -1;
                         const phoneMatch = v.phone && v.phone.indexOf(lower) !== -1;
@@ -4997,7 +5028,7 @@ app.get('/', (req, res) => {
                             // Update live debug metrics
                             document.getElementById('pg-metric-provider').innerText = data.provider || provider;
                             document.getElementById('pg-metric-latency').innerText = data.timeMs + ' ms';
-                            document.getElementById('pg-metric-tags').innerText = (data.user?.tags || []).join(', ') || 'सामान्य';
+                            document.getElementById('pg-metric-tags').innerText = ((data.user && data.user.tags) || []).join(', ') || 'सामान्य';
                             document.getElementById('pg-metric-drip').innerText = data.nextDripMedia ? data.nextDripMedia.title : 'पूर्ण';
                         } else {
                             chatUi.innerHTML += '<div class="bubble bubble-bot" style="color:red;">त्रुटि: ' + (data.error || 'अज्ञात समस्या') + '</div>';
@@ -5014,8 +5045,8 @@ app.get('/', (req, res) => {
                 let cachedContacts = [];
 
                 async function loadContacts() {
-                    const line = document.getElementById('contact-filter-line')?.value || 'all';
-                    const ward = document.getElementById('contact-filter-ward')?.value || 'all';
+                    const line = (document.getElementById('contact-filter-line') || {}).value || 'all';
+                    const ward = (document.getElementById('contact-filter-ward') || {}).value || 'all';
                     const tbody = document.getElementById('contacts-table-body');
                     const countEl = document.getElementById('contacts-count');
                     
@@ -5064,7 +5095,7 @@ app.get('/', (req, res) => {
                 }
 
                 function filterContactsTable() {
-                    const q = document.getElementById('contact-search-input')?.value.toLowerCase().trim() || '';
+                    const q = ((document.getElementById('contact-search-input') || {}).value || '').toLowerCase().trim();
                     if (!q) {
                         renderContactsTable(cachedContacts);
                         return;
@@ -5403,12 +5434,20 @@ app.get('/', (req, res) => {
 
                 // ---------- Media Bank ----------
                 function loadMedia() {
-                    return fetch('/api/media/list').then(function (r) { return r.json(); }).then(function (d) {
+                    var box = el('hm-list');
+                    if (box && !mediaCache.length) box.innerHTML = '<div style="color:#64748b; font-size:12px;">⏳ Loading media…</div>';
+                    return fetch('/api/media/list', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.json();
+                    }).then(function (d) {
                         mediaCache = d.media || [];
                         renderMediaList();
                         refreshMediaSelects();
-                    }).catch(function () {});
+                    }).catch(function (e) {
+                        if (box) box.innerHTML = '<div style="color:#b91c1c; font-size:12px;">⚠️ Media list failed to load (' + esc(e.message) + ') — <button type="button" onclick="window.hkLoadMedia()">retry</button></div>';
+                    });
                 }
+                window.hkLoadMedia = loadMedia;
                 function refreshMediaSelects() {
                     var bulk = el('bulk-media');
                     if (bulk) {
