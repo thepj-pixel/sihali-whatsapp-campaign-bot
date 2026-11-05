@@ -44,6 +44,14 @@ const mk = () => ({ phone: '9198' + Math.floor(Math.random() * 1e8), history: []
     r = await talk(u, 'hinglish me baat karo');
     ok(u.memory.scriptPref === 'hinglish' && isRoman(r.text), 'switch back to Hinglish: ' + r.text);
 
+    // 1b. a bare "hinglish" before we asked
+    u = mk(); await talk(u, 'ram ram');
+    r = await talk(u, 'hinglish');
+    ok(u.memory.scriptPref === 'hinglish' && isRoman(r.text) && !ASK.test(r.text), 'bare "hinglish" = choice even unasked: ' + r.text);
+    u = mk(); await talk(u, 'ram ram');
+    r = await talk(u, 'हिंदी में');
+    ok(u.memory.scriptPref === 'hindi' && !ASK.test(r.text), 'bare "हिंदी में" = choice');
+
     // 2. ignored question -> stays Hindi, never asked again
     u = mk();
     await talk(u, 'namaste');

@@ -234,6 +234,9 @@ function classify(text, user = {}) {
     if (!t) return out('unclear');
     // script preference: explicit switch any time, or a short answer to our one-time question
     if (SCRIPT_SWITCH_RX.test(t) && t.split(/\s+/).length <= 10) return out('script_pref', { script: /(hinglish|roman|english|abc)/i.test(t) && !/(hindi|हिंदी|हिन्दी|devanagari|देवनागरी)\s*(me|mein|में)/i.test(t) ? 'hinglish' : 'hindi' });
+    // a bare "hinglish" / "hindi" / "हिंदी में" is a script choice whenever it comes
+    if (/^(hinglish|हिंगलिश|roman|roman me|english me|hinglish (me|mein|mai)|in hinglish)\s*(please|plz|pls|ji|जी)?[\s!.🙏👍]*$/i.test(t)) return out('script_pref', { script: 'hinglish' });
+    if (/^(hindi|हिंदी|हिन्दी|devanagari|देवनागरी|in hindi)(\s*(me|mein|mai|में))?\s*(please|plz|pls|ji|जी|ही)?[\s!.🙏👍]*$/i.test(t)) return out('script_pref', { script: 'hindi' });
     if (SCRIPT_ASK_RX.test(lastBotText(user)) && t.split(/\s+/).length <= 5) {
         if (/(hinglish|roman|english|abc)/i.test(t) || SCRIPT_ANS_HINGLISH.test(t)) return out('script_pref', { script: 'hinglish' });
         if (/(hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी)/i.test(t) || SCRIPT_ANS_HINDI.test(t)) return out('script_pref', { script: 'hindi' });
