@@ -67,6 +67,8 @@ const {
 
 const voterEngine = require('./voter_engine.js');
 const slipFlow = require('./slip_flow.js');
+const nluMod = require('./nlu.js');
+const nluRouter = require('./nlu_router.js');
 const voterCardGen = require('./voter_card_generator.js');
 const aiService = require('./ai_assistant_service.js');
 const userMemory = require('./user_memory.js');
@@ -989,9 +991,24 @@ async function startSession(sessionObj) {
                         isFollowUpDetails
                     );
 
+                    // NLU v5: understand the message (LLM JSON, ~4s, rules fallback) before routing
+                    let nluPlan = null;
+                    if (!imageAnalysis && !isMediaToken && !isPosterGenQuery && !isVideoQuery && process.env.NLU !== 'off') {
+                        try {
+                            const llmOn = process.env.NLU_LLM !== 'off' && aiService.aiStatus().anyLLM;
+                            const n = await nluMod.understand(body, user, { callLLM: llmOn ? (sys, prompt, budget) => aiService.callLLMCascade(sys, [], prompt, null, budget) : null });
+                            nluPlan = nluRouter.plan(n, user, { text: body, lineDisplay: (engagementPolicy.getLineContact ? engagementPolicy.getLineContact(sessionObj.id).display : '') });
+                            user.lastNlu = { at: new Date().toISOString(), msg: String(body).slice(0, 80), intent: n.intent, target: n.target_person, name: n.person_name_hi || n.person_name_roman || null, source: n.source, llmFailed: !!n.llm_failed };
+                            console.log(`[${sessionObj.id}] NLU ${senderPhone}: ${n.intent} (${n.source}${n.llm_failed ? ', llm failed' : ''}) target=${n.target_person || '-'} name=${n.person_name_hi || n.person_name_roman || '-'}`);
+                        } catch (e) { console.error(`[${sessionObj.id}] NLU error:`, e.message); nluPlan = null; }
+                    }
+                    if (nluPlan && nluPlan.reply && (isPhotoQuery)) nluPlan.reply = null;
+
                     let slipPlan = null;
-                    if (!imageAnalysis && !isPosterGenQuery && !isVideoQuery && !isPhotoQuery) {
-                        try { slipPlan = slipFlow.decide(body, user, { slipIntent: isVoterSlipIntent, searchText: effectiveSearchText, blocked: inBrainFlow || isSelfIntro }); }
+                    if (!imageAnalysis && !isPosterGenQuery && !isVideoQuery && !isPhotoQuery && !(nluPlan && nluPlan.reply)) {
+                        const slipOpts = nluPlan && nluPlan.slipOpts ? { ...nluPlan.slipOpts, blocked: false }
+                            : { slipIntent: isVoterSlipIntent && !(nluPlan && nluPlan.noSlip), searchText: effectiveSearchText, blocked: inBrainFlow || isSelfIntro, noSlip: !!(nluPlan && nluPlan.noSlip) };
+                        try { slipPlan = slipFlow.decide(body, user, slipOpts); }
                         catch (e) { console.error(`[${sessionObj.id}] slip flow error:`, e.message); slipPlan = null; }
                     }
 
@@ -1075,6 +1092,17 @@ async function startSession(sessionObj) {
                         }
                         mediaTypeSent = poster.id.includes('demo') ? 'demoPoster' : 'poster';
                         console.log(`[${sessionObj.id}] ✅ Sent poster (${poster.id}) to ${senderPhone}`);
+                    } else if (nluPlan && nluPlan.reply) {
+                        // NLU v5 direct reply: contact ask (+ card), voter card not received, "who am I", campaign talk / concern
+                        try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: nluPlan.reply.intent, topic: null }); } catch (e) {}
+                        replyText = nluPlan.reply.text;
+                        userMemory.save();
+                        await sendSafeMessage(sock, replyJid, { text: replyText });
+                        mediaTypeSent = 'nlu_' + nluPlan.reply.intent;
+                        if (nluPlan.reply.contactCard) {
+                            try { contactCard.markSent(user, sessionObj.id); userMemory.save(); } catch (e) {}
+                            setTimeout(() => { sendMultiContactCard(sock, replyJid, sessionObj.id).then(() => userMemory.recordMessage(senderPhone, 'bot', '📇 [Line contact card sent]', null, sessionObj.name)).catch(() => {}); }, 1500);
+                        }
                     } else if (slipPlan) {
                         // Voter slip (slip_flow.js): numbered choice, "हाँ" confirmation, remembered name, full-name match
                         const targetVoter = slipPlan.voter || null;
@@ -1113,7 +1141,8 @@ async function startSession(sessionObj) {
                             content: h.text
                         }));
 
-                        replyText = await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter });
+                        const clar = nluPlan && nluPlan.nlu && nluPlan.nlu.intent === 'unclear' ? nluRouter.clarify(user) : null;
+                        replyText = clar || await aiService.getAIResponse(body, NVIDIA_API_KEY, history, senderPhone, { line: sessionObj.id, test: !!isSelfTestVoter, nlu: nluPlan ? nluPlan.nlu : null, noSlip: !!(nluPlan && (nluPlan.noSlip || nluPlan.slipOpts)) });
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getSafeFallback(body, senderPhone);
                         }

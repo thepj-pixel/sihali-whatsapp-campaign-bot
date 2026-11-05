@@ -743,7 +743,7 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     const user = phone ? userMemory.getUser(phone) : null;
 
     // Voter-slip state first (numbered choice, "हाँ", "maine abhi bataya", parchi ask with a remembered name)
-    if (user) {
+    if (user && !meta.noSlip) {
         try {
             const sf = require('./slip_flow.js');
             const sp = sf.decide(userMessage, user, { slipIntent: false, blocked: brain.inFlow(user) });
@@ -760,13 +760,13 @@ async function getAIResponse(userMessage, apiKey = null, conversationHistory = [
     const lastBotForSlip = user ? (((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '') : '';
     const isFollowUpDetails = (lowerMsg.includes('ye hie') || lowerMsg.includes('yahi') || lowerMsg.includes('yehi') || lowerMsg.includes('itna hi')) &&
         /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && lowerMsg.split(/\s+/).length <= 5;
-    if (isFollowUpDetails && user && user.lastFoundVoter) {
+    if (isFollowUpDetails && user && user.lastFoundVoter && !meta.noSlip) {
         console.log('[AI Assistant] Delivering stored voter slip upon details confirmation for:', phone);
         return voterEngine.formatSlipResponse(user.lastFoundVoter);
     }
 
     // Pending slip: person answered with father/husband name -> deliver only on a real match
-    if (user && user.pendingParchiCandidate) {
+    if (user && user.pendingParchiCandidate && !meta.noSlip && !(user.slipPendingWho === 'other')) {
         const pv = user.pendingParchiCandidate;
         const relHi = (pv.rel_name_hi || '').toLowerCase();
         const relEn = String(pv.rel_name_en || '').toLowerCase();

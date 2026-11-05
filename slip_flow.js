@@ -62,19 +62,27 @@ function wardIn(text) {
 const relText = v => lowerOf(`${v.rel_name_hi || ''} ${v.rel_name || ''} ${v.rel_name_en || ''} ${v.r_en || ''}`);
 const SURNAME_TOK = /^(singh|kumar|kumari|devi|yadav|ram|lal|chand|chandra|prasad|sharma|saini|meena|gurjar|सिंह|कुमार|कुमारी|देवी|यादव|राम|लाल|चन्द|चंद|प्रसाद|शर्मा)$/i;
 const QUESTION_RX = /(\?|\bwho\b|\bwhat\b|kaun|kon\b|kya\b|kyu|kaise|कौन|क्या|क्यों|कैसे)/i;
+const CANDIDATE_WORD = /^(abhay|abhey|abhai|abay|baba|अभय|बाबा)$/i;
 function fatherGiven(text, v) {
     if (QUESTION_RX.test(String(text || ''))) return false;
+    // v5: "baba ke 100 vote kam h" matched a voter whose father is अभय सिंह and leaked a slip. The candidate's
+    // name / "baba" never counts as a father's name, and a long sentence about votes is never a slip answer.
+    if (/(abhay|abhey|abhai|baba|अभय|बाबा)/i.test(String(text || '')) && !/(pita|pitaji|father|papa|पिता|पापा|s\/o)/i.test(String(text || ''))) return false;
+    if (/(vote|वोट)/i.test(String(text || '')) && !/(pita|pitaji|father|papa|पिता|पापा)/i.test(String(text || ''))) return false;
     const low = lowerOf(text);
     const parts = [v.rel_name_hi, v.rel_name, v.rel_name_en, v.r_en].filter(Boolean).map(lowerOf).filter(x => x.length >= 3);
     if (parts.some(p => low.includes(p))) return true;
     // first word of the father's name in Roman/Devanagari ("Bhawani" for "भवानी राम") via the engine's transliteration
-    const toks = nameQuery(text).toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !SURNAME_TOK.test(w) && !SURNAME_TOK.test(voterEngine.translit ? voterEngine.translit(w) : w));
+    const toks = nameQuery(text).toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !CANDIDATE_WORD.test(w) && !SURNAME_TOK.test(w) && !SURNAME_TOK.test(voterEngine.translit ? voterEngine.translit(w) : w));
     const rel = relText(v).split(/\s+/).filter(w => w.length >= 3);
-    return toks.some(tk => rel.includes(tk) || (voterEngine.translit && rel.includes(voterEngine.translit(tk))));
+    const sk = x => String(x || '').toLowerCase().replace(/[aeiouy]/g, '').replace(/w/g, 'v').replace(/(.)\1+/g, '$1');
+    // Roman spelling variants of the father's first name (bhawani ~ Bhavani) by consonant skeleton
+    return toks.some(tk => rel.includes(tk) || (voterEngine.translit && rel.includes(voterEngine.translit(tk)))
+        || (/^[a-z]{4,}$/.test(tk) && sk(tk).length >= 3 && rel.some(r => /^[a-z]+$/.test(r) && r[0] === tk[0] && sk(r) === sk(tk))));
 }
 
 /** Search the roll: full-name matches first; a ward typed in the message filters; the profile ward only breaks ties. */
-function search(q, user, text) {
+function search(q, user, text, strict = false) {
     const ward = wardIn(text);
     const query = q + (ward ? ` ward ${ward}` : '');
     let found = voterEngine.searchVoters(query, 8, ward || null);
@@ -87,6 +95,20 @@ function search(q, user, text) {
     else if (toks.length === 1) {
         const exact = found.filter(v => nameHas(v, toks[0]));
         if (exact.length) found = exact;
+    }
+    if (strict) {
+        // v5 (NLU-driven search): the first name must really match (exact, Devanagari, or same consonant skeleton);
+        // a surname typed (yadav/sharma/...) must be in the voter's own name. Otherwise "not found" + ask father/ward.
+        const sk = x => String(x || '').toLowerCase().replace(/[aeiouy]/g, '').replace(/w/g, 'v').replace(/(.)\1+/g, '$1');
+        const first = toks.find(w => !SURNAME_TOK.test(w)) || toks[0];
+        const hard = toks.filter(w => /^(yadav|sharma|saini|meena|gurjar|यादव|शर्मा|सैनी|मीणा|गुर्जर)$/i.test(w));
+        found = found.filter(v => {
+            const words = `${lowerOf(v.name_hi)} ${lowerOf(v.name_en || v.ne || '')}`.split(/\s+/);
+            const okFirst = !first || nameHas(v, first) || words.includes(first) || (/^[a-z]+$/.test(first) && sk(first).length >= 3 && words.some(w => /^[a-z]+$/.test(w) && w[0] === first[0] && sk(w) === sk(first)));
+            const okHard = hard.every(h => words.includes(h) || words.includes(tr(h)));
+            return okFirst && okHard;
+        });
+        if (!found.length) return [];
     }
     const pref = !ward && user ? (Number(user.ward) || (user.memory && Number(user.memory.ward)) || null) : null;
     if (pref) found = found.slice().sort((a, b) => (Number(b.ward) === pref) - (Number(a.ward) === pref));
@@ -108,35 +130,59 @@ const fresh = (user, key) => user && user[key] && (!user.slipPendingAt || Date.n
 
 function confirmText(v, en) {
     const rel = v.rel_type === 'H' ? 'पति' : 'पिताजी';
-    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${v.rel_type === 'H' ? 'pati' : 'pitaji'} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}, makan no. ${v.house_no || '—'}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
-    return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या आपके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}, मकान नं. ${v.house_no || '—'}) है?\n\nसही हो तो बस *'हाँ'* लिख दीजिए—पर्ची तुरंत भेज दूँगी 🙏\n*(अगर ये आप नहीं हैं, तो अपना पूरा नाम और पिता/पति का नाम लिखिए)*`;
+    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya aapke ${v.rel_type === 'H' ? 'pati' : 'pitaji'} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai?\n\nSahi ho to bas *'haan'* likh dijiye—parchi turant bhej dungi 🙏\n*(Agar ye aap nahi hain, to apna poora naam aur pita/pati ka naam likhiye)*`;
+    return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या आपके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है?\n\nसही हो तो बस *'हाँ'* लिख दीजिए—पर्ची तुरंत भेज दूँगी 🙏\n*(अगर ये आप नहीं हैं, तो अपना पूरा नाम और पिता/पति का नाम लिखिए)*`;
 }
 function listText(matches, q, en) {
     if (en) {
         let e = `Voter list me *${q}* se milte ${matches.length} naam mile hain:\n\n`;
-        matches.forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'pati' : 'pita'}: ${m.rel_name_hi}) — ward ${m.ward}, makan no. ${m.house_no || '—'}\n`; });
+        matches.forEach((m, i) => { e += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'pati' : 'pita'}: ${m.rel_name_hi}) — ward ${m.ward}\n`; });
         return e + `\nAap inme se kaun hain? Bas number (*1*, *2*…) ya apne pita/pati ka naam bhej dijiye—aapki parchi turant bhej dungi 🙏`;
     }
     let t = `वोटर लिस्ट में *${q}* से मिलते ${matches.length} नाम मिले हैं:\n\n`;
-    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'पति' : 'पिता'}: ${m.rel_name_hi}) — वार्ड ${m.ward}, मकान नं. ${m.house_no || '—'}\n`; });
+    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${m.rel_type === 'H' ? 'पति' : 'पिता'}: ${m.rel_name_hi}) — वार्ड ${m.ward}\n`; });
     return t + `\nआप इनमें से कौन हैं? बस नंबर (*1*, *2*…) या अपने पिता/पति का नाम भेज दीजिए—आपकी पर्ची तुरंत भेज दूँगी 🙏`;
 }
+function confirmOther(v, en) {
+    const rel = v.rel_type === 'H' || v.rel_type === 'पति' ? (en ? 'pati' : 'पति') : (en ? 'pita' : 'पिता');
+    if (en) return `Voter list me *${v.name_hi || v.name}* naam mila hai 📋\n\nKya unke ${rel} ka naam *${v.rel_name_hi || '—'}* (ward ${v.ward}) hai? Sahi ho to *'haan'* likh dijiye—unki parchi bhej dungi 🙏`;
+    return `वोटर लिस्ट में *${v.name_hi || v.name}* नाम मिला है 📋\n\nक्या उनके ${rel} का नाम *${v.rel_name_hi || '—'}* (वार्ड ${v.ward}) है? सही हो तो *'हाँ'* लिख दीजिए—उनकी पर्ची भेज दूँगी 🙏`;
+}
+function listOther(matches, q, en) {
+    const rel = m => (m.rel_type === 'H' || m.rel_type === 'पति') ? (en ? 'pati' : 'पति') : (en ? 'pita' : 'पिता');
+    let t = en ? `Voter list me *${q}* naam ke ${matches.length} log mile hain:\n\n` : `वोटर लिस्ट में *${q}* नाम के ${matches.length} लोग मिले हैं:\n\n`;
+    matches.forEach((m, i) => { t += `${i + 1}️⃣ *${m.name_hi}* (${rel(m)}: ${m.rel_name_hi}) — ${en ? 'ward' : 'वार्ड'} ${m.ward}\n`; });
+    return t + (en ? `\nInme se ${q} ji kaun se hain? Number (*1*, *2*…) ya unke pita/pati ka naam bhej dijiye 🙏` : `\nइनमें से ${q} जी कौन से हैं? नंबर (*1*, *2*…) या उनके पिता/पति का नाम भेज दीजिए 🙏`);
+}
+const NOT_FOUND_OTHER = (q, en) => en ? `*${q}* naam se voter list me pakka naam nahi mila 🙏 Unke pita/pati ka naam ya ward bata dijiye, ya naam waise likhiye jaise voter card par hai—phir se dekh leti hoon.` : `*${q}* नाम से वोटर लिस्ट में पक्का नाम नहीं मिला 🙏 उनके पिता/पति का नाम या वार्ड बता दीजिए, या नाम वैसे लिखिए जैसे वोटर कार्ड पर है—फिर से देख लेती हूँ।`;
+const ASK_OTHER = en => en ? 'Kiski parchi chahiye? Unka poora naam aur pita/pati ka naam bata dijiye 🙏' : 'किसकी पर्ची चाहिए? उनका पूरा नाम और पिता/पति का नाम बता दीजिए 🙏';
 const ASK_NAME = 'पर्ची अभी निकाल देती हूँ 🙏 अपना पूरा नाम और पिता/पति का नाम लिख भेजिए (वार्ड पता हो तो वो भी)।';
 const ASK_NAME_EN = 'Parchi abhi nikaal deti hoon 🙏 Apna poora naam aur pita/pati ka naam likh bhejiye (ward pata ho to wo bhi).';
 const NOT_FOUND_EN = q => `*${q}* naam se list me pakka naam nahi mila 🙏 Apna poora naam waise likhiye jaise voter card par hai, saath me pita/pati ka naam ya ward bhi likh dijiye—phir se dekh leti hoon.`;
 const NOT_FOUND = q => `*${q}* नाम से सूची में पक्का नाम नहीं मिला 🙏 अपना पूरा नाम वैसे लिखिए जैसे वोटर कार्ड पर है, साथ में पिता/पति का नाम या वार्ड भी लिख दीजिए—फिर से देख लेती हूँ।`;
 
-function setPending(user, kind, payload) {
+function setPending(user, kind, payload, who) {
     if (!user) return;
     delete user.pendingParchiCandidate; delete user.disambiguationMatches;
     if (kind === 'confirm') user.pendingParchiCandidate = payload;
     if (kind === 'choose') user.disambiguationMatches = payload;
     user.slipPendingAt = new Date().toISOString();
+    user.slipPendingWho = who || 'self';
 }
-function deliverTo(user, v) {
+function deliverTo(user, v, other = false) {
+    if (user && other) {
+        delete user.pendingParchiCandidate; delete user.disambiguationMatches; delete user.slipPendingAt;
+        try {
+            const m = require('./voter_memory.js').ensure(user);
+            m.familySlips = (Array.isArray(m.familySlips) ? m.familySlips : []).concat([{ name: v.name_hi || v.name, relName: v.rel_name_hi || null, ward: Number(v.ward) || null, at: new Date().toISOString() }]).slice(-10);
+        } catch (e) {}
+        if (user.slipTarget) user.slipTarget.done = true;
+        return { kind: 'deliver', voter: v, other: true };
+    }
     if (user) {
         delete user.pendingParchiCandidate; delete user.disambiguationMatches; delete user.slipPendingAt;
         user.lastFoundVoter = v;
+        if (user.slipTarget) user.slipTarget.done = true;
         user.ward = user.ward || Number(v.ward) || user.ward;
         // never wipe or overwrite what the voter told us: only fill blanks, and keep the slip facts alongside
         try {
@@ -161,6 +207,9 @@ function deliverTo(user, v) {
 function decide(body, user, opts = {}) {
     const text = String(body || '').trim();
     if (!text) return null;
+    // v5: the NLU said this message is about something else (votes, contact, voter-card, complaint...): no slip step
+    if (opts.noSlip) return null;
+    const fatherText = `${text} ${opts.father ? 'pita ' + opts.father : ''}`.trim();
     const asked = isSlipAsk(text);
     const recall = isRecall(text);
     const q = nameQuery(opts.searchText || text);
@@ -171,33 +220,40 @@ function decide(body, user, opts = {}) {
     const sp = user && user.memory && user.memory.scriptPref;
     const en = sp ? sp === 'hinglish' : (process.env.DEFAULT_SCRIPT === 'auto' ? (scriptOf(text) || prevUser[prevUser.length - 1] || (user && user.memory && user.memory.language === 'en' ? 'en' : 'hi')) === 'en' : (user && user.languagePreference === 'hinglish'));
     // the server's name-like guess never fires on abuse, the candidate's own name or a question
-    if (opts.slipIntent && !asked && (IMPLICIT_NO.test(text) || /\?/.test(text) || CONCERN_NO.test(text) || text.split(/\s+/).length > 6)) opts = { ...opts, slipIntent: false };
+    const pendingOther = user && user.slipPendingWho === 'other';
+    if (opts.slipIntent && !opts.nlu && !asked && (IMPLICIT_NO.test(text) || /\?/.test(text) || CONCERN_NO.test(text) || text.split(/\s+/).length > 6)) opts = { ...opts, slipIntent: false };
 
     // 1. a numbered list is pending
     if (fresh(user, 'disambiguationMatches') && Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length) {
         const list = user.disambiguationMatches;
         const idx = choiceIndex(text, list.length);
-        if (idx >= 0) return deliverTo(user, list[idx]);
-        const byRel = list.find(v => fatherGiven(text, v));
-        if (byRel) return deliverTo(user, byRel);
-        if (recall || (asked && !q) || (slipPromptLast && isYes(text))) return { kind: 'choose', matches: list, text: (en ? 'Upar wali list me se apna number bhej dijiye 🙏\n\n' : 'ऊपर वाली सूची में से अपना नंबर भेज दीजिए 🙏\n\n') + listText(list, user.lastSlipQuery || (en ? 'is naam' : 'इस नाम'), en) };
+        if (idx >= 0) return deliverTo(user, list[idx], pendingOther);
+        const byRel = list.find(v => fatherGiven(fatherText, v));
+        if (byRel) return deliverTo(user, byRel, pendingOther);
+        if (recall || (asked && !q) || (slipPromptLast && isYes(text))) return pendingOther
+            ? { kind: 'choose', matches: list, text: listOther(list, (user.slipTarget && user.slipTarget.nameHi) || user.lastSlipQuery || '', en) }
+            : { kind: 'choose', matches: list, text: (en ? 'Upar wali list me se apna number bhej dijiye 🙏\n\n' : 'ऊपर वाली सूची में से अपना नंबर भेज दीजिए 🙏\n\n') + listText(list, user.lastSlipQuery || (en ? 'is naam' : 'इस नाम'), en) };
         if (!(asked || opts.slipIntent) || !q) return null; // something else: the brain answers; the list stays open for a while
     }
     // 2. a single candidate waits for "हाँ"
     if (fresh(user, 'pendingParchiCandidate')) {
         const v = user.pendingParchiCandidate;
-        if (fatherGiven(text, v)) return deliverTo(user, v);
-        if (isYes(text) && (slipPromptLast || recall)) return deliverTo(user, v);
+        if (fatherGiven(fatherText, v)) return deliverTo(user, v, pendingOther);
+        if (isYes(text) && (slipPromptLast || recall)) return deliverTo(user, v, pendingOther);
         if (isNo(text) && slipPromptLast) { setPending(user, null); delete user.slipPendingAt; return { kind: 'ask_name', text: en ? 'Koi baat nahi 🙏 Apna poora naam aur pita/pati ka naam likhiye, sahi parchi dhoondh deti hoon.' : 'कोई बात नहीं 🙏 अपना पूरा नाम और पिता/पति का नाम लिखिए, सही पर्ची ढूँढ देती हूँ।' }; }
-        if (recall || (asked && !q)) return { kind: 'confirm', voter: v, text: confirmText(v, en) };
+        if (recall || (asked && !q)) return { kind: 'confirm', voter: v, text: pendingOther ? confirmOther(v, en) : confirmText(v, en) };
         if (!(asked || opts.slipIntent) || !q) return null;
     }
     if (opts.blocked && !asked && !slipPromptLast) return null;
     // 3. "maine abhi bataya" right after we asked for the name: use what they told
     const wantSlip = asked || opts.slipIntent || (recall && slipPromptLast) || (slipPromptLast && q && /(नाम|naam|name)/i.test(lastBot(user)) && !/\?/.test(text) && text.split(/\s+/).length <= 6);
     if (!wantSlip) return null;
+    const other = opts.target === 'other';
     let query = q;
-    if (!query || (recall && !asked && !q)) {
+    if (other) {
+        if (!query && user && user.slipTarget && user.slipTarget.who === 'other' && !user.slipTarget.done) query = nameQuery(user.slipTarget.nameHi || user.slipTarget.name || '');
+        if (!query) { if (user) user.slipAskedAt = new Date().toISOString(); return { kind: 'ask_name', text: ASK_OTHER(en) }; }
+    } else if (!query || (recall && !asked && !q)) {
         if (user && user.lastFoundVoter && recall && !asked) {
             const v = user.lastFoundVoter;
             if (en) return { kind: 'recall', voter: v, text: `Ji, yaad hai 🙏 Aap *${v.name_hi}* (${v.rel_type === 'H' ? 'pati' : 'pita'}: ${v.rel_name_hi}, ward ${v.ward}) hain—aapki parchi upar isi chat me hai. Dobara chahiye to "parchi" likh dijiye, ya parivar ke kisi aur ka naam bhejiye.` };
@@ -207,23 +263,54 @@ function decide(body, user, opts = {}) {
         query = rememberedName(user);
     }
     if (!query) { if (user) user.slipAskedAt = new Date().toISOString(); return { kind: 'ask_name', text: en ? ASK_NAME_EN : ASK_NAME }; }
-    const matches = search(query, user, opts.searchText || text);
+    const matches = search(query, user, opts.searchText || text, !!opts.nlu);
     if (user) { user.lastSlipQuery = query; user.lastSearchedQuery = query; }
-    if (!matches.length) return (asked || recall || (opts.slipIntent && slipPromptLast)) ? { kind: 'not_found', text: en ? NOT_FOUND_EN(query) : NOT_FOUND(query) } : null;
+    const shown = (opts.displayName || query);
+    if (!matches.length) {
+        if (other) {
+            const again = lastBot(user).includes(`*${shown}*`) && /(नहीं मिला|nahi mila)/.test(lastBot(user));
+            if (again) return { kind: 'not_found', text: en ? `*${shown}* naam abhi bhi list me nahi dikh raha 🙏 Ho sakta hai voter card par naam thoda alag likha ho. Unke pita ka naam bata dijiye, usse dhoondh lungi.` : `*${shown}* नाम अभी भी सूची में नहीं दिख रहा 🙏 हो सकता है वोटर कार्ड पर नाम थोड़ा अलग लिखा हो। उनके पिता का नाम बता दीजिए, उससे ढूँढ लूँगी।` };
+            return { kind: 'not_found', text: NOT_FOUND_OTHER(shown, en) };
+        }
+        return (asked || recall || opts.nlu || (opts.slipIntent && slipPromptLast)) ? { kind: 'not_found', text: en ? NOT_FOUND_EN(shown) : NOT_FOUND(shown) } : null;
+    }
+    if (other) {
+        const withRel = matches.find(v => fatherGiven(fatherText, v));
+        if (withRel) return deliverTo(user, withRel, true);
+        if (matches.length > 1) {
+            const prevList = user && fresh(user, 'disambiguationMatches') && pendingOther && Array.isArray(user.disambiguationMatches) ? user.disambiguationMatches : null;
+            const same = prevList && prevList.length === matches.length && prevList.every((v, i) => (v.id || v.epic) === (matches[i].id || matches[i].epic));
+            setPending(user, 'choose', matches, 'other');
+            if (same) {
+                // the same list is already on screen: don't paste it again, ask for the pick in one line
+                user.slipListRepeat = (user.slipListRepeat || 0) + 1;
+                const lines = en
+                    ? [`Ji, ${shown} ji ki hi parchi dhoondh rahi hoon 🙏 List me is naam ke ${matches.length} log hain—upar wali list me se unka number bhej dijiye, ya unke pita ka naam ya ward bata dijiye.`,
+                       `${shown} naam ke ${matches.length} log hain, isliye pakka karna zaroori hai 🙏 Unke pita ka naam ya ward bata dijiye, turant parchi bhej dungi.`]
+                    : [`जी, ${shown} जी की ही पर्ची ढूँढ रही हूँ 🙏 सूची में इस नाम के ${matches.length} लोग हैं—ऊपर वाली सूची में से उनका नंबर भेज दीजिए, या उनके पिता का नाम या वार्ड बता दीजिए।`,
+                       `${shown} नाम के ${matches.length} लोग हैं, इसलिए पक्का करना ज़रूरी है 🙏 उनके पिता का नाम या वार्ड बता दीजिए, तुरंत पर्ची भेज दूँगी।`];
+                return { kind: 'choose', matches, text: lines[(user.slipListRepeat - 1) % lines.length] };
+            }
+            user.slipListRepeat = 0;
+            return { kind: 'choose', matches, text: listOther(matches, shown, en) };
+        }
+        setPending(user, 'confirm', matches[0], 'other');
+        return { kind: 'confirm', voter: matches[0], text: confirmOther(matches[0], en) };
+    }
     if (user) {
         try { const m = require('./voter_memory.js').ensure(user); if (!m.name && q && /[a-z\u0900-\u097F]{3,}/i.test(q)) { m.name = q.split(/\s+/)[0]; m.nameSource = 'slip_query'; } } catch (e) {}
     }
     if (matches.length > 1) {
-        const withRel = matches.find(v => fatherGiven(opts.searchText || text, v));
+        const withRel = matches.find(v => fatherGiven(fatherText, v));
         if (withRel) return deliverTo(user, withRel);
-        setPending(user, 'choose', matches);
+        setPending(user, 'choose', matches, 'self');
         return { kind: 'choose', matches, text: listText(matches, query, en) };
     }
     const v = matches[0];
-    if (fatherGiven(opts.searchText || text, v)) return deliverTo(user, v);
-    setPending(user, 'confirm', v);
+    if (fatherGiven(fatherText, v)) return deliverTo(user, v);
+    setPending(user, 'confirm', v, 'self');
     return { kind: 'confirm', voter: v, text: confirmText(v, en) };
 }
 
 const FAMILY_TAIL = '\n\n👨‍👩‍👧 परिवार के किसी और सदस्य की पर्ची चाहिए तो उनका नाम और पिता/पति का नाम भेज दीजिए 🙏';
-module.exports = { decide, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };
+module.exports = { fatherGiven, decide, confirmOther, listOther, ASK_OTHER, NOT_FOUND_OTHER, choiceIndex, nameQuery, isYes, isNo, isRecall, isSlipAsk, search, confirmText, listText, FAMILY_TAIL, ASK_NAME };

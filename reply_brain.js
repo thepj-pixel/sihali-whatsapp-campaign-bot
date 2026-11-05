@@ -942,8 +942,13 @@ function compose(cls, ctx) {
         }
         case 'short_reply': {
             const r = recall(user, l);
-            body = vary(user, [S(`जी${H}, समझ गई 🙏`, `Ji${H}, samajh gayi 🙏`), S(`अच्छा${H} 🙏`, `Achha${H} 🙏`), S(`जी${H} 🙏`, `Ji${H} 🙏`)]) + (r ? ' ' + r : '');
-            if (!r) { body += ' ' + vary(user, [S('और बताइए, घर-गाँव में सब ठीक चल रहा है?', 'Aur bataiye, ghar-gaon me sab theek chal raha hai?'), S('कोई काम या सवाल हो तो बेझिझक बताइए।', 'Koi kaam ya sawal ho to bejhijhak bataiye.'), S('आपके मोहल्ले में किस काम की सबसे ज़्यादा ज़रूरत है?', 'Aapke mohalle me kis kaam ki sabse zyada zaroorat hai?')]); ask = false; }
+            body = vary(user, [S(`अच्छा${H} 🙏`, `Achha${H} 🙏`), S(`जी${H} 🙏`, `Ji${H} 🙏`)]) + (r ? ' ' + r : '');
+            // v5: the canned "घर-गाँव में सब ठीक?" fallback is gone (owner: #1 dumb reply). An open slip search gets a
+            // specific question about it; otherwise one plain open line.
+            let clar = null;
+            try { clar = require('./nlu_router.js').clarify(user); } catch (e) {}
+            if (!r && clar) { body = clar; ask = false; }
+            else if (!r) { body += ' ' + vary(user, [S('कोई काम या सवाल हो तो बेझिझक बताइए।', 'Koi kaam ya sawal ho to bejhijhak bataiye.'), S('आपके मोहल्ले में किस काम की सबसे ज़्यादा ज़रूरत है?', 'Aapke mohalle me kis kaam ki sabse zyada zaroorat hai?'), S('पर्ची, बूथ या गाँव का कोई काम—जो भी हो, बताइए।', 'Parchi, booth ya gaon ka koi kaam—jo bhi ho, bataiye.')]); ask = false; }
             break;
         }
         case 'daily_followup':
@@ -959,7 +964,10 @@ function compose(cls, ctx) {
             if (!cls.gibberish && words <= 6 && !/\?/.test(message) && !/^[^a-z\u0900-\u097F]*$/i.test(message)) {
                 // a normal short remark we have no rule for: acknowledge like a person, ask one open question at most
                 const r = recall(user, l);
-                needsAdmin = true; return { needsAdmin, text: vary(user, [S(`अच्छा${H} 🙏`, `Achha${H} 🙏`), S(`जी${H}, समझ गई 🙏`, `Ji${H}, samajh gayi 🙏`)]) + (r ? ' ' + r : S(' और बताइए, आपके यहाँ सब ठीक चल रहा है?', ' Aur bataiye, aapke yahan sab theek chal raha hai?')), ask: false, used };
+                let clar = null;
+                try { clar = require('./nlu_router.js').clarify(user); } catch (e) {}
+                if (clar) { needsAdmin = true; return { needsAdmin, text: clar, ask: false, used }; }
+                needsAdmin = true; return { needsAdmin, text: vary(user, [S(`अच्छा${H} 🙏`, `Achha${H} 🙏`), S(`जी${H} 🙏`, `Ji${H} 🙏`)]) + (r ? ' ' + r : S(' थोड़ा खुलकर बताइए—पर्ची चाहिए, कोई काम है या कुछ और पूछना है?', ' Thoda khulkar bataiye—parchi chahiye, koi kaam hai ya kuch aur poochhna hai?')), ask: false, used };
             }
         }
             needsAdmin = true;

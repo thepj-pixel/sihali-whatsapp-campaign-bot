@@ -1,3 +1,19 @@
+# HARK_CHANGES — v5 NLU (5 Nov 2026, production day: "the bot can't understand context")
+
+**Understanding before routing (`nlu.js`, `nlu_router.js`).** Every text message is first read by an NLU step: the NVIDIA LLM (same keys/cascade as the brain, `NLU_BUDGET_MS` default 4000) gets the last ~12 turns, the voter-memory summary and the pending slip state and must answer strict JSON `{intent, target_person self|other, person_name_hi/roman, father_name, ward, sentiment, refers_to, wants_slip, wants_contact, complaint, script, short_summary}`. `<think>`/code fences are stripped, trailing commas tolerated, every field is whitelisted and filler is removed from names. If the LLM is slow/off/garbled, a rule parser answers (always computed and used as guard-rails: a message about Baba/Abhay Singh or votes is never a slip; a contact ask is always a contact ask). `NLU=off` disables the step, `NLU_LLM=off` keeps rules only. `user.lastNlu` and a log line record each verdict.
+
+**Routing.** contact ask → line number + contact card (sent even if it went before); voter card not received → recalls the name the voter told ("आप कृष्ण कुमार जी हैं न—आपने बताया था"), notes it, "टीम से पता करके बताएँगे" (no invented BLO/e-EPIC process), offers the parchi via father-name confirmation; "koin hu m" → own name; political talk ("baba ke 100 vote kam h") → thanks, "हर एक वोट कीमती है", ask to talk to family/friends (no figure echoed); "हम आपके साथ nhai हैं" → respect + asks the concern; "baba jitenge" → warm thanks. These intents block the slip search entirely.
+
+**Slip for self vs another person.** `user.slipTarget = {who, nameHi, nameRoman}`; a different person clears the old pending list/candidate, so "are bhai bataya naa" refers to the person being searched (never resends someone else's slip). Other-person texts ("इनमें से प्रवीण कुमार जी कौन से हैं?", "क्या उनके पिता का नाम … है?") and a family slip never touches the voter's own memory (`memory.familySlips`). A repeated name with the same list on screen gets one line instead of the list again; a repeated not-found gets a different line. A name that is the father of someone in the open list ("bhawani ram") answers that list. Roll search now uses the English names (`name_en`) and a consonant-skeleton match (parveen/pareven ~ Praveen, bhawani ~ Bhavani); NLU searches are strict (first name must really match; a typed surname like yadav must be in the voter's own name) so "babal yadav" says not found + asks the father instead of listing random people.
+
+**Privacy.** `fatherGiven` never counts "baba/abhay" and never fires on a sentence about votes (the live leak: "baba ke 100 vote kam h" matched कृष्ण पिता अभय सिंह and sent the slip). House numbers are no longer shown before confirmation (list + confirm show name, father/husband, ward); EPIC/house/booth only on the delivered slip.
+
+**Dumb fallbacks removed.** "जी, समझ गई 🙏 और बताइए, घर-गाँव में सब ठीक चल रहा है?" and "आपके यहाँ सब ठीक चल रहा है?" are gone; with an open slip search the bot asks one specific question ("प्रवीण कुमार जी की पर्ची चाहिए? उनके पिता का नाम या वार्ड बता दीजिए 🙏").
+
+**Tests.** `npm run test:nlu` (`test_nlu_v5.cjs`, in `test:all`): the owner's whole transcript + a family-slip script, each with a stub LLM (realistic JSON with think-tags/fences) and with the LLM off, plus units (filler strip, transliteration, JSON parse, guard-rails, baba≠father).
+
+---
+
 # HARK_CHANGES — CRM + emoji/photo (5 Nov 2026, production day)
 
 | Item | What changed | Files |

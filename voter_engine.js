@@ -190,6 +190,8 @@ function normalizePhonetic(str) {
     return s;
 }
 
+function skeleton(s) { return String(s || '').toLowerCase().replace(/[aeiouy]/g, '').replace(/w/g, 'v').replace(/(.)\1+/g, '$1'); }
+
 function levenshteinDistance(a, b) {
     if (a === b) return 0;
     if (!a.length) return b.length;
@@ -403,8 +405,8 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
         const nameHi = (v.name_hi || '').toLowerCase();
         const relHi = (v.rel_name_hi || '').toLowerCase();
         const nameRaw = (v.name_raw || '').toLowerCase();
-        const nameEn = (v.name || '').toLowerCase();
-        const relEn = (v.rel_name || '').toLowerCase();
+        const nameEn = `${v.name_en || v.ne || ''} ${/[a-z]/i.test(v.name || '') ? v.name : ''}`.toLowerCase().trim();
+        const relEn = `${v.rel_name_en || v.re || ''} ${/[a-z]/i.test(v.rel_name || '') ? v.rel_name : ''}`.toLowerCase().trim();
         const searchText = (v.search_text || '').toLowerCase();
         const epic = (v.epic || '').toLowerCase();
         const vId = (v.id || '').toLowerCase();
@@ -485,6 +487,11 @@ function searchVoters(rawInput, limit = 5, fallbackWard = null) {
                     const normW = normalizePhonetic(w);
                     if (normW === normT || normW.includes(normT) || normT.includes(normW)) {
                         score += 30;
+                        matchedDistinctName = true;
+                        break;
+                    } else if (rawT.length >= 4 && /^[a-z]+$/.test(rawT) && /^[a-z]+$/.test(w) && skeleton(rawT).length >= 3 && skeleton(rawT) === skeleton(w) && rawT[0] === w[0]) {
+                        // consonant skeleton: parveen/pareven ~ praveen, krishan ~ krishna
+                        score += 28;
                         matchedDistinctName = true;
                         break;
                     } else if (normT.length >= 4 && Math.abs(normT.length - normW.length) <= 1) {
