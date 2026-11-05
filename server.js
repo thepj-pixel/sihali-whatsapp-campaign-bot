@@ -67,6 +67,8 @@ const {
 
 const voterEngine = require('./voter_engine.js');
 const slipFlow = require('./slip_flow.js');
+const linkShare = require('./link_share.js');
+const linkPreview = require('./link_preview.js');
 const nluMod = require('./nlu.js');
 const nluRouter = require('./nlu_router.js');
 const voterCardGen = require('./voter_card_generator.js');
@@ -451,6 +453,12 @@ async function sendMultiContactCard(sock, jid, senderPhone = null) {
 
 async function sendSafeMessage(sock, jid, content, options = {}) {
     try {
+        // our website link -> big preview card (cached 6 h, warmed on connect; waits ≤1.5 s, else plain text)
+        if (content && typeof content.text === 'string' && !('linkPreview' in content) && linkPreview.OUR_URL_RX.test(content.text)) {
+            let lp = null;
+            try { lp = await linkPreview.forText(content.text, sock, { waitMs: 1500 }); } catch (e) { lp = null; }
+            content = { ...content, linkPreview: lp || null };
+        }
         const sent = await sock.sendMessage(jid, content, options);
         if (sent?.key?.id && sent?.message) {
             MSG_STORE.set(sent.key.id, sent.message);
@@ -584,6 +592,9 @@ async function startSession(sessionObj) {
         keepAliveIntervalMs: 25000,
         syncFullHistory: false,
         defaultQueryTimeoutMs: 60000,
+        // big link-preview card (uploads the og:image as a high-quality thumbnail); our own site links get a
+        // vendored preview (link_preview.js) passed as content.linkPreview, so a send never waits on link-preview-js
+        generateHighQualityLinkPreview: true,
         msgRetryCounterCache,
         userDevicesCache,
         getMessage: async (key) => {
@@ -660,6 +671,8 @@ async function startSession(sessionObj) {
             sessionObj.status = 'CONNECTED';
             sessionObj.qr = null;
             console.log(`[${sessionObj.id}] ✅ WhatsApp Connected & Healthy!`);
+            // warm the website preview cards in the background (never blocks a reply)
+            setTimeout(() => { linkPreview.warm(linkShare.SITE, sock); linkPreview.warm(linkShare.VOTER_DIR, sock); }, 3000);
             if (DISAPPEAR.seconds && sock.updateDefaultDisappearingMode) sock.updateDefaultDisappearingMode(Number(DISAPPEAR.seconds)).catch(e => console.warn('[Disappear] default', e.message));
             sendAdminBootReport(sessionObj).catch(e => console.warn('[AdminReport]', e.message));
         }
@@ -1019,7 +1032,7 @@ async function startSession(sessionObj) {
                     // Check if user is confirming previous query ("ye hie details h", "yahi h", "itna hi pata h", etc.)
                     // Context-loss fix: "yahi"/"nahi pata" re-ran the last voter search on ANY later message ("nahi pata kab banegi
                     // sadak" -> a slip again). It now counts only as a short answer right after our own slip prompt.
-                    const lastBotForSlip = ((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '';
+                    const lastBotForSlip = linkShare.strip(((user.history || []).filter(h => h.role === 'bot').slice(-1)[0] || {}).text || '');
                     const isFollowUpDetails = (lower.includes('ye hie') || lower.includes('yahi') || lower.includes('yehi') || lower.includes('itna hi') || lower.includes('nahi pata')) &&
                         /(पर्ची|वोटर लिस्ट|parchi)/i.test(lastBotForSlip) && body.trim().split(/\s+/).length <= 5 && !/(डिजिटल मतदाता पर्ची|परिवार की मतदाता पर्ची)/.test(lastBotForSlip);
                     let effectiveSearchText = body;
@@ -1157,6 +1170,8 @@ async function startSession(sessionObj) {
                         // NLU v5 direct reply: contact ask (+ card), voter card not received, "who am I", campaign talk / concern
                         try { require('./voter_memory.js').updateFromVoterMessage(user, body, { lastBotText: lastBotForSlip, intent: nluPlan.reply.intent, topic: null }); } catch (e) {}
                         replyText = nluPlan.reply.text;
+                        // website link (works menu / categories / about Baba), rate-limited per voter
+                        try { replyText = linkShare.addLink(replyText, user, { msg: body, intent: nluPlan.reply.intent }); } catch (e) {}
                         userMemory.save();
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         mediaTypeSent = 'nlu_' + nluPlan.reply.intent;
@@ -1172,6 +1187,7 @@ async function startSession(sessionObj) {
                         if (slipPlan.kind === 'family' && targetVoter) {
                             const fam = slipPlan.members || [targetVoter];
                             replyText = slipFlow.familyCaption({ ...slipPlan, members: fam }, !!(user.memory && user.memory.scriptPref === 'hinglish'));
+                            try { replyText = linkShare.addLink(replyText, user, { msg: body, kind: 'voter', intent: 'family' }); } catch (e) {}
                             let famBuf = null;
                             try { famBuf = await voterCardGen.generateFamilyCard(targetVoter, fam); } catch (e) { console.error(`[${sessionObj.id}] family card error:`, e.message); }
                             if (famBuf) await sendSafeMessage(sock, replyJid, { image: famBuf, caption: replyText });
@@ -1188,6 +1204,7 @@ async function startSession(sessionObj) {
                             try { cardBuffer = await voterCardGen.generateVoterCard(targetVoter); }
                             catch (cardErr) { console.error(`[${sessionObj.id}] Error generating voter card:`, cardErr.message); }
                             if (!cardBuffer) replyText = voterEngine.formatShortSlipResponse(targetVoter) + slipFlow.familyTail(user, targetVoter, slipEn, !!slipPlan.other);
+                            try { replyText = linkShare.addLink(replyText, user, { msg: body, kind: 'voter', intent: 'deliver' }); } catch (e) {}
                             if (cardBuffer) {
                                 try { fs.writeFileSync(path.join(__dirname, 'media', 'uploads', `parchi_${targetVoter.id || targetVoter.sr_no}.jpg`), cardBuffer); } catch (e) {}
                                 await sendSafeMessage(sock, replyJid, { image: cardBuffer, caption: replyText });
@@ -1201,6 +1218,8 @@ async function startSession(sessionObj) {
                             if (slipPlan.kind === 'confirm' && targetVoter) voterCardGen.generateVoterCard(targetVoter).catch(() => {});
                             userMemory.save();
                             replyText = slipPlan.text;
+                            // voter-directory link after a not-found or a ward question (never on confirm / name ask: those wait for an answer)
+                            if (slipPlan.kind === 'not_found' || slipPlan.kind === 'choose') { try { replyText = linkShare.addLink(replyText, user, { msg: body, kind: 'voter', intent: slipPlan.kind }); } catch (e) {} }
                             await sendSafeMessage(sock, replyJid, { text: replyText });
                             mediaTypeSent = { confirm: 'parchiConfirmation', choose: 'disambiguation', ask_name: 'parchiNamePrompt', not_found: 'parchiNotFound', recall: 'parchiRecall' }[slipPlan.kind] || 'parchi';
                         }
@@ -1212,7 +1231,7 @@ async function startSession(sessionObj) {
                         // AI Assistant query
                         const history = userMemory.getUserHistory(senderPhone).slice(0, -1).map(h => ({
                             role: h.role === 'bot' ? 'assistant' : 'user',
-                            content: h.text
+                            content: h.role === 'bot' ? linkShare.strip(h.text) : h.text
                         }));
 
                         const clar = nluPlan && nluPlan.nlu && nluPlan.nlu.intent === 'unclear' && ['unclear', 'short_reply'].includes(replyBrain.classify(body, user).intent) ? nluRouter.clarify(user) : null; // the brain's own rules (e.g. English "who is this?") win over a bare 'unclear'
@@ -1221,6 +1240,8 @@ async function startSession(sessionObj) {
                         if (!replyText || replyText.trim() === '') {
                             replyText = aiService.getSafeFallback(body, senderPhone);
                         }
+                        // website link: works / sankalp / list / more info (or once per conversation on a friendly turn), rate-limited
+                        try { replyText = linkShare.addLink(replyText, user, { msg: body, intent: (replyBrain.classify(body, user) || {}).intent || '' }); } catch (e) {}
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         console.log(`[${sessionObj.id}] ✅ Replied via AI/local to ${senderPhone}`);
                     }

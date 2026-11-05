@@ -732,7 +732,7 @@ async function callGeminiModel(model, body, key, timeoutMs) {
         throw e;
     }
 }
-async function callGemini(systemPrompt, conversationHistory, userMessage, key, timeoutMs = 4500) {
+async function callGemini(systemPrompt, conversationHistory, userMessage, key, timeoutMs = 6000) {
     if (!key) throw new Error('No Gemini key configured');
     const contents = [];
     for (const msg of conversationHistory || []) {
@@ -998,7 +998,7 @@ async function probeProviders() {
         out.groq = { ok: keys.some(k => k.ok), model: GROQ_MODEL, count: gks.length, okCount: keys.filter(k => k.ok).length, keys };
     }
     const gm = CONFIG.gemini_api_key || process.env.GEMINI_API_KEY;
-    if (gm) { try { out.gemini = { ok: !!(await callGemini('Reply with the single word: ok', [], 'ping', gm)) }; } catch (e) { out.gemini = { ok: false, error: String(e.message).slice(0, 120) }; } }
+    if (gm) { try { out.gemini = { ok: !!(await callGemini('Reply with the single word: ok', [], 'ping', gm, 9000)) }; } catch (e) { out.gemini = { ok: false, error: String(e.message).slice(0, 120) }; } }
     if (!Object.keys(out).length) out.none = 'No LLM API key configured on this machine (NVIDIA_API_KEY(S) / GROQ_API_KEY / GEMINI_API_KEY env or api_config.json).';
     return out;
 }

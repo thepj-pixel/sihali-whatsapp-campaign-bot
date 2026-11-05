@@ -10,8 +10,13 @@
 | "mere papa ki slip chahiye" took "ki slip" as the father's name → self flow | filler never counts as a father's name; "papa ki slip" = other person → asks पिताजी's name | `nlu.js` |
 | "voter slip for rajesh devi" searched "for राजेश देवी" | English filler (for/of/the/his/her/send/all…) is never a name | `slip_flow.js`, `nlu.js` |
 | "ward 3 nahi ward 6" / "ward 3 ni ward 6" / "3 nahi 6" picked 3 | the corrected ward wins (slip flow + NLU) | `slip_flow.js`, `nlu.js` |
+| Owner 03:04: share the website | `link_share.js`: works / vikas / sankalp / "poori list" / more info → answer, then "पूरी लिस्ट और सारे काम वेबसाइट पे देख लो जी 👇" + `https://abhaysinghsihali.in` alone on the next line (vikas menu + category replies via the router, brain works/sankalp replies); voter list / parchi → "अपना नाम वोटर लिस्ट में यहाँ भी खोज सकते हैं 👇" + `/voter-directory` after the slip caption, family caption, not-found and ward questions (never on confirm / name ask). One link message per voter per 6 h (`user.linkSharedAt`), explicit link/website/list asks override; a friendly turn carries it once if nothing was shared yet; never with STOP/opt-out, abuse, grief, complaint; skipped if the reply already has a URL. The block is stripped from "last bot message" checks and LLM history (slip_flow, nlu, reply_brain, server) | `link_share.js`, `server.js`, `slip_flow.js`, `nlu.js`, `reply_brain.js` |
+| "baba ke kaam ki poori list" → "थोड़ा खुलकर बताइए" | works menu also on "baba ke kaam", "kaam ki (poori) list"; "bekar/shikayat" is never the menu | `vikas_menu.js` |
+| Big preview card | `generateHighQualityLinkPreview: true`; `link-preview-js@^3.2.0` added (Baileys optional peer; lock updated, `npm ci` verified). Our own links use a vendored preview (`link_preview.js`): og:title/description/og:image + jpeg, small jpegThumbnail + uploaded HQ thumbnail (`thumbnail-link`), 4 s fetch cap, 6 h cache per URL, warmed when a line connects; a send waits ≤ 1.5 s, else plain text | `link_preview.js`, `server.js`, `package.json` |
 
 Tests: new `test:slipmixed` (78 checks: owner's live convo, 10 family wordings, 7 relation asks, English/mixed, corrections, typos; Devanagari / no ballot serial / no EPIC on every reply) and `test:llm` (mocked fetch: model, key rotation, Gemini header/models/503). Both in `test:all`.
+
+Tests: `test:links` (35: placement, rate limit, explicit override, blocks, first-URL, slip flow with links in history, preview cache/timeout).
 
 # HARK_CHANGES — brain v7.4 (5 Nov 2026 night: round 4 live battery + feature QA before the first real bulk)
 

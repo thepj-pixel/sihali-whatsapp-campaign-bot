@@ -189,7 +189,7 @@ function lastBot(user) {
     // v8 (6 Nov): the vikas menu / category replies are not slip questions — look past them to the open slip step
     let vm = null; try { vm = require('./vikas_menu.js'); } catch (e) {}
     const h = (user && Array.isArray(user.history) ? user.history : []).filter(x => x.role === 'bot' && !(vm && vm.isVikasText(x.text)));
-    return h.length ? String(h[h.length - 1].text || '') : '';
+    return h.length ? require('./link_share.js').strip(String(h[h.length - 1].text || '')) : '';
 }
 const fresh = (user, key) => user && user[key] && (!user.slipPendingAt || Date.now() - Date.parse(user.slipPendingAt) < PENDING_TTL_MS);
 

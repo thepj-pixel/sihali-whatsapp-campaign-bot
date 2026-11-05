@@ -133,7 +133,7 @@ function rules(text, user) {
     const slipWord = SLIP_RX.test(t);
     const st = user && user.slipTarget && user.slipTarget.at && (Date.now() - Date.parse(user.slipTarget.at) < 3 * 3600 * 1000) ? user.slipTarget : null;
     const pendingList = user && ((Array.isArray(user.disambiguationMatches) && user.disambiguationMatches.length) || user.pendingParchiCandidate);
-    const lastBot = (((user && user.history) || []).filter(h => h.role === 'bot' && !vikasMenu.isVikasText(h.text)).slice(-1)[0] || {}).text || '';
+    const lastBot = require('./link_share.js').strip((((user && user.history) || []).filter(h => h.role === 'bot' && !vikasMenu.isVikasText(h.text)).slice(-1)[0] || {}).text || '');
     const botAskedName = /(नाम|naam).{0,40}(बता|लिख|bata|likh)|पिता.{0,10}नाम|pita.{0,10}naam/i.test(lastBot);
 
     if (ABUSE_RX.test(t)) { out.intent = 'abuse'; out.sentiment = 'angry'; return out; }

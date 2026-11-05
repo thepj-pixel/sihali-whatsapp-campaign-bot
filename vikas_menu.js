@@ -60,7 +60,7 @@ const CAT_RX = {
 
 const SLIP_RX = /(parchi|parchee|parchii|pqrchi|slip|voter\s*(list|id|card|slip)|वोटर\s*(लिस्ट|आईडी|कार्ड|पर्ची)|पर्ची|epic)/i;
 // a taunt / complaint / future-date question is not a works menu ask ("kuch kaam nahi kiya", "kaam kab hoga")
-const NEG_RX = /(\bnahi|\bnahin|\bnhi\b|\bnhai|\bnaa?\b|jhooth|jhoot|jhuth|bakwas|\bkab\b|\bkabhi|\btoot|\btuti|\btooti|kharab|kharaab|\bband\b|नहीं|(?:^|\s)ना(?:\s|$)|झूठ|बकवास|(?:^|\s)कब(?:\s|$|\?)|टूट|खराब|ख़राब|(?:^|\s)बंद)/i;
+const NEG_RX = /(\bnahi|\bnahin|\bnhi\b|\bnhai|\bnaa?\b|jhooth|jhoot|jhuth|bakwas|bekar|bekaar|shikayat|शिकायत|बेकार|\bkab\b|\bkabhi|\btoot|\btuti|\btooti|kharab|kharaab|\bband\b|नहीं|(?:^|\s)ना(?:\s|$)|झूठ|बकवास|(?:^|\s)कब(?:\s|$|\?)|टूट|खराब|ख़राब|(?:^|\s)बंद)/i;
 const OFFICER_RX = /(adhikari|officer|vdo|अधिकारी)/i;
 const VIKAS = '(?:vikas|vikaas|vikash|vkas|विकास)';
 const WORK = '(?:karya|kary|kaarya|karyo|kaary|kaam|kaj|kaaj|works?|कार्य|कार्यों|काम|कामों)';
@@ -73,6 +73,9 @@ const MENU_RX = new RegExp([
     `(?:kya|kya kya|kaun|kon|konse|kaunse|kaun\\s*se|kon\\s*se|क्या|कौन|कौन\\s*से)\\s*(?:se\\s*)?(?:kaam|kam|karya|kaarya|काम|कार्य)\\s*(?:-?\\s*kaam\\s*)?(?:${DONE})`,
     `(?:kaam|karya|kaarya|works?|काम|कार्य)\\s*(?:kya|क्या)\\s*(?:${DONE})`,
     `(?:kaam|karya|kaarya|works?|काम|कार्य)\\s*(?:${ASK})`,
+    // v9 (owner 03:04): "baba ke kaam ki poori list", "baba ke kaam", "kaam ki list", "abhay singh ne kya kaam kiye"
+    `(?:baba|abhay|abhey|abhai|बाबा|अभय)\\s*(?:ji|जी|singh|सिंह)?\\s*(?:ji|जी)?\\s*(?:ne|ke|ka|ki|ne\\s*kya|के|का|की|ने)\\s*(?:kya\\s*(?:kya\\s*)?)?${WORK}`,
+    `${WORK}\\s*(?:ki|ka|ke|की|का|के)?\\s*(?:poori|puri|pura|poora|sari|saari|sab|पूरी|पूरा|सारी)?\\s*(?:list|lisht|suchi|soochi|लिस्ट|सूची)`,
     `(?:what|which)\\s+(?:work|works|development)`, `works?\\s+done`, `development\\s+works?`, `list\\s+of\\s+works`
 ].join('|'), 'i');
 // a direct category question needs a works marker next to the category word

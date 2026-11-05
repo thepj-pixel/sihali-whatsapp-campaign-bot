@@ -398,11 +398,11 @@ const CLOSERS = {
 };
 
 function recentBotText(user, n = 4) {
-    return (user && Array.isArray(user.history) ? user.history.filter(h => h.role === 'bot').slice(-n).map(h => h.text || '') : []).join(' \n ');
+    return (user && Array.isArray(user.history) ? user.history.filter(h => h.role === 'bot').slice(-n).map(h => require('./link_share.js').strip(h.text || '')) : []).join(' \n ');
 }
 function lastBotText(user) {
     const h = (user && Array.isArray(user.history) ? user.history : []).filter(x => x.role === 'bot');
-    return h.length ? String(h[h.length - 1].text || '') : '';
+    return h.length ? require('./link_share.js').strip(String(h[h.length - 1].text || '')) : '';
 }
 
 /** A closer tied to the voter's own concern, or a stage closer; never one used in the last 5 bot messages. */
@@ -1212,7 +1212,7 @@ function validateLLM(reply, { allowedText, user, l } = {}) {
 
 function historyTurns(user, opts, n = 10) {
     const h = (user && Array.isArray(user.history) && user.history.length ? user.history : []).filter(x => x && x.text);
-    const turns = h.length ? h.map(x => ({ role: x.role === 'bot' ? 'assistant' : 'user', content: String(x.text).slice(0, 400) })) : (opts.history || []);
+    const turns = h.length ? h.map(x => ({ role: x.role === 'bot' ? 'assistant' : 'user', content: String(x.role === 'bot' ? require('./link_share.js').strip(x.text) : x.text).slice(0, 400) })) : (opts.history || []);
     const trimmed = turns.slice();
     if (trimmed.length && trimmed[trimmed.length - 1].role === 'user') trimmed.pop();
     return trimmed.slice(-n);
