@@ -14,6 +14,8 @@ New module `operator_control.js` (state `operator_control.json`, gitignored) + `
 
 API (PIN): `GET/POST /api/control/day`, `GET /api/control/history`, `POST /api/control/default-mode`, `GET/POST /api/control/voter/:phone`, `GET /api/control/followups`, `POST /api/control/followups/run`; CRM profile GET/POST also carries `about, style, mode, voteAsk, followup`.
 
+**Live-test fixes (v6.1–6.8).** "mere baare me kya pata hai" was answered by recall_self as "आप अभय सिंह जी हैं" — privacy probes now go to the brain and the candidate's name is never stored as the voter's; a son's job hunt is life talk (no jobs-sankalp pitch, no concern logged); the LLM memory may not store a ward/number the voter didn't write; "parchi mil jayegi kya" and "dhanyavad ji" are no longer roll searches; the locked bot line is kept verbatim (no LLM rewrite) on a calm turn; aggressive keeps its vote ask through the LLM (`dropped_vote_ask`); chill/briefed voters get a family question instead of "chunav ka mahaul" and chill never asks for the vote in the first 5 exchanges; no self re-introduction; grammar/promise guards ("आपका … ध्यान रखिएगा", "नौकरी ज़रूर लगेगी"). Self-Test `POST /api/self-test/start {…, op:{about,style,mode,voteAsk}}` simulates a briefed voter.
+
 Tests: `npm run test:v6` (`test_operator_control_v6.cjs`, in `test:all`): brief injection (reply + NLU prompts), leak-guard units, a leaking stub LLM across adversarial turns, modes (aggressive > normal > chill, gentle 0, never rude), daily lock + media once/day + retired filter, follow-up rules, persistence, leftovers.
 
 ---
