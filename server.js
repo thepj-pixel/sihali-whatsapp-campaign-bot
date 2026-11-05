@@ -3011,7 +3011,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <textarea id="qa-custom" rows="3" placeholder="अपना मैसेज लिखें…" style="display:none;"></textarea>
                         <div class="qa-row">
                             <select id="qa-poster"><option value="">🖼️ बिना पोस्टर</option></select>
-                            <label class="qa-check"><input id="qa-forcecard" type="checkbox"> कार्ड दोबारा भेजें</label>
+                            <label class="qa-check"><input id="qa-forcecard" type="checkbox" checked> नंबर-सेव कार्ड भेजें</label>
                         </div>
                         <button id="qa-send" type="button" class="qa-send">📲 Save &amp; Send now</button>
                         <div id="qa-status" class="qa-status" role="status" aria-live="polite"></div>
