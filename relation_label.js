@@ -1,6 +1,5 @@
 // Single source of truth for "पिता" vs "पति" on the voter roll.
-// voters_cleaned.json and the parcha CSV disagree on ~600 rows, so a label is
-// only shown firmly when both agree; otherwise a woman's record shows "पिता/पति".
+// Uses the record's own relation (voters_cleaned.json); the CSV is only a fallback.
 const fs = require('fs');
 const path = require('path');
 
@@ -39,11 +38,9 @@ function relLabel(v, en) {
     const a = norm(v.rt) || norm(v.rel_type);
     const b = norm(loadCsv().get(`${ward}-${sr}`));
     const female = /महिला|^f/i.test(String(v.gender || v.g || ''));
-    let out;
-    if (a && b && a === b) out = a;
-    else if (!b && a) out = a;
-    else if (!a && b) out = b;
-    else out = female ? 'पिता/पति' : 'पिता';
+    // voters_cleaned.json is the corrected roll (CSV is regenerated from it, 5 Nov 2026).
+    let out = a || b || (female ? 'पिता/पति' : 'पिता');
+    if (out === 'पति' && !female) out = 'पिता';
     return en ? ROMAN[out] : out;
 }
 
