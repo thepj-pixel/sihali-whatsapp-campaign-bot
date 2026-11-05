@@ -23,7 +23,7 @@ const STUB = {
     'babal yadav kie bhi parchi de do': { intent: 'slip_request', target_person: 'other', person_name_hi: 'बबल यादव', person_name_roman: 'babal yadav', wants_slip: true, script: 'roman' },
     'parveen kumar': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', wants_slip: true, script: 'roman' },
     // live finding: the model copied a father's name out of the list -> must be dropped (ungrounded), never deliver
-    'are bhai bataya naa naam voter id me': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', father_name: 'लाल सिंह', refers_to: 'pending slip for Parveen Kumar', wants_slip: true, script: 'roman' },
+    'are bhai bataya naa naam voter id me': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', father_name: 'लाल सिंह', ward: 1, refers_to: 'pending slip for Parveen Kumar', wants_slip: true, script: 'roman' },
     'are parveen kumar kie voter list chaiye thi_': {},
     'are parveen kumar kie voter list chaiye thi': { intent: 'slip_request', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', wants_slip: true, script: 'roman' },
     'nahi uski voter list id de doo': { intent: 'slip_request', target_person: 'other', person_name_hi: 'प्रवीण कुमार', father_name: 'हुकुम लाल', refers_to: 'Parveen Kumar', wants_slip: true, script: 'roman' },

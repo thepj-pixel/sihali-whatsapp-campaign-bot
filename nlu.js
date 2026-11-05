@@ -301,6 +301,8 @@ function merge(r, l, text, user) {
     if (o.wants_slip && !o.person_name_hi && !o.person_name_roman) { o.person_name_hi = r.person_name_hi; o.person_name_roman = r.person_name_roman; }
     if (o.wants_slip && !o.target_person) o.target_person = r.target_person || 'self';
     if (!o.father_name) o.father_name = r.father_name;
+    // a ward must be written in this message (the model copied "वार्ड 1" out of the list once)
+    if (o.ward && !new RegExp('(^|\\D)' + o.ward + '(\\D|$)').test(text)) o.ward = null;
     if (!o.ward) o.ward = r.ward;
     if (o.intent === 'unclear' && r.intent !== 'unclear') o.intent = r.intent;
     return o;
