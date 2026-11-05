@@ -79,7 +79,7 @@ if (fs.existsSync(FONT_PATH)) {
 async function generateVoterCard(voter) {
     const cacheKey = voter.id || voter.sr_no || voter.epic || `${voter.ward || 1}_${voter.sr_no || 1}`;
     // v3 in the name: cards rendered before 4 Nov 2026 carried a symbol and must never be served again
-    const cacheFile = path.join(CARD_CACHE_DIR, `card_v3_${cacheKey}.jpg`);
+    const cacheFile = path.join(CARD_CACHE_DIR, `card_v4_${cacheKey}.jpg`);
     if (fs.existsSync(cacheFile)) {
         try {
             return fs.readFileSync(cacheFile);
