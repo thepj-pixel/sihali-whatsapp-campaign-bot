@@ -200,69 +200,12 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// PIN Security Gate Middleware
-app.use((req, res, next) => {
-    // Whitelist static media, health, debug, and Meta Ads Webhook
-    if (req.path.startsWith('/media') || req.path === '/health' || req.path === '/api/debug' || req.path.startsWith('/webhook')) {
-        return next();
-    }
-
-    const cookieHeader = req.headers.cookie || '';
-    const cookies = {};
-    cookieHeader.split(';').forEach(c => {
-        const parts = c.trim().split('=');
-        if (parts[0]) cookies[parts[0]] = parts[1] ? decodeURIComponent(parts[1]) : '';
-    });
-
-    const queryPin = req.query.pin;
-    const headerPin = req.headers['x-campaign-pin'];
-    const activePin = cookies['campaign_pin'] || queryPin || headerPin;
-
-    if (activePin === CAMPAIGN_PIN) {
-        if (queryPin === CAMPAIGN_PIN) {
-            res.setHeader('Set-Cookie', `campaign_pin=${CAMPAIGN_PIN}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly${req.secure ? '; Secure' : ''}`); // Secure only when the request really is https (works on plain http too)
-        }
-        return next();
-    }
-
-    if (req.path.startsWith('/api')) {
-        return res.status(401).json({ error: 'Unauthorized. Enter the dashboard PIN.' });
-    }
-
-    // Render Lock Screen
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>🔒 Security Gate - Sihali Khurd 2026</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-            <style>
-                * { box-sizing: border-box; }
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
-                .card { background: #1e293b; padding: 35px 25px; border-radius: 18px; width: 100%; max-width: 380px; text-align: center; box-shadow: 0 20px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
-                .pin-input { width: 100%; padding: 15px; font-size: 26px; text-align: center; letter-spacing: 10px; border-radius: 10px; border: 2px solid #475569; background: #0f172a; color: #38bdf8; margin: 22px 0; outline: none; font-weight: 700; }
-                .pin-input:focus { border-color: #38bdf8; }
-                .btn { width: 100%; padding: 15px; background: #2563eb; color: white; font-size: 16px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
-                .btn:active { transform: scale(0.98); }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <div style="font-size: 42px; margin-bottom: 12px;">🔒</div>
-                <h2 style="margin: 0; font-size: 20px; color: #f8fafc;">ग्राम पंचायत सिहाली खुर्द</h2>
-                <p style="color: #94a3b8; font-size: 13px; margin: 6px 0 0 0;">बाबा अभय सिंह चुनाव 2026 — निजी कंट्रोल रूम</p>
-                
-                <form method="GET" action="/">
-                    <input type="password" name="pin" class="pin-input" placeholder="••••" maxlength="8" autofocus required inputmode="numeric">
-                    <button type="submit" class="btn">🚀 Unlock Dashboard</button>
-                </form>
-                <p style="color: #64748b; font-size: 11px; margin-top: 18px;">Private & Confidential • Campaign Team Access Only</p>
-            </div>
-        </body>
-        </html>
-    `);
-});
+// Security gate: per-person username/password sessions (dashboard_auth.js) + the campaign PIN as admin fallback
+// (x-campaign-pin header, ?pin=, PIN form). Public: /media, /health (sanitized), /webhook/*, /login, /logout.
+const dashAuth = require('./dashboard_auth.js').create({ pin: CAMPAIGN_PIN, dir: __dirname });
+app.use(dashAuth.gate);
+app.use(dashAuth.auditMiddleware);
+dashAuth.install(app);
 
 // (moved below the PIN gate so complaint/intel data is no longer public)
 // Endpoints to view registered complaints & ground intel
@@ -1491,7 +1434,7 @@ app.post('/api/quick-add-send', async (req, res) => {
             card = 'sent';
         }
         userMemory.save();
-        logMessage({ session: sess.name, phone, incoming: `[Quick Add${name ? ': ' + name : ''}]`, reply: text, status: media ? 'MEDIA_SENT' : 'DELIVERED' });
+        logMessage({ session: sess.name, phone, incoming: `[Quick Add${name ? ': ' + name : ''}]`, reply: text, by: req.dashUser ? req.dashUser.username : undefined, status: media ? 'MEDIA_SENT' : 'DELIVERED' });
         operationsTracker.record('quick_add_send', 'sent', { lineId, mediaType: media ? media.type : 'text', card });
         res.json({ success: true, phone, name: identityResolver.nameFor(phone), line: lineId, lineName: sess.name, message: text, poster: media ? media.file : null, contactCard: card,
             messageId: sent && sent.key ? sent.key.id : null, contactId: contact && contact.id });
@@ -1624,6 +1567,7 @@ app.post('/api/send-message', async (req, res) => {
             phone: cleanedPhone,
             incoming: `[Quick Add: ${name || 'Voter'}]`,
             reply: messageText,
+            by: req.dashUser ? req.dashUser.username : undefined,
             status: mediaType ? 'MEDIA_SENT' : 'DELIVERED'
         });
         operationsTracker.record('dashboard_send', 'ok', {
@@ -2401,7 +2345,7 @@ function selfTestPinOk(req) {
     // Defence in depth: the global gate already requires the PIN; require it explicitly here too.
     const cookiePin = (String(req.headers.cookie || '').match(/(?:^|;\s*)campaign_pin=([^;]+)/) || [])[1];
     const pin = req.headers['x-campaign-pin'] || req.query.pin || (req.body && req.body.pin) || (cookiePin && decodeURIComponent(cookiePin));
-    return pin === CAMPAIGN_PIN;
+    return pin === CAMPAIGN_PIN || !!(req.dashUser && req.dashUser.role === 'admin');
 }
 // POST /api/ai-keys {nvidia_keys?:[..], groq_api_key?, gemini_api_key?} -> writes gitignored api_config.json and hot-reloads (PIN required)
 app.post('/api/ai-keys', (req, res) => {
@@ -2603,7 +2547,7 @@ app.post('/api/contacts/bulk-add', (req, res) => {
 });
 
 // API: Request Pairing Code (for Canada + Baba accounts)
-app.post('/api/request-pairing-code', async (req, res) => {
+app.post('/api/request-pairing-code', dashAuth.requireAdmin, async (req, res) => {
     try {
         const { sessionId, phone } = req.body;
         const sessionObj = SESSIONS.find(s => s.id === sessionId);
@@ -2620,7 +2564,7 @@ app.post('/api/request-pairing-code', async (req, res) => {
 });
 
 // API: PM2 Bot Debug Logs
-app.get('/api/debug', (req, res) => {
+app.get('/api/debug', dashAuth.requireAdmin, (req, res) => {
     exec('pm2 logs whatsapp-bot --lines 80 --nostream', (err, stdout, stderr) => {
         res.type('text/plain').send(stdout || stderr || 'No PM2 logs available');
     });
@@ -2690,7 +2634,7 @@ app.get('/api/clear-card-cache', (req, res) => {
     }
 });
 
-app.get('/update', (req, res) => {
+app.get('/update', dashAuth.requireAdmin, (req, res) => {
     console.log('[AutoDeploy] Pulling latest code from GitHub...');
     exec('git pull origin main && mkdir -p ~/.fonts && cp media/*.ttf ~/.fonts/ 2>/dev/null || true && fc-cache -f ~/.fonts 2>/dev/null || true && rm -rf parchi_cache/* && pm2 restart all', (err, stdout, stderr) => {
         if (err) {
@@ -2699,7 +2643,7 @@ app.get('/update', (req, res) => {
                 <body style="font-family: sans-serif; padding: 30px;">
                     <h2 style="color: #dc2626;">❌ Auto-Update Failed</h2>
                     <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px;">${stderr || err.message}</pre>
-                    <a href="/?pin=${CAMPAIGN_PIN}">← Return to Dashboard</a>
+                    <a href="/">← Return to Dashboard</a>
                 </body>
             `);
         }
@@ -2709,8 +2653,8 @@ app.get('/update', (req, res) => {
                 <p>Google Cloud VM has pulled all latest changes and restarted the bot.</p>
                 <pre style="background: #f1f5f9; padding: 15px; border-radius: 8px; text-align: left; display: inline-block;">${stdout}</pre>
                 <br><br>
-                <a href="/?pin=${CAMPAIGN_PIN}" style="background: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Return to Dashboard</a>
-                <script>setTimeout(() => window.location.href = '/?pin=${CAMPAIGN_PIN}', 3000);</script>
+                <a href="/" style="background: #2563eb; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Return to Dashboard</a>
+                <script>setTimeout(() => window.location.href = '/', 3000);</script>
             </body>
         `);
     });
@@ -2764,8 +2708,8 @@ app.get('/repair/:id', async (req, res) => {
             <p style="color: #4ade80; font-weight: bold; font-size: 16px;">✅ Login credentials preserved — NO QR scan needed!</p>
             <p style="color: #94a3b8;">WhatsApp is re-synchronizing fresh pre-keys right now...</p>
             <br>
-            <a href="/?pin=${CAMPAIGN_PIN}" style="display:inline-block; padding:12px 24px; background:#2563eb; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">← Return to Dashboard</a>
-            <script>setTimeout(() => window.location.href = '/?pin=${CAMPAIGN_PIN}', 3500);</script>
+            <a href="/" style="display:inline-block; padding:12px 24px; background:#2563eb; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">← Return to Dashboard</a>
+            <script>setTimeout(() => window.location.href = '/', 3500);</script>
         </body>
         </html>
     `);
@@ -3025,7 +2969,8 @@ app.get('/', (req, res) => {
                     <div class="top-actions">
                         <span id="public-url-badge" style="background: #e0f2fe; color: #0369a1; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">🔗 Fixed dashboard address</span>
                         <span style="background: #dcfce7; color: #15803d; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 700;">🟢 Iowa Cloud 24/7</span>
-                        <a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>
+${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="return confirm('Sync latest code from GitHub?')" style="background: #0f172a; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700;">🔄 Pull GitHub</a>` : ''}
+                        ${dashAuth.ui.headerBadge(req)}
                     </div>
                 </div>
 
@@ -3315,6 +3260,7 @@ app.get('/', (req, res) => {
                             </tbody>
                         </table>
                     </div>
+                ${dashAuth.ui.pane(req)}
                 </div>
 
                 <!-- TAB 2: Live Poster Studio (Personalized Status Posters) -->
@@ -6028,7 +5974,7 @@ app.get('/', (req, res) => {
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
-            </script>${opsRoutes.ui.script()}${crmUi.script()}${ocRoutes.ui.script()}
+            </script>${opsRoutes.ui.script()}${crmUi.script()}${ocRoutes.ui.script()}${dashAuth.ui.script()}
         </body>
         </html>
     `);
@@ -6036,12 +5982,14 @@ app.get('/', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
+    // Public: liveness only. The detailed view (sessions, queue, settings) needs a login or the PIN header.
+    const base = { status: 'ok', mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live', uptime: process.uptime(), brain: 'v3' };
+    let authed = false;
+    try { const hp = req.headers['x-campaign-pin']; authed = !!(req.dashUser || (hp && hp === CAMPAIGN_PIN)); } catch (e) {}
+    if (!authed) return res.json({ ...base, linesConnected: SESSIONS.filter(s => s.status === 'CONNECTED').length, lines: SESSIONS.length });
     res.json({
-        status: 'ok',
-        mode: DASHBOARD_ONLY ? 'dashboard-only' : 'live',
+        ...base,
         publicDashboardUrl: PUBLIC_DASHBOARD_URL || null,
-        uptime: process.uptime(),
-        brain: 'v3',
         selfTest: liveSelfTest.isActive() ? 'running' : 'idle',
         silencePeriod: followupPlanner.inSilencePeriod(new Date()),
         outbound: require('./outbound_settings.js').get(),

@@ -324,7 +324,7 @@ function install(app, deps) {
             }
             if (!logOnly) userMemory.recordMessage(phone, 'bot', text, mediaType, 'Admin Quick Action');
             else userMemory.save();
-            try { logMessage({ session: active ? active.session.name : 'CRM', phone, incoming: `[Action: ${action}]`, reply: text, status: logOnly ? 'LOGGED' : (mediaType ? 'MEDIA_SENT' : 'DELIVERED') }); } catch (e) {}
+            try { logMessage({ session: active ? active.session.name : 'CRM', phone, incoming: `[Action: ${action}]`, reply: text, by: req.dashUser ? req.dashUser.username : undefined, status: logOnly ? 'LOGGED' : (mediaType ? 'MEDIA_SENT' : 'DELIVERED') }); } catch (e) {}
             res.json({ success: true, action, sent: !logOnly, message: text, record });
         } catch (e) {
             res.status(e.retired ? 400 : 500).json({ success: false, error: e.message });
