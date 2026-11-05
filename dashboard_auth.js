@@ -158,9 +158,11 @@ function create(opts = {}) {
     const USERS_FILE = opts.usersPath || process.env.DASHBOARD_USERS_PATH || path.join(dir, 'dashboard_users.json');
     const SESS_FILE = opts.sessionsPath || process.env.DASHBOARD_SESSIONS_PATH || path.join(dir, 'dashboard_sessions.json');
     const AUDIT_FILE = opts.auditPath || process.env.DASHBOARD_AUDIT_PATH || path.join(dir, 'dashboard_audit.jsonl');
-    const pin = String(opts.pin || '');
+    let pin = String(opts.pin || '');
     const now = opts.now || (() => Date.now());
-    const pinTag = crypto.createHash('sha256').update('dash-pin|' + pin).digest('hex').slice(0, 16);
+    let pinTag = crypto.createHash('sha256').update('dash-pin|' + pin).digest('hex').slice(0, 16);
+    /** Change the admin PIN at runtime (old PIN sessions end via pinTag). */
+    function setPin(p) { pin = String(p || ''); pinTag = crypto.createHash('sha256').update('dash-pin|' + pin).digest('hex').slice(0, 16); }
 
     let users = (readJson(USERS_FILE, { users: [] }).users || []).filter(u => u && u.username && u.hash && u.salt);
     const sessions = new Map();
@@ -613,6 +615,7 @@ ${m === 'pin' ? pinForm : userForm}
     };
 
     return {
+        setPin,
         gate, install, requireAdmin, auditMiddleware, ui, clientIp, isHttps, loginPage,
         upsertUser, setDisabled, deleteUser, listUsers: () => users.map(publicUser), readAudit, record,
         _internal: { hashPassword, verifyPassword, sessions, fails, isCloudflare, USERS_FILE, SESS_FILE, AUDIT_FILE, SESSION_COOKIE },

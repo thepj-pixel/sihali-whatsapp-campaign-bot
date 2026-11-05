@@ -39,3 +39,5 @@ dashboard_users.json.tmp
 dashboard_sessions.json
 dashboard_sessions.json.tmp
 dashboard_audit.jsonl
+
+dashboard_pin.json

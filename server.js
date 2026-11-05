@@ -124,7 +124,9 @@ app.use('/media', express.static(path.join(__dirname, 'media')));
 const PORT = process.env.PORT || 3000;
 // Optional explicit override; when empty, ai_assistant_service uses its key list (env NVIDIA_API_KEYS / api_config.json)
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
-const CAMPAIGN_PIN = process.env.CAMPAIGN_PIN || '1789';
+// Admin PIN: a PIN changed from the dashboard (gitignored dashboard_pin.json) wins over the env var.
+const PIN_FILE = path.join(__dirname, 'dashboard_pin.json');
+let CAMPAIGN_PIN = (() => { try { const p = JSON.parse(fs.readFileSync(PIN_FILE, 'utf8')).pin; if (/^\d{4,12}$/.test(String(p))) return String(p); } catch (e) {} return process.env.CAMPAIGN_PIN || '1789'; })();
 const DASHBOARD_ONLY = process.env.DASHBOARD_ONLY === 'true';
 const PUBLIC_DASHBOARD_URL = String(process.env.PUBLIC_DASHBOARD_URL || '').replace(/\/$/, '');
 
@@ -1376,6 +1378,16 @@ app.use((req, res, next) => {
 });
 
 // ==================== REST APIS ====================
+
+// API: change the admin PIN (admin only). POST /api/admin/pin {newPin}
+app.post('/api/admin/pin', (req, res) => {
+    if (!req.dashUser || req.dashUser.role !== 'admin') return res.status(403).json({ success: false, error: 'admin only' });
+    const p = String((req.body && req.body.newPin) || '').trim();
+    if (!/^\d{4,12}$/.test(p)) return res.status(400).json({ success: false, error: 'PIN 4–12 अंकों का होना चाहिए' });
+    try { fs.writeFileSync(PIN_FILE, JSON.stringify({ pin: p, changedAt: new Date().toISOString(), by: req.dashUser.username }), { mode: 0o600 }); } catch (e) { return res.status(500).json({ success: false, error: 'save failed' }); }
+    CAMPAIGN_PIN = p; dashAuth.setPin(p);
+    res.json({ success: true });
+});
 
 // API: Mobile "➕ Add contact & send now" (operator-triggered). Saves the contact on the chosen line, sends the
 // message (+ optional Media Bank poster) and then the line's contact card. Respects STOP / declined consent.
@@ -2880,6 +2892,15 @@ app.get('/', (req, res) => {
                     .studio-grid, .chat-view-container { grid-template-columns: 1fr; }
                     .header-bar { flex-direction: column; align-items: flex-start; }
                 }
+                /* 📱 Simple mobile view: only the header + "Add contact & send now" unless "पूरा डैशबोर्ड" is tapped */
+                .mobile-full-toggle { display: none; }
+                @media (max-width: 760px) {
+                    .mobile-full-toggle { display: block; width: 100%; margin: 0 0 14px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; color: #0f172a; font-size: 15px; font-weight: 700; cursor: pointer; }
+                    body:not(.show-full) .container > *:not(.header-bar):not(#qa-panel):not(.mobile-full-toggle):not(script):not(style) { display: none !important; }
+                    body:not(.show-full) .header-bar .brand p, body:not(.show-full) #public-url-badge, body:not(.show-full) .header-bar .top-actions > span:not([class]) , body:not(.show-full) .header-bar .top-actions > a { display: none !important; }
+                    body:not(.show-full) .header-bar h1 { font-size: 17px; }
+                    body:not(.show-full) .qa-row { grid-template-columns: 1fr; }
+                }
                 .qa-panel { background: linear-gradient(135deg, #065f46, #0f766e); color: #fff; border-radius: 14px; padding: 14px; margin-bottom: 16px; box-shadow: 0 6px 18px rgba(6,95,70,.25); }
                 .qa-head { font-weight: 800; font-size: 17px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
                 .qa-panel form { display: grid; gap: 8px; max-width: 760px; }
@@ -2996,6 +3017,8 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <div id="qa-status" class="qa-status" role="status" aria-live="polite"></div>
                     </form>
                 </div>
+                <button type="button" id="mobile-full-toggle" class="mobile-full-toggle" onclick="(function(){var on=document.body.classList.toggle('show-full');try{localStorage.setItem('dashFull',on?'1':'0')}catch(e){};document.getElementById('mobile-full-toggle').textContent=on?'📱 सिर्फ़ मैसेज भेजना दिखाएँ':'📋 पूरा डैशबोर्ड दिखाएँ';})()">📋 पूरा डैशबोर्ड दिखाएँ</button>
+                <script>try{if(localStorage.getItem('dashFull')==='1'){document.body.classList.add('show-full');document.getElementById('mobile-full-toggle').textContent='📱 सिर्फ़ मैसेज भेजना दिखाएँ';}}catch(e){}</script>
                 <script>
                 (function () {
                     function $(id) { return document.getElementById(id); }
