@@ -40,7 +40,7 @@ const NON_NAME = new Set(('haa haan han hn ha ji jee arre arey are aree abhi mai
     'apni apna apne meri sirf bas ek list me mein se se par pe nikalo nikal nikaal dikhao dekho dekhna check kar karo kardo de ' +
     'ab phir fir jaldi jldi jaldii yaar yr ok okay theek thik hello hi hii ram raam namaste ' +
     'dhanyavad dhanyawad dhanyavaad dhanywad dhanyabad shukriya sukriya thanks thank thankyou thanku thnx thx tq ty welcome achha acha accha badhiya shabash sahi mast good nice ' +
-    'mil mila milegi milega jayegi jaegi jayega jaega jaayegi jaye sakti sakta sakte hogi hoga kya kab kaise kyu diya diye du doon dun kie kii ni is my the of can you send please or aur wo woh vo ye yeh h he hai hain ' +
+    'mil mila milegi milega jayegi jaegi jayega jaega jaayegi jaye sakti sakta sakte hogi hoga kya kab kaise kyu diya diye du doon dun kie kii ni is my the of can you send please or aur wo woh vo ye yeh h he hai hain pata pta patta maloom malum maaloom number nambar wala wali vala ' +
     // brain v7 (5 Nov live): relation / family words and voice-typing filler are never a person's name ("mummy", "wife", "parivar", "namaskar raha")
     RELATION_WORDS + ' parivar pariwar family sab sabki sabhi ghar gharwale walo wale namaskar namaskaar namste namastey pranam raha rahi rha rhi bol bolta bolti hoon hun hu sihali khurd kalan haraheri hadahedi gaon gaam ' +
     'vote booth bootha kahan kaha kidhar kab kitne baje tak time date tarikh dalna daalna dena matdan nahi nahin nhi galat matlab mtlab ruko pehle ek baat acha accha achha batao bata du kya').split(/\s+/));
@@ -464,6 +464,21 @@ function decide0(body, user, opts = {}) {
                 if (wide.length === 1) { delete user.slipAwaitWard; setPending(user, 'confirm', wide[0], who); return { kind: 'confirm', voter: wide[0], text: pendingOther ? confirmOther(wide[0], en) : confirmText(wide[0], en) }; }
             }
             if (byRel0.length > 1) { delete user.slipAwaitWard; setPending(user, 'choose', byRel0, who); return { kind: 'choose', matches: byRel0, text: pendingOther ? listOther(byRel0, nm, en) : listText(byRel0, nm, en) }; }
+        }
+        // v7: with a list open, "pata nahi ward" / "list bhejo" re-show it; "9 wala nahi, 10 number wala" narrows by ward
+        if (!user.slipAwaitWard) {
+            const tail = correctionTail(text);
+            const wm = wardIn(tail) || ((tail.match(/(?:^|\s)(\d{1,2})\s*(?:number|no|nambar|नंबर)?\s*(?:wala|wali|vala|वाला|वाली|ward|वार्ड)/i) || [])[1] ? Number(tail.match(/(?:^|\s)(\d{1,2})\s*(?:number|no|nambar|नंबर)?\s*(?:wala|wali|vala|वाला|वाली|ward|वार्ड)/i)[1]) : null);
+            const who0 = pendingOther ? 'other' : 'self';
+            const nm0 = (list[0] && list[0].name_hi) || user.lastSlipQuery || '';
+            if (wm && wm >= 1 && wm <= WARD_MAX && list.some(v => Number(v.ward) === wm) && (wm > list.length || /(ward|वार्ड|wala|वाला|number|nambar)/i.test(tail))) {
+                const inW = list.filter(v => Number(v.ward) === wm);
+                if (inW.length === 1) { setPending(user, 'confirm', inW[0], who0); return { kind: 'confirm', voter: inW[0], text: pendingOther ? confirmOther(inW[0], en) : confirmText(inW[0], en) }; }
+                setPending(user, 'choose', inW, who0); return { kind: 'choose', matches: inW, text: pendingOther ? listOther(inW, nm0, en) : listText(inW, nm0, en) };
+            }
+            if (DONT_KNOW_WARD.test(text) || /^(list|लिस्ट|सूची)\s*(bhejo|भेजो|do|दो|dikhao|दिखाओ)?\s*$/i.test(text.trim())) {
+                return { kind: 'choose', matches: list, text: (en ? 'Koi baat nahi 🙏 Upar wali list me se number bhej dijiye, ya unke pita/pati ka naam likh dijiye.\n\n' : 'कोई बात नहीं 🙏 इस सूची में से नंबर भेज दीजिए, या उनके पिता/पति का नाम लिख दीजिए।\n\n') + (pendingOther ? listOther(list, nm0, en) : listText(list, nm0, en)) };
+            }
         }
         const idx = user.slipAwaitWard ? -1 : choiceIndex(text, list.length);
         if (idx >= 0) return deliverTo(user, list[idx], pendingOther);
