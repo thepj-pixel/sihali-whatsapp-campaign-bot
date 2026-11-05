@@ -44,7 +44,8 @@ function choiceIndex(text, n) {
     if (d && Number(d[1]) >= 1 && Number(d[1]) <= n) return Number(d[1]) - 1;
     return -1;
 }
-const isYes = t => YES_RX.test(lowerOf(t)) && !NO_RX.test(lowerOf(t));
+const EMOJI_YES_RX = /^[\s👍🙏✅👌☑✔\ufe0f\u{1F3FB}-\u{1F3FF}]+$/u; // 👍 / ✅ / 🙏 to "is this your father's name?" = yes
+const isYes = t => (YES_RX.test(lowerOf(t)) && !NO_RX.test(lowerOf(t))) || (EMOJI_YES_RX.test(String(t || '').trim()) && /[👍🙏✅👌☑✔]/u.test(String(t || '')));
 const isNo = t => NO_RX.test(lowerOf(t)) && lowerOf(t).split(/\s+/).length <= 4;
 const isRecall = t => RECALL_RX.test(String(t || ''));
 const isSlipAsk = t => SLIP_WORD_RX.test(String(t || ''));

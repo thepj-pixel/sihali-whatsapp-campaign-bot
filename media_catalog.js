@@ -102,7 +102,8 @@ class MediaCatalogEngine {
     }
 
     setDemoMode(enabled) {
-        this.useDemoPosters = Boolean(enabled);
+        // 5 Nov 2026: the demo poster says "Testing Mode" -> it can only be enabled when the VM sets USE_DEMO_POSTERS=true
+        this.useDemoPosters = Boolean(enabled) && process.env.USE_DEMO_POSTERS === 'true';
         return this.useDemoPosters;
     }
 

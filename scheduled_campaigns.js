@@ -141,6 +141,7 @@ class ScheduledCampaigns {
         if (!base || base !== String(file) || base.startsWith('.')) throw new Error('Invalid media file name: ' + file);
         const type = mediaTypeOf(path.extname(base).toLowerCase());
         if (!type) throw new Error('Unsupported media type: ' + base);
+        require('./media_policy.js').assertSendable(base);
         if (!fs.existsSync(path.join(this.mediaDir, base))) throw new Error('Media file not found: ' + base);
         return { file: base, type };
     }
@@ -401,6 +402,7 @@ class ScheduledCampaigns {
             this.save();
             let content;
             if (media) {
+                require('./media_policy.js').assertSendable(media.file);
                 const p = path.join(this.mediaDir, media.file);
                 if (!fs.existsSync(p)) throw new Error('media file missing: ' + media.file);
                 content = media.type === 'video' ? { video: { url: p }, caption: text }

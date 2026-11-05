@@ -215,6 +215,7 @@ class BroadcastEngine {
         const ext = path.extname(base).toLowerCase();
         const type = mediaTypeOf(ext);
         if (!type) throw new Error('Media must be an image (jpg/png/webp), video (mp4/3gp/mov) or PDF');
+        require('./media_policy.js').assertSendable(base);
         const full = path.join(this.mediaDir, base);
         if (!fs.existsSync(full)) throw new Error(`Media file not found: ${base}`);
         return { file: base, type, path: full };
@@ -229,7 +230,7 @@ class BroadcastEngine {
                 const ext = path.extname(f).toLowerCase();
                 let size = 0, mtime = 0;
                 try { const st = fs.statSync(path.join(this.mediaDir, f)); size = st.size; mtime = st.mtimeMs; } catch (_) {}
-                return { file: f, type: mediaTypeOf(ext), size, mtime, url: '/media/' + encodeURIComponent(f) };
+                return { file: f, type: mediaTypeOf(ext), size, mtime, url: '/media/' + encodeURIComponent(f), retired: require('./media_policy.js').isRetired(f) };
             }).sort((a, b) => b.mtime - a.mtime);
         } catch (e) { return []; }
     }
@@ -511,6 +512,7 @@ class BroadcastEngine {
 
             let content;
             if (c.media) {
+                require('./media_policy.js').assertSendable(c.media.file);
                 const mediaPath = path.join(this.mediaDir, c.media.file);
                 if (!fs.existsSync(mediaPath)) throw Object.assign(new Error('media file missing: ' + c.media.file), { noLineError: true });
                 content = c.media.type === 'video'

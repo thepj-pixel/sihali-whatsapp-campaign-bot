@@ -74,6 +74,7 @@ const posterEngine = require('./poster_engine.js');
 const mediaCatalog = require('./media_catalog.js');
 const campaignAgenda = require('./campaign_agenda.js');
 const visionService = require('./vision_service.js');
+const mediaUnderstanding = require('./media_understanding.js');
 const contactsManager = require('./contacts_manager.js');
 const engagementPolicy = require('./engagement_policy.js');
 const operationsTracker = require('./operations_tracker.js');
@@ -694,6 +695,12 @@ async function startSession(sessionObj) {
                     }
                 }
 
+                const imageCaption = hasImage ? body : '';
+                // Caption + a photo we could not classify (or a plain personal photo): the caption text drives the reply
+                if (hasImage && imageAnalysis && imageCaption && (imageAnalysis.fallback || ['other', 'personal_photo'].includes(imageAnalysis.category))) {
+                    try { const um = userMemory.getUser(senderPhone); if (um) { require('./voter_memory.js').ensure(um).photoOpenAt = new Date().toISOString(); } } catch (e) {}
+                    imageAnalysis = null;
+                }
                 if (!body && hasImage) {
                     body = (imageAnalysis && imageAnalysis.summaryHindi)
                         ? `[फोटो: ${imageAnalysis.summaryHindi}]`
@@ -982,24 +989,23 @@ async function startSession(sessionObj) {
                     }
 
                     if (imageAnalysis) {
-                        const voterName = user.name || 'भैया';
+                        // Photo understanding (media_understanding.js): civic photo -> samasya with "photo received"; poster -> thanks;
+                        // unreadable -> warm ack + one-line ask (next problem-like answer is logged). Never promises a fix or a date.
                         if (imageAnalysis.suggestedTag) {
                             userMemory.updateTags(senderPhone, [imageAnalysis.suggestedTag]);
                         }
-                        if (imageAnalysis.category === 'civic_issue') {
-                            const newMahool = ((user.mahoolNotes || '') + ' | शिकायत: ' + imageAnalysis.summaryHindi).trim();
-                            userMemory.updateNotes(senderPhone, { mahoolNotes: newMahool });
-                            replyText = visionService.getConversationalReply(imageAnalysis, voterName);
-                        } else if (imageAnalysis.category === 'voter_id') {
-                            const searchQ = imageAnalysis.details?.epic || imageAnalysis.details?.name || '';
+                        let pr = null;
+                        if (imageAnalysis.category === 'voter_id') {
+                            const searchQ = imageAnalysis.details?.epic || '';
                             const parchiMatches = searchQ ? voterEngine.searchVoters(searchQ) : [];
-                            if (parchiMatches && parchiMatches.length > 0) {
-                                replyText = `राम राम ${voterName}! 🙏 आपकी वोटर आईडी / पर्ची की पहचान हो गई है:\n\n` + voterEngine.formatVoterSlip(parchiMatches[0]);
-                            } else {
-                                replyText = visionService.getConversationalReply(imageAnalysis, voterName);
+                            if (parchiMatches && parchiMatches.length === 1) {
+                                replyText = `राम राम जी! 🙏 आपकी वोटर आईडी की पहचान हो गई है:\n\n` + voterEngine.formatVoterSlip(parchiMatches[0]);
                             }
-                        } else {
-                            replyText = visionService.getConversationalReply(imageAnalysis, voterName);
+                        }
+                        if (!replyText) {
+                            pr = mediaUnderstanding.replyForPhoto({ user, analysis: imageAnalysis, caption: imageCaption, meta: { phone: senderPhone, line: sessionObj.id, test: !!isSelfTestVoter, localUrl: imageAnalysis.localUrl } });
+                            replyText = pr.text;
+                            userMemory.save();
                         }
                         await sendSafeMessage(sock, replyJid, { text: replyText });
                         mediaTypeSent = 'visionResponse';
@@ -1377,6 +1383,7 @@ app.post('/api/quick-add-send', async (req, res) => {
         let media = null;
         if (b.poster) {
             const f = path.basename(String(b.poster));
+            if (require('./media_policy.js').isRetired(f)) return res.status(400).json({ success: false, error: 'This poster is retired and can not be sent: ' + f });
             const full = path.join(MEDIA_DIR, f);
             const t = mediaTypeOf(path.extname(f).toLowerCase());
             if (!fs.existsSync(full) || !t) return res.status(400).json({ success: false, error: 'Poster not found in Media Bank: ' + f });
@@ -1926,7 +1933,8 @@ app.get('/api/demo-poster-status', (req, res) => {
 });
 
 // API: Quick Actions for Chat (Demo Poster, Video, Slip, Ram Ram, Meeting, Baba Register)
-app.post('/api/quick-action', async (req, res) => {
+app.post('/api/quick-action-legacy', async (req, res) => {
+    if (req.body && req.body.action === 'demo_poster') return res.status(410).json({ error: 'Use /api/quick-action (approved posters only)' });
     try {
         const { phone, action, lineId, customNote } = req.body;
         if (!phone || !action) return res.status(400).json({ error: 'Phone and action are required' });
@@ -2412,6 +2420,22 @@ app.post('/api/mulaqat/delete', (req, res) => {
 // ==================== OPS v4: Overview / विरोधी list / Scheduled bulk (logic in ops_routes.js) ====================
 const opsRoutes = require('./ops_routes.js');
 const ops = opsRoutes.install(app, { SESSIONS, broadcastEngine, userMemory, liveSelfTest, engagementPolicy, followupPlanner, contactsManager, samasyaStore, mulaqatStore, campaignAgenda, replyBrain, logMessage, onBulkSent: (info) => broadcastEngine.onSent(info), dailyIstDate: () => dailyGoal.currentIstDate(), resolveAudience: resolveBroadcastAudience });
+// CRM (WhatsApp Web Live): full chat, voter profile & memory, AI co-pilot, safe quick actions (crm_routes.js)
+const crmRoutes = require('./crm_routes.js');
+const crmUi = require('./crm_ui.js');
+crmRoutes.install(app, { userMemory, getActiveSocket, sendSafeMessage, sendMultiContactCard, engagementPolicy, contactCard, logMessage, samasyaStore, mulaqatStore, voterEngine, voterCardGen, slipFlow, replyBrain,
+    getLLM: () => { const C = aiService.CONFIG || {}; const any = NVIDIA_API_KEY || (C.nvidia_keys && C.nvidia_keys.length) || C.groq_api_key || C.gemini_api_key; return any ? (sys, hist, msg) => aiService.callLLMCascade(sys, hist, msg, NVIDIA_API_KEY || null, 7000) : null; } });
+// Vision probe: does an NVIDIA vision model answer with the VM's keys? (uses an approved Media Bank poster)
+app.get('/api/vision/probe', async (req, res) => {
+    try {
+        const p = require('./media_policy.js').approved('poster')[0];
+        if (!p) return res.json({ success: false, error: 'no approved poster to probe with' });
+        visionService.reloadConfig();
+        const t0 = Date.now();
+        const r = await visionService.analyzeImage(fs.readFileSync(p.path), 'image/jpeg');
+        res.json({ success: !r.fallback, ms: Date.now() - t0, category: r.category, summary: r.summaryHindi, model: r.model || null, provider: r.provider || (r.fallback ? 'none' : 'gemini'), nvidia: visionService.lastNvidia || null });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 /** Removes every samasya/mulaqat record created by a Live Self-Test (flag test=true). */
 app.post('/api/test-records/cleanup', (req, res) => {
     const s1 = samasyaStore.removeWhere(r => !!r.test);
@@ -2893,6 +2917,7 @@ app.get('/', (req, res) => {
                 .wa-input-field:focus { border-color: #00a884; }
                 .wa-send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00a884; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; transition: background 0.15s; }
                 .wa-send-btn:hover { background: #028066; }
+                ${crmUi.css()}
 
             </style>
         </head>
@@ -3386,7 +3411,7 @@ app.get('/', (req, res) => {
                                     <span style="font-size: 11px; color: #64748b;">WhatsApp Web Replica • Ground CRM</span>
                                 </div>
                                 <button onclick="toggleDemoPosterMode()" id="demo-mode-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid #16a34a; background: #dcfce7; color: #15803d; font-weight: 700; cursor: pointer;">
-                                    📸 डेमो पोस्टर मोड: चालू
+                                    🖼️ पोस्टर मोड…
                                 </button>
                             </div>
                             <div class="wa-search-bar">
@@ -3458,6 +3483,7 @@ app.get('/', (req, res) => {
                                         <option value="neutral">⚪ सामान्य संपर्क</option>
                                     </select>
 
+                                    <button type="button" onclick="crmToggleProfile()" id="btn-crm-profile" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #6366f1; background: #eef2ff; font-size: 12px; font-weight: 700; cursor: pointer; color: #4338ca;">🧾 प्रोफ़ाइल व मेमरी</button>
                                     <!-- Toggle Intelligence Notes Drawer -->
                                     <button onclick="toggleIntelDrawer()" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; font-size: 12px; font-weight: 600; cursor: pointer; color: #0f172a;">
                                         📋 वोटर नोट्स व टैग्स
@@ -3523,6 +3549,7 @@ app.get('/', (req, res) => {
                                 </div>
                             </div>
 
+                            <div class="crm-profile" id="crm-profile-panel" style="display: none;"></div>
                             <!-- Messages Stream -->
                             <div class="wa-chat-scroll" id="wa-chat-scroll">
                                 <div style="text-align: center; color: #8696a0; margin-top: 180px;">
@@ -3534,22 +3561,28 @@ app.get('/', (req, res) => {
 
                             <!-- Quick Action Bar -->
                             <div class="wa-quick-actions" id="wa-quick-actions" style="display: none;">
-                                <button class="wa-action-btn" style="background: #0284c7; color: white; border-color: #0369a1; font-weight: 700;" onclick="sendQuickAction('contact_card')">📇 संपर्क कार्ड (Anti-Ban)</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('ramram')">🙏 राम राम</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('demo_poster')">📸 डेमो पोस्टर भेजें</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('video')">📹 3D वीडियो रील</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('slip')">🎫 वोटर पर्ची निकालें</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('baba_register')">📝 बाबा रजिस्टर में दर्ज</button>
-                                <button class="wa-action-btn" onclick="sendQuickAction('meeting')">🤝 चौपाल मुलाकात</button>
+                                <button type="button" class="wa-action-btn" id="qa-card" style="background: #0284c7; color: white; border-color: #0369a1; font-weight: 700;" onclick="sendQuickAction('contact_card')">📇 संपर्क कार्ड (Anti-Ban)</button>
+                                <button type="button" class="wa-action-btn" id="qa-ramram" onclick="sendQuickAction('ramram')">🙏 राम राम</button>
+                                <button type="button" class="wa-action-btn" id="qa-poster" onclick="sendQuickAction('poster')">📸 पोस्टर भेजें (स्वीकृत)</button>
+                                <button type="button" class="wa-action-btn" id="qa-video" onclick="sendQuickAction('video')">📹 3D वीडियो रील</button>
+                                <button type="button" class="wa-action-btn" id="qa-slip" onclick="sendQuickAction('slip')">🎫 वोटर पर्ची निकालें</button>
+                                <button type="button" class="wa-action-btn" id="qa-register" onclick="sendQuickAction('baba_register')">📝 बाबा रजिस्टर में दर्ज</button>
+                                <button type="button" class="wa-action-btn" id="qa-meeting" onclick="sendQuickAction('meeting')">🤝 चौपाल मुलाकात</button>
                             </div>
 
-                            <!-- AI Copilot / Assisted Message Drafting Bar -->
-                            <div id="wa-copilot-container" style="background: #f8fafc; padding: 8px 16px; border-top: 1px solid #e2e8f0; display: none; gap: 8px; align-items: center;">
-                                <span style="font-size: 12px; font-weight: 700; color: #6366f1; white-space: nowrap;">✨ AI सह-चालक:</span>
-                                <input type="text" id="wa-ai-instruction" placeholder="AI को निर्देश दें (उदा: 'बोलो कि कल सुबह 9 बजे चौपाल पर आएं और साथ में चाय पीते हैं')..." style="flex: 1; padding: 7px 12px; border-radius: 12px; border: 1px solid #cbd5e1; font-size: 12px; background: white; color: #0f172a;" onkeydown="if(event.key==='Enter') generateAIDraft()">
-                                <button onclick="generateAIDraft()" id="btn-ai-draft" style="background: #6366f1; color: white; border: none; padding: 7px 14px; border-radius: 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;">
-                                    ✨ ड्राफ्ट बनाएं
-                                </button>
+                            <!-- AI Co-pilot: reads the full chat + voter memory, suggests the best next reply (validated) -->
+                            <div id="wa-copilot-container" class="crm-copilot">
+                                <div class="crm-copilot-row">
+                                    <span style="font-size: 12px; font-weight: 700; color: #6366f1; white-space: nowrap;">✨ AI सह-चालक</span>
+                                    <input type="text" id="wa-ai-instruction" placeholder="वैकल्पिक निर्देश (उदा: 'चौपाल पर बुलाओ') — खाली छोड़ें तो अगला सबसे अच्छा जवाब" onkeydown="if(event.key==='Enter') crmSuggest(false)">
+                                    <button type="button" class="crm-btn" id="crm-cp-suggest" onclick="crmSuggest(false)">✨ सुझाव दें</button>
+                                </div>
+                                <div id="crm-cp-info" style="font-size: 11px; color: #5b21b6;"></div>
+                                <textarea id="crm-suggestion" style="display: none;"></textarea>
+                                <div class="crm-copilot-row" id="crm-cp-actions" style="display: none;">
+                                    <button type="button" class="crm-btn go" id="crm-cp-send" onclick="crmSendSuggestion()">📤 भेजें</button>
+                                    <button type="button" class="crm-btn alt" id="crm-cp-again" onclick="crmSuggest(true)">🔁 दूसरा सुझाव</button>
+                                </div>
                             </div>
 
                             <!-- Chat Direct Input Bar -->
@@ -5902,7 +5935,7 @@ app.get('/', (req, res) => {
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
-            </script>${opsRoutes.ui.script()}
+            </script>${opsRoutes.ui.script()}${crmUi.script()}
         </body>
         </html>
     `);

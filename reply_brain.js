@@ -27,6 +27,7 @@ const STAGES = ['unknown', 'undecided', 'leaning', 'committed', 'opposed'];
 
 // ---------------- language / person ----------------
 const hasDevanagari = t => /[\u0900-\u097F]/.test(String(t || ''));
+const emojiSense = require('./emoji_sense.js');
 const MEDIA_RX = /^\[(voice note|audio|sticker|photo|फोटो[^\]]*|video|वीडियो|document|location|लोकेशन|contact card|gif)\]$/i;
 
 function lang(text, user) {
@@ -34,6 +35,7 @@ function lang(text, user) {
     if (user && user.languagePreference === 'hi') return 'hi';
     const m = user && user.memory;
     if (MEDIA_RX.test(String(text || '').trim())) return m && m.language === 'en' ? 'en' : 'hi';
+    if (emojiSense.analyze(text).emojiOnly) return m && m.language === 'en' ? 'en' : 'hi';
     if (hasDevanagari(text)) return 'hi';
     if (/[a-z]/i.test(String(text || ''))) return 'en';
     return m && m.language === 'hi' ? 'hi' : 'en';
@@ -198,6 +200,12 @@ function classify(text, user = {}) {
     const topic = detectTopic(t);
     const out = (intent, extra = {}) => ({ intent, topic, ...extra });
     if (!t) return out('unclear');
+    // emoji-only replies (5 Nov): 👍/✅/🙏/❤️ after our vote ask = soft commit; otherwise a short human emoji reply by mood
+    const emo = emojiSense.analyze(t);
+    if (emo.emojiOnly) {
+        if (['agree', 'pray', 'love'].includes(emo.kind) && ASKED_VOTE.test(lastBotText(user))) return out('commit', { viaContext: true, viaEmoji: true, emoji: emo.kind });
+        return out('emoji', { emoji: emo.kind, emojis: emo.emojis });
+    }
     const ci = !RX.bribe.test(t) && !RX.abuse.test(t) && !RX.condolence.test(t) ? contextualIntent(t, user, topic) : null;
     if (ci) return out(ci.intent, ci);
     if (MEDIA_RX.test(t)) return out('media', { media: t.replace(/[\[\]]/g, '').toLowerCase() });
@@ -437,7 +445,7 @@ function compose(cls, ctx) {
             const k = cls.media || '';
             if (/voice|audio/.test(k)) body = vary(user, [S(`आपका वॉइस मैसेज मिला${H} 🙏 मैं अभी वॉइस नहीं सुन पाती—दो लाइन लिखकर बता देंगे?`, `Aapka voice message mila${H} 🙏 Main abhi voice nahi sun paati—do line likhkar bata denge?`), S(`वॉइस मिल गई${H}, धन्यवाद 🙏 लिखकर भेज देंगे तो मैं तुरंत नोट कर लूँगी।`, `Voice mil gayi${H}, dhanyavad 🙏 Likhkar bhej denge to main turant note kar lungi.`)]);
             else if (/sticker|gif/.test(k)) body = vary(user, [S('😊🙏', '😊🙏'), S(`🙏 राम राम${H}!`, `🙏 Ram Ram${H}!`)]);
-            else if (/photo|फोटो/.test(k)) body = S(`फोटो मिल गई${H} 🙏 ये किस जगह की है और क्या दिक्कत है—दो शब्द लिख देंगे?`, `Photo mil gayi${H} 🙏 Ye kis jagah ki hai aur kya dikkat hai—do shabd likh denge?`);
+            else if (/photo|फोटो/.test(k) && (mem.photoOpenAt = new Date().toISOString())) body = S(`फोटो मिल गई${H} 🙏 ये किस जगह की है और क्या दिक्कत है—दो शब्द लिख देंगे?`, `Photo mil gayi${H} 🙏 Ye kis jagah ki hai aur kya dikkat hai—do shabd likh denge?`);
             else if (/video|वीडियो/.test(k)) body = S(`वीडियो मिल गया${H}, धन्यवाद 🙏 इसके बारे में कुछ बताना हो तो लिख दीजिए।`, `Video mil gaya${H}, dhanyavad 🙏 Iske baare me kuch batana ho to likh dijiye.`);
             else if (/location|लोकेशन/.test(k)) body = S(`लोकेशन मिल गई${H}, धन्यवाद 🙏 यहाँ की कोई बात हो तो लिखकर बता दीजिए।`, `Location mil gayi${H}, dhanyavad 🙏 Yahan ki koi baat ho to likhkar bata dijiye.`);
             else if (/contact/.test(k)) body = S(`संपर्क मिल गया${H} 🙏 इनके बारे में कुछ बताना हो तो लिख दीजिए।`, `Contact mil gaya${H} 🙏 Inke baare me kuch batana ho to likh dijiye.`);
@@ -461,6 +469,23 @@ function compose(cls, ctx) {
             const skLine = sk && !mem.toldItems.includes(sk.id) ? S(' आगे का संकल्प भी यही है: ', ' Aage ka sankalp bhi yahi hai: ') + kb.render(sk, l) : '';
             if (skLine && sk) used.push(sk.id);
             return { text: S(`पक्की तारीख़ का वादा मैं नहीं करूँगी${H} 🙏 आपकी ${c && c.ward ? 'वार्ड ' + c.ward + ' की ' : ''}${label} वाली बात रजिस्टर में दर्ज है और अभय सिंह जी तक पहुँच चुकी है।`, `Pakki tareekh ka vaada main nahi karungi${H} 🙏 Aapki ${c && c.ward ? 'ward ' + c.ward + ' ki ' : ''}${label} wali baat register me darj hai aur Abhay Singh ji tak pahunch chuki hai.`) + skLine, ask: false, used };
+        }
+        case 'emoji': {
+            const k = cls.emoji || 'other';
+            if (k === 'upset') {
+                mem.grievanceOpenAt = new Date().toISOString(); // next problem-like answer is logged; no vote ask for 45 min
+                return { text: vary(user, [
+                    S(`😔🙏 लगता है कोई बात बुरी लगी${H}। आपकी नाराज़गी सिर आँखों पर—बताइए क्या दिक्कत है, मैं सबसे पहले अभय सिंह जी तक पहुँचाती हूँ।`, `😔🙏 Lagta hai koi baat buri lagi${H}. Aapki naraazgi sir aankhon par—bataiye kya dikkat hai, main sabse pehle Abhay Singh ji tak pahunchati hoon.`),
+                    S(`🙏 माफ़ी चाहती हूँ${H}, अगर कुछ ग़लत लगा हो। खुलकर बताइए क्या परेशानी है—आपकी बात ज़रूर आगे पहुँचेगी।`, `🙏 Maafi chahti hoon${H}, agar kuch galat laga ho. Khulkar bataiye kya pareshani hai—aapki baat zaroor aage pahunchegi.`)
+                ]), ask: false };
+            }
+            if (k === 'sad') return { text: vary(user, [S(`😔 क्या हुआ${H}? सब ठीक तो है? कोई परेशानी हो तो बताइए, हम साथ हैं 🙏`, `😔 Kya hua${H}? Sab theek to hai? Koi pareshani ho to bataiye, hum saath hain 🙏`)]), ask: false };
+            if (k === 'laugh') return { text: vary(user, [S(`😄🙏 आपकी हँसी से दिन बन गया${H}!`, `😄🙏 Aapki hansi se din ban gaya${H}!`), S(`😂🙏 ख़ुश रहिए${H}!`, `😂🙏 Khush rahiye${H}!`)]), ask: false };
+            if (k === 'think') return { text: vary(user, [S(`🤔 कोई सवाल मन में है${H}? बेझिझक पूछिए—काम, पर्ची या बूथ, सब बताऊँगी।`, `🤔 Koi sawaal man me hai${H}? Bejhijhak poochhiye—kaam, parchi ya booth, sab bataungi.`)]), ask: false };
+            if (k === 'love') return { text: vary(user, [S(`🙏❤️ आपका प्यार और आशीर्वाद ही हमारी ताकत है${H}!`, `🙏❤️ Aapka pyaar aur aashirwad hi hamari taakat hai${H}!`), S(`🙏😊 बहुत-बहुत धन्यवाद${H}, आपका साथ बना रहे!`, `🙏😊 Bahut-bahut dhanyavad${H}, aapka saath bana rahe!`)]), ask: false };
+            if (k === 'wow') return { text: vary(user, [S(`🙏🚩 धन्यवाद${H}! आपका जोश देखकर हौसला बढ़ गया।`, `🙏🚩 Dhanyavad${H}! Aapka josh dekhkar hausla badh gaya.`)]), ask: false };
+            if (k === 'agree' || k === 'pray') return { text: vary(user, [S(`🙏😊 धन्यवाद${H}! कुछ और पूछना हो—पर्ची, बूथ या गाँव का कोई काम—तो बेझिझक लिखिए।`, `🙏😊 Dhanyavad${H}! Kuch aur poochhna ho—parchi, booth ya gaon ka koi kaam—to bejhijhak likhiye.`), S(`👍🙏 जी${H}, साथ बना रहे!`, `👍🙏 Ji${H}, saath bana rahe!`), S(`🙏 राम राम${H}! कोई काम हो तो बताइएगा।`, `🙏 Ram Ram${H}! Koi kaam ho to bataiyega.`)]), ask: false };
+            return { text: vary(user, [S(`🙏 राम राम${H}! बताइए, क्या सेवा करूँ—पर्ची, बूथ या गाँव का कोई काम?`, `🙏 Ram Ram${H}! Bataiye, kya seva karun—parchi, booth ya gaon ka koi kaam?`), S(`😊🙏 आपका संदेश मिला${H}। कुछ पूछना हो तो लिख दीजिए।`, `😊🙏 Aapka sandesh mila${H}. Kuch poochna ho to likh dijiye.`)]), ask: false };
         }
         case 'emoji_only':
             return { text: vary(user, [S(`🙏 राम राम${H}! बताइए, क्या सेवा करूँ—पर्ची, बूथ या गाँव का कोई काम?`, `🙏 Ram Ram${H}! Bataiye, kya seva karun—parchi, booth ya gaon ka koi kaam?`), S(`😊🙏 आपका संदेश मिला${H}। कुछ पूछना हो तो लिख दीजिए।`, `😊🙏 Aapka sandesh mila${H}. Kuch poochna ho to likh dijiye.`)]), ask: false };
@@ -1029,6 +1054,7 @@ function think(message, user, opts = {}, memoryDone = false) {
         voterMemory.tickTurn(user);
     }
     const mem = user.memory;
+    if (cls.viaEmoji && mem) mem.commitment = Object.assign({}, mem.commitment || {}, { status: 'committed', soft: true, via: 'emoji', quote: String(message).slice(0, 20), at: new Date().toISOString() });
     const person = personOf(user, message);
     const hon = honorific(person, l);
     const previousStage = stageOf(user);
@@ -1059,6 +1085,14 @@ function think(message, user, opts = {}, memoryDone = false) {
             else if (mem.grievanceOpenAt && Date.now() - Date.parse(mem.grievanceOpenAt) < 45 * 60e3 && ['topic_mention', 'short_reply', 'unclear', 'gave_ward', 'works'].includes(cls.intent) && (cls.topic || CONCERN_RX.test(message)) && !/\?/.test(message)) {
                 fr = flows.startSamasya(ctx, { topic: kb.primaryTopic(message, cls.topic) });
                 if (fr) mem.grievanceOpenAt = null;
+            }
+            // after a photo we could not read we asked "ye kis baare me hai?": a problem-like answer is logged as a samasya with the photo noted
+            else if (mem.photoOpenAt && Date.now() - Date.parse(mem.photoOpenAt) < 60 * 60e3 && ['topic_mention', 'short_reply', 'unclear', 'gave_ward', 'works', 'grievance'].includes(cls.intent) && (cls.topic || CONCERN_RX.test(message)) && !/\?/.test(message)) {
+                fr = flows.startSamasya(ctx, { topic: kb.primaryTopic(message, cls.topic) });
+                if (fr) {
+                    mem.photoOpenAt = null;
+                    try { if (fr.samasyaId) { const ss = require('./samasya_store.js'); const r = ss.get(fr.samasyaId); ss.update(fr.samasyaId, { notes: ((r && r.notes) ? r.notes + ' | ' : '') + 'photo received', description: ('📷 ' + ((r && r.description) || '')).slice(0, 300) }, 'bot'); } } catch (e) {}
+                }
             }
             if (fr && cls.intent === 'complaint') mem.grievanceOpenAt = null;
         }

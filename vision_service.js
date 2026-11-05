@@ -91,13 +91,79 @@ class VisionService {
             }
         }
 
-        // 2. Intelligent Village Fallback
+        // 2. NVIDIA vision (same NVIDIA keys as the reply brain; short timeout, never blocks the reply for long)
+        try {
+            const nv = await this.analyzeWithNvidia(base64Data, mimeType, promptText);
+            if (nv) return nv;
+        } catch (e) { console.warn('[VisionService] NVIDIA vision failed:', e.message); }
+
+        // 3. No vision available: the caller asks the voter in one line what the photo is about (fallback:true)
         return {
             category: 'other',
-            summaryHindi: 'ग्रामवासी द्वारा भेजी गई फोटो (सड़क, पर्ची या व्यक्तिगत संदर्भ)',
+            fallback: true,
+            summaryHindi: '',
             details: {},
-            suggestedTag: '⚪ सामान्य संपर्क'
+            suggestedTag: null
         };
+    }
+
+    /** Shrink to <=768px JPEG so the base64 fits NVIDIA's inline image limit. */
+    async _shrink(base64Data) {
+        try {
+            const sharp = require('sharp');
+            const out = await sharp(Buffer.from(base64Data, 'base64')).rotate().resize({ width: 768, height: 768, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer();
+            return out.toString('base64');
+        } catch (e) { return base64Data; }
+    }
+
+    async analyzeWithNvidia(base64Data, mimeType, promptText, opts = {}) {
+        const keys = (CONFIG.nvidia_keys || []).filter(Boolean);
+        if (!keys.length || process.env.VISION_NVIDIA === 'off') return null;
+        const small = await this._shrink(base64Data);
+        const models = opts.models || (process.env.NVIDIA_VISION_MODELS ? process.env.NVIDIA_VISION_MODELS.split(',') : ['meta/llama-3.2-11b-vision-instruct', 'microsoft/phi-3.5-vision-instruct', 'meta/llama-3.2-90b-vision-instruct']);
+        const budgetMs = opts.timeoutMs || 9000;
+        const started = Date.now();
+        const tried = [];
+        for (const model of models) {
+            for (const key of keys.slice(0, 2)) {
+                const left = budgetMs - (Date.now() - started);
+                if (left < 1500) { this.lastNvidia = { ok: false, tried, reason: 'budget' }; return null; }
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), Math.min(left, 8000));
+                try {
+                    const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                        method: 'POST',
+                        signal: controller.signal,
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, Accept: 'application/json' },
+                        body: JSON.stringify({
+                            model,
+                            messages: [{ role: 'user', content: promptText + `\n<img src="data:image/jpeg;base64,${small}" />` }],
+                            max_tokens: 300, temperature: 0.2, stream: false
+                        })
+                    });
+                    clearTimeout(timer);
+                    if (!res.ok) { tried.push(model + ':' + res.status); continue; }
+                    const data = await res.json();
+                    const raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+                    const jm = raw.match(/\{[\s\S]*\}/);
+                    if (!jm) { tried.push(model + ':nojson'); continue; }
+                    const parsed = JSON.parse(jm[0]);
+                    const cats = ['voter_id', 'civic_issue', 'campaign_material', 'personal_photo', 'other'];
+                    if (!cats.includes(parsed.category)) parsed.category = 'other';
+                    parsed.model = model;
+                    parsed.provider = 'nvidia';
+                    this.lastNvidia = { ok: true, model, at: new Date().toISOString() };
+                    console.log(`[VisionService] NVIDIA ${model}:`, parsed.category, parsed.summaryHindi);
+                    return parsed;
+                } catch (e) {
+                    clearTimeout(timer);
+                    tried.push(model + ':' + (e.name === 'AbortError' ? 'timeout' : String(e.message).slice(0, 40)));
+                    break; // a timeout/network error on one key -> next model
+                }
+            }
+        }
+        this.lastNvidia = { ok: false, tried, at: new Date().toISOString() };
+        return null;
     }
 
     getConversationalReply(analysis, voterName = 'भैया') {
