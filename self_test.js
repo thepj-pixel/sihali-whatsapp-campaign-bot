@@ -116,6 +116,8 @@ class LiveSelfTest {
         Object.assign(u, { consented: true, consentStatus: 'ACCEPTED', autoPilot: true, contactCardSent: true, selfTest: this.run.id, assignedLine: this.run.targetLine, broadcastOptOut: false, languagePreference: 'auto', name: u.name || '' });
         // freshContact: behave exactly like a brand-new number (consent prompt + this line's contact card on the first reply)
         if (this.run.freshContact && fresh) Object.assign(u, { consented: null, consentStatus: 'PENDING', contactCardSent: false, contactCardLines: {} });
+        // v6: simulate a voter with an operator brief / mode (private brief, mode, vote-ask frequency)
+        if (fresh && this.run.op) { try { require('./operator_control.js').setVoterControl(u, this.run.op); } catch (e) {} }
         return u;
     }
 
@@ -133,7 +135,7 @@ class LiveSelfTest {
         return r ? { id: r.id, status: r.status, testerLine: r.testerLine, targetLine: r.targetLine, startedAt: r.startedAt, endedAt: r.endedAt, turn: r.turns.length, total: r.script.length, passed: r.passed, failed: r.failed, error: r.error || null, turns: r.turns } : { status: 'idle' };
     }
 
-    start({ testerLine, targetLine, script, replyTimeoutMs = 60000, settleMs = 5000, gapMs = 4000, freshContact = false } = {}) {
+    start({ testerLine, targetLine, script, replyTimeoutMs = 60000, settleMs = 5000, gapMs = 4000, freshContact = false, op = null } = {}) {
         if (this.isActive()) throw new Error('A self-test is already running');
         if (!testerLine || !targetLine || testerLine === targetLine) throw new Error('Pick two different lines (tester and target)');
         const sessions = this.getSessions() || [];
@@ -146,7 +148,7 @@ class LiveSelfTest {
         const steps = normalizeScript(script);
         if (!steps.length) throw new Error('Script is empty');
         const id = 'st_' + new Date(this.now()).toISOString().replace(/[-:T]/g, '').slice(0, 14) + '_' + Math.random().toString(36).slice(2, 6);
-        this.run = { id, status: 'running', testerLine, targetLine, targetJid: targetNumber + '@s.whatsapp.net', script: steps, turns: [], startedAt: new Date(this.now()).toISOString(), endedAt: null, passed: 0, failed: 0, preparedKeys: [], freshContact: !!freshContact, config: { replyTimeoutMs, settleMs, gapMs } };
+        this.run = { id, status: 'running', testerLine, targetLine, targetJid: targetNumber + '@s.whatsapp.net', script: steps, turns: [], startedAt: new Date(this.now()).toISOString(), endedAt: null, passed: 0, failed: 0, preparedKeys: [], freshContact: !!freshContact, op: op && typeof op === 'object' ? op : null, config: { replyTimeoutMs, settleMs, gapMs } };
         // pre-reset the tester's phone record (target side sees it under this key unless WhatsApp uses a LID)
         for (const k of this.identitiesFor(testerLine)) if (k.length >= 10) this.prepareRecord(k);
         this._loop().catch(e => { this.run.status = 'error'; this.run.error = e.message; this._finish(); });
