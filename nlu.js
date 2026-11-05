@@ -281,6 +281,11 @@ function merge(r, l, text, user) {
     if (['unclear', 'chitchat', 'other', 'greeting', 'thanks'].includes(l.intent) && !['unclear', 'chitchat', 'greeting', 'thanks', 'question'].includes(r.intent) && r.confidence >= 0.55) {
         return { ...r, source: 'rules', llm_intent: l.intent };
     }
+    // a slip ask the rules are sure of (a name + "ki parchi"/"kie", or a name while a slip search is open) stands
+    // unless the model also reads it as a slip (then the model's richer fields are used)
+    if (['slip_request', 'slip_answer'].includes(r.intent) && r.confidence >= 0.55 && (r.person_name_hi || r.person_name_roman) && !['slip_request', 'slip_answer', 'contact_request', 'voter_card_issue'].includes(l.intent)) {
+        return { ...r, source: 'rules', llm_intent: l.intent };
+    }
     // names must come from the message itself (or be the person already being searched)
     if (l.father_name && !grounded(l.father_name, text, user)) l.father_name = null;
     if (l.person_name_hi && !grounded(l.person_name_hi, text, user) && !sameAsTarget(l.person_name_hi, user)) l.person_name_hi = null;

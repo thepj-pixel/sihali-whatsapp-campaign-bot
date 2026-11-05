@@ -19,7 +19,7 @@ const STUB = {
     'acha koin hu m aur mera voter id abhi tak nahi aaya': { intent: 'voter_card_issue', target_person: 'self', refers_to: 'self name', wants_slip: false, wants_contact: false, sentiment: 'concerned', script: 'roman' },
     'baba ke 100 vote kam h sihali me ..': { intent: 'political_talk', target_person: null, person_name_hi: 'कृष्ण', wants_slip: false, sentiment: 'concerned', script: 'roman' },
     // live finding: the model shrugged at this one -> the rules must win
-    'babal yadav kie': { intent: 'chitchat', target_person: null, wants_slip: false, script: 'roman' },
+    'babal yadav kie': { intent: 'question', target_person: null, wants_slip: false, script: 'roman' },
     'babal yadav kie bhi parchi de do': { intent: 'slip_request', target_person: 'other', person_name_hi: 'बबल यादव', person_name_roman: 'babal yadav', wants_slip: true, script: 'roman' },
     'parveen kumar': { intent: 'slip_answer', target_person: 'other', person_name_hi: 'प्रवीण कुमार', person_name_roman: 'parveen kumar', wants_slip: true, script: 'roman' },
     // live finding: the model copied a father's name out of the list -> must be dropped (ungrounded), never deliver

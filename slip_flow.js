@@ -286,9 +286,11 @@ function decide(body, user, opts = {}) {
                 user.slipListRepeat = (user.slipListRepeat || 0) + 1;
                 const lines = en
                     ? [`Ji, ${shown} ji ki hi parchi dhoondh rahi hoon 🙏 List me is naam ke ${matches.length} log hain—upar wali list me se unka number bhej dijiye, ya unke pita ka naam ya ward bata dijiye.`,
-                       `${shown} naam ke ${matches.length} log hain, isliye pakka karna zaroori hai 🙏 Unke pita ka naam ya ward bata dijiye, turant parchi bhej dungi.`]
+                       `${shown} naam ke ${matches.length} log hain, isliye pakka karna zaroori hai 🙏 Unke pita ka naam ya ward bata dijiye, turant parchi bhej dungi.`,
+                       `Samajh rahi hoon, aapko ${shown} ji ki parchi chahiye 🙏 Bas ye bata dijiye ki unke pita kaun hain—${matches.map(m => m.rel_name_hi).filter(Boolean).join(', ')}? Usi se pakki parchi niklegi.`]
                     : [`जी, ${shown} जी की ही पर्ची ढूँढ रही हूँ 🙏 सूची में इस नाम के ${matches.length} लोग हैं—ऊपर वाली सूची में से उनका नंबर भेज दीजिए, या उनके पिता का नाम या वार्ड बता दीजिए।`,
-                       `${shown} नाम के ${matches.length} लोग हैं, इसलिए पक्का करना ज़रूरी है 🙏 उनके पिता का नाम या वार्ड बता दीजिए, तुरंत पर्ची भेज दूँगी।`];
+                       `${shown} नाम के ${matches.length} लोग हैं, इसलिए पक्का करना ज़रूरी है 🙏 उनके पिता का नाम या वार्ड बता दीजिए, तुरंत पर्ची भेज दूँगी।`,
+                       `समझ रही हूँ, आपको ${shown} जी की पर्ची चाहिए 🙏 बस ये बता दीजिए कि उनके पिता कौन हैं—${matches.map(m => m.rel_name_hi).filter(Boolean).join(', ')}? उसी से पक्की पर्ची निकलेगी।`];
                 return { kind: 'choose', matches, text: lines[(user.slipListRepeat - 1) % lines.length] };
             }
             user.slipListRepeat = 0;
