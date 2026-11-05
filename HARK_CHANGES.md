@@ -10,6 +10,8 @@
 
 **Dumb fallbacks removed.** "जी, समझ गई 🙏 और बताइए, घर-गाँव में सब ठीक चल रहा है?" and "आपके यहाँ सब ठीक चल रहा है?" are gone; with an open slip search the bot asks one specific question ("प्रवीण कुमार जी की पर्ची चाहिए? उनके पिता का नाम या वार्ड बता दीजिए 🙏").
 
+**Live-test fixes (v5.1–5.4).** The model is never trusted with facts it could copy from the chat: a father's name, a person's name or a ward it returns must be written in the voter's message (Roman/Devanagari/spelling variants via the roll's own Hindi↔English names), or be the person already being searched — the first live run sent प्रवीण पिता लाल सिंह's slip because the model copied "लाल सिंह" from the list. When the model shrugs (unclear/chitchat/question) but the rules see a specific intent, or the rules are sure of a slip ask (name + "kie/ki parchi"), the rules win. A shorter name from the model ("बबल") gives way to the fuller one from the same message. Repeated asks while a list is open rotate four different one-liners (the third names the fathers already shown, the fourth asks the ward/mohalla).
+
 **Tests.** `npm run test:nlu` (`test_nlu_v5.cjs`, in `test:all`): the owner's whole transcript + a family-slip script, each with a stub LLM (realistic JSON with think-tags/fences) and with the LLM off, plus units (filler strip, transliteration, JSON parse, guard-rails, baba≠father).
 
 ---

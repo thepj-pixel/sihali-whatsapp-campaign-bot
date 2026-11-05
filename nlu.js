@@ -299,6 +299,8 @@ function merge(r, l, text, user) {
     if (['slip_request', 'slip_answer'].includes(o.intent)) o.wants_slip = true;
     if (!['slip_request', 'slip_answer'].includes(o.intent)) o.wants_slip = false;
     if (o.wants_slip && !o.person_name_hi && !o.person_name_roman) { o.person_name_hi = r.person_name_hi; o.person_name_roman = r.person_name_roman; }
+    // the model sometimes drops a word ("बबल" for "babal yadav"): keep the fuller name the rules read from the same message
+    if (o.wants_slip && r.person_name_hi && o.person_name_hi && r.person_name_hi !== o.person_name_hi && r.person_name_hi.includes(o.person_name_hi)) { o.person_name_hi = r.person_name_hi; o.person_name_roman = r.person_name_roman || o.person_name_roman; }
     if (o.wants_slip && !o.target_person) o.target_person = r.target_person || 'self';
     if (!o.father_name) o.father_name = r.father_name;
     // a ward must be written in this message (the model copied "वार्ड 1" out of the list once)
