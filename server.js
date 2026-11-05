@@ -605,7 +605,7 @@ async function startSession(sessionObj) {
         if (personal && content && !('disappearingMessagesInChat' in content) && !content.delete && !content.react && !content.edit) {
             let st = ephGet(sessionObj.id, jid);
             // turn the chat's timer to our setting once; after that, if the voter changes it, we follow theirs (no fight)
-            if (secs && (!st || (st.exp !== secs && !st.forced))) {
+            if (st ? (st.exp !== secs && !st.forced) : secs) { // also turns a chat's timer OFF once when our setting is 0
                 try {
                     await _rawSend(jid, { disappearingMessagesInChat: secs });
                     st = { exp: secs, ts: Math.floor(Date.now() / 1000), forced: true };
