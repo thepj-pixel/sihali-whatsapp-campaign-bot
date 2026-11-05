@@ -216,7 +216,7 @@ app.use((req, res, next) => {
 
     if (activePin === CAMPAIGN_PIN) {
         if (queryPin === CAMPAIGN_PIN) {
-            res.setHeader('Set-Cookie', `campaign_pin=${CAMPAIGN_PIN}; Path=/; Max-Age=2592000; SameSite=Lax`);
+            res.setHeader('Set-Cookie', `campaign_pin=${CAMPAIGN_PIN}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly${req.secure ? '; Secure' : ''}`); // Secure only when the request really is https (works on plain http too)
         }
         return next();
     }

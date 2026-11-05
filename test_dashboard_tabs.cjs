@@ -46,7 +46,7 @@ function makeDom(html) {
         const sandbox = { document, window: { confirm: () => true, location: {} }, fetch: async () => ({ json: async () => ({ lines: [], media: [], progress: { goal: {}, byLine: {}, byWard: {}, stageChanges: {} }, totals: {} }), status: 200 }),
             switchTab: (id) => calls.push(id), setInterval: () => 0, setTimeout: () => 0, clearTimeout() {}, FileReader: function () {}, Intl, console, encodeURIComponent, String, Array, Math, JSON, Object };
         vm.createContext(sandbox);
-        for (const s of scripts.slice(1)) vm.runInContext(s, sandbox); // the two new IIFE scripts
+        for (const s of scripts.filter(x => !x.includes('function switchTab(') && !x.includes('qa-send'))) vm.runInContext(s, sandbox); // the feature-module IIFE scripts (main script + quick-add panel are exercised by test:ui)
         document.getElementById('tab-btn-bulk').click();
         document.getElementById('tab-btn-goal').click();
         check('Bulk Send tab click -> switchTab("bulk")', calls.includes('bulk'));

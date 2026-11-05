@@ -198,3 +198,23 @@ The brain classifies each message into one of these intents: voter slip, complai
 Persuasion stays within the law: it says no to bribes, sets abuse aside, and asks an opposed person for their reason once and then backs off. It never threatens, appeals to caste or religion, or invents numbers. The person is addressed by gender and age from the voter record (लिंग/आयु) or from their name: माता जी, ताई जी, or बहन जी; दादा जी, ताऊ जी, or भाई साहब. Talking points also follow gender: water, safety, pension, or education for women; roads, farming, or youth for men.
 
 If an LLM key is set, the LLM only *rephrases* the reply. Its output is rejected if it adds numbers, uses banned terms, or repeats an earlier reply, and the grounded template is sent instead. Unclear messages get one short clarifying question and are flagged 🚩 for an admin. `REPLY_BRAIN=off` brings back the old path. Before and after examples are in `REPLY_BRAIN_BEFORE_AFTER.md`.
+
+## Dashboard UI fix + mobile quick-add + one identity (2026-11-05)
+- **Root cause of "tabs not clickable"**: the tab bar was a single `nowrap` row with `overflow-x: auto`; with 15 tabs the
+  newer buttons (Bulk Send, Goal, Self-Test, Samasya, Mulaqat, Voter Plan, Overview, Scheduled) sat off the right edge with
+  no visible scrollbar, so on desktop/mouse they could not be reached. JS handlers were fine. Tabs now wrap (desktop) and
+  form a 2-column tap grid on phones; one delegated tab handler backs up the per-module listeners; ES5-safe (no `?.`).
+- Media Bank reloads on every open and shows an error + retry instead of "empty" when the list call fails.
+- Mobile: proper viewport (zoom allowed), 16px inputs, 44px+ tap targets, wide tables scroll inside their card, CRM stacks.
+- **➕ Add contact & send now** panel at the top → `POST /api/quick-add-send {phone, name?, ward?, lineId, message:'intro'|'custom', customText?, poster?, forceCard?}`:
+  saves the contact on that line, sends intro/custom (+ Media Bank image), then the line's contact card (once per contact per
+  line unless `forceCard`). Refuses STOP/declined numbers (409) and disconnected lines (503).
+- **identity.js**: one phone normalizer (91XXXXXXXXXX / intl digits; JID → number; @lid → not a phone) and one name source
+  (operator-saved Contacts name > voter-memory name > user name > WhatsApp name; placeholders never win). A GET middleware
+  applies it to messages, voters, contacts, samasya, mulaqat, voter-plan, overview, scheduled, virodhi, voter/:phone.
+- Tests: `test:ui` (real headless Chromium, desktop+mobile, clicks every tab at its on-screen position, fails on console
+  errors; skips if no Chromium unless UI_REQUIRED=1; UI_BASE_URL=... to run against live), `test:identity`. Both in test:all.
+- HTTP/HTTPS: all dashboard fetches/assets are relative, no https redirect/HSTS in app code, `trust proxy` on, PIN cookie
+  is SameSite=Lax + HttpOnly and only `Secure` when the request is https → works on http://IP and behind Cloudflare.
+  Real https without SSH: Cloudflare DNS `dash.abhaysinghsihali.in` A → 136.80.218.29 (proxied, orange cloud), SSL/TLS mode
+  **Flexible** (origin stays on port 80). Full/Strict would need port 443 + a cert on the VM (needs SSH/Nginx change).
