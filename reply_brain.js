@@ -1229,7 +1229,7 @@ function think(message, user, opts = {}, memoryDone = false) {
         } else if (c.ask && !/\?/.test(text) && text.length < 230) {
             const closer = pickCloser(stage, l, user, c.concern || null);
             if (closer) text += ' ' + closer;
-        } else if (opCtl.effectiveMode(user) === 'aggressive' && !/\?/.test(text) && text.length < 230 && AGGR_OK.has(cls.intent) && stage !== 'opposed') {
+        } else if (opCtl.effectiveMode(user) === 'aggressive' && !/\?/.test(text) && text.length < 150 && AGGR_OK.has(cls.intent) && stage !== 'opposed') {
             // persistent mode: a respectful vote step after most safe replies; a hesitation gets "what is holding you back?"
             const hes = HESITATE_RX.test(message) && stage !== 'committed';
             const closer = hes ? vary(user, l === 'hi' ? ['किस बात पर सोच रहे हैं—बताइए, मैं साफ़ कर दूँ?', 'कोई शंका हो तो खुलकर बताइए, जवाब दूँगी—फिर 16 नवंबर को साथ देंगे ना?'] : ['Kis baat par soch rahe hain—bataiye, main saaf kar doon?', 'Koi shanka ho to khulkar bataiye, jawab dungi—phir 16 Nov ko saath denge na?']) : pickCloser(stage, l, user, c.concern || null);
@@ -1257,7 +1257,7 @@ async function respond(message, user = {}, opts = {}) {
     if (user && !user.history) user.history = [];
     const cls = classify(message, user);
     voterMemory.updateFromVoterMessage(user, message, { lastBotText: lastBotText(user), intent: cls.intent, topic: cls.topic });
-    if (opts.llmJson && !flows.inFlow(user)) await voterMemory.llmExtract(user, message, opts.llmJson);
+    if (opts.llmJson && !flows.inFlow(user)) await voterMemory.llmExtract(user, message, opts.llmJson, 2500, { intent: cls.intent });
     voterMemory.rollSummary(user);
     voterMemory.tickTurn(user);
     const t = think(message, user, { ...opts, cls }, true);

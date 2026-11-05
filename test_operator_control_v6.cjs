@@ -189,6 +189,9 @@ const VOTE_ASK = /(साथ देंगे ना\?|वोट देंगे 
     ok(ef.intent === 'daily_life' && ef.kind === 'effort', 'a son\'s job hunt is life talk, not a jobs pitch: ' + ef.intent);
     const efr = await talk(mk({ memory: { op: { mode: 'aggressive' } } }), 'haan beta naukri dhoond raha hai abhi');
     ok(!VOTE_ASK.test(efr.text) && !/संकल्प/.test(efr.text), 'family update gets warmth, no pitch even in aggressive mode: ' + efr.text);
+    const wu = mk({ memory: {} });
+    await require('./voter_memory.js').llmExtract(wu, 'haan beta naukri dhoond raha hai abhi', async () => '{"ward":1,"concern":{"topic":"jobs","text":"beta naukri","ward":1},"gist":"son job hunting"}', 2500, { intent: 'daily_life' });
+    ok(!wu.memory.ward && !(wu.memory.concerns || []).length && wu.memory.gist === 'son job hunting', 'LLM memory: no invented ward, no concern from a family update, gist kept');
     try { fs.unlinkSync(process.env.OPERATOR_CONTROL_FILE); } catch (e) {}
     console.log(`\ntest:v6 — ${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);

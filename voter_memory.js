@@ -183,7 +183,7 @@ function extractRules(text, ctx = {}) {
     if (fv) patch.familyVotes = fv;
     const topics = kb.detectTopics(t);
     const topic = kb.primaryTopic(t, ctx.topic && (topics.includes(ctx.topic) || !topics.length) ? ctx.topic : null) || topics[0] || null;
-    if (topic && (CONCERN_MARK.test(t) || ctx.intent === 'complaint')) {
+    if (topic && ctx.intent !== 'daily_life' && (CONCERN_MARK.test(t) || ctx.intent === 'complaint')) {
         patch.concern = { topic, text: t.slice(0, 160), ward: place.ward || null, place: place.place || null, village: villages[0] || null };
     }
     if (OBJECTION_MARK.test(t) || ['taunt', 'opposed'].includes(ctx.intent)) patch.objection = t.slice(0, 160);
@@ -311,11 +311,18 @@ function updateFromVoterMessage(user, text, ctx = {}) {
     return { memory: m, patch };
 }
 
-async function llmExtract(user, text, llmJson, budgetMs = 2500) {
+async function llmExtract(user, text, llmJson, budgetMs = 2500, ctx = {}) {
     if (!llmJson || String(text || '').trim().length < 8) return null;
     try {
         const raw = await Promise.race([llmJson(buildExtractionPrompt(text, user)), new Promise(r => setTimeout(() => r(null), budgetMs))]);
         const p = parseExtraction(raw);
+        // never trust the model with a number the voter did not write (live: "ward 1" invented from a family update)
+        const said = n => new RegExp('(^|\\D)' + n + '(\\D|$)').test(String(text || ''));
+        if (p && p.ward && !said(p.ward)) delete p.ward;
+        if (p && p.concern && p.concern.ward && !said(p.concern.ward)) p.concern.ward = null;
+        if (p && p.familyVotes && !said(p.familyVotes)) delete p.familyVotes;
+        if (p && p.age && !said(p.age)) delete p.age;
+        if (p && ctx.intent === 'daily_life') delete p.concern; // a family update is life talk, not a complaint to recall later
         if (p) merge(user, p, 'llm');
         return p;
     } catch (e) { return null; }
