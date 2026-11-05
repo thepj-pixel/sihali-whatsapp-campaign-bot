@@ -151,7 +151,7 @@ function markDayMedia(user, now = new Date()) { const op = ensureOp(user); op.da
 const MODE_GUIDE = {
     normal: 'NORMAL: warm and helpful; ask for the vote now and then when it fits.',
     aggressive: 'PERSISTENT (aggressive): steer firmly but respectfully toward a clear vote promise for 16 Nov; if the voter hesitates ("sochenge", "dekhenge"), gently ask what is holding them back and answer it. Never rude, never pushy-insulting, no threats, no bribes, no guilt-tripping.',
-    chill: 'CHILL: relationship first. Mostly listen and talk about their life; mention the vote rarely (only if they bring it up). No pitch in this reply unless the draft has one.',
+    chill: 'CHILL: relationship first. Mostly listen and talk about their life; mention the vote rarely (only if they bring it up). No pitch in this reply unless the draft has one. If you ask something, ask about their life/family (follow the operator\'s how-to-talk), never about the election mood.',
     gentle: 'GENTLE: this voter supports someone else. Respect, listen, no vote request at all.'
 };
 function promptBlock(user, now = new Date()) {
@@ -233,9 +233,14 @@ function probeReply(user, l, message) {
     if (m.ward) own.push(l === 'hi' ? 'वार्ड' : 'ward');
     if ((m.concerns || []).length) own.push(l === 'hi' ? 'आपकी बताई समस्या' : 'aapki batayi samasya');
     const ownTxt = own.length ? own.join(l === 'hi' ? ', ' : ', ') : null;
-    if (who) return l === 'hi'
-        ? 'बस अपनापन है जी, गाँव के लोगों का हालचाल पूछ लेती हूँ 🙏 कोई बात बुरी लगी हो तो माफ़ी चाहती हूँ। बताइए, आज किस बात में मदद करूँ?'
-        : 'Bas apnapan hai ji, gaon ke logon ka haalchaal pooch leti hoon 🙏 Koi baat buri lagi ho to maafi chahti hoon. Bataiye, aaj kis baat me madad karun?';
+    if (who) {
+        // apologise only if our last message actually raised something personal; otherwise a light, honest-sounding no-big-deal
+        const lastBot = ((user && user.history) || []).filter(h => h.role === 'bot').slice(-2).map(h => h.text || '').join(' ');
+        const personal = /(बेटे|बेटी|बेटा|परिवार|पत्नी|नौकरी|सेहत|bete|beti|beta|parivar|patni|naukri|sehat)/i.test(lastBot);
+        return l === 'hi'
+            ? (personal ? 'बस अपनापन है जी, गाँव के अपनों का हालचाल पूछ लेती हूँ 🙏 कोई बात बुरी लगी हो तो माफ़ी चाहती हूँ।' : 'कोई ख़ास बात नहीं जी 🙏 गाँव के अपनों से बस हालचाल पूछ लेती हूँ। बताइए, आज किस बात में मदद करूँ?')
+            : (personal ? 'Bas apnapan hai ji, gaon ke apnon ka haalchaal pooch leti hoon 🙏 Koi baat buri lagi ho to maafi chahti hoon.' : 'Koi khaas baat nahi ji 🙏 Gaon ke apnon se bas haalchaal pooch leti hoon. Bataiye, aaj kis baat me madad karun?');
+    }
     return l === 'hi'
         ? `जो आपने यहाँ बातचीत में बताया${ownTxt ? ' (' + ownTxt + ')' : ''}, बस वही याद रखती हूँ 🙏 आपकी निजी बात किसी से साझा नहीं होती। बताइए, क्या मदद करूँ?`
         : `Jo aapne yahan baatcheet me bataya${ownTxt ? ' (' + ownTxt + ')' : ''}, bas wahi yaad rakhti hoon 🙏 Aapki niji baat kisi se share nahi hoti. Bataiye, kya madad karun?`;
