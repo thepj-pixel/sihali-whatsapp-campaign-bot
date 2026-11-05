@@ -402,7 +402,7 @@ function decide0(body, user, opts = {}) {
     const asked = isSlipAsk(text);
     const recall = isRecall(text);
     const q = nameQuery(opts.searchText || text);
-    const slipPromptLast = /(पर्ची|parchi)/i.test(lastBot(user));
+    const slipPromptLast = /(पर्ची|parchi|वोटर लिस्ट|वोटर सूची|voter list)/i.test(lastBot(user));
     // reply in the voter's script (a bare "1" follows their earlier messages)
     const scriptOf = x => (/[\u0900-\u097F]/.test(x) ? 'hi' : (/[a-z]/i.test(x) ? 'en' : null));
     const prevUser = (user && Array.isArray(user.history) ? user.history : []).filter(h => h.role === 'user').map(h => scriptOf(h.text || '')).filter(Boolean);

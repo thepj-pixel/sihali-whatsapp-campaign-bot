@@ -22,7 +22,7 @@ Round 2: pronoun father answers ("unke papa ka naam X") never re-ask, "ghar wali
 
 Round 3: with a list open, "pata nahi ward" / "list bhejo" re-show it and "9 wala nahi, 10 number wala" narrows by ward; "sharam nahi aati" is an insult (no argument).
 
-Tests: `npm run test:brainlive` (`test_brain_live_fixes.cjs`, in `test:all`): 70 checks mirroring server routing with the live model's bad verdicts stubbed.
+Tests: `npm run test:brainlive` (`test_brain_live_fixes.cjs`, in `test:all`): 71 checks mirroring server routing with the live model's bad verdicts stubbed.
 # HARK_CHANGES — bulk day 6 Nov 2026: import → scheduled bulk → Status posts (first real 100–200 voters)
 
 New: `contact_import.js`, `status_posts.js`, `status_routes.js`, `test_bulk_6nov.cjs` (`npm run test:bulk`, in `test:all`). Changed: `scheduled_campaigns.js`, `ops_routes.js`, `contacts_manager.js`, `campaign_agenda.js`, `server.js`. Runtime file `status_posts.json` (gitignored).

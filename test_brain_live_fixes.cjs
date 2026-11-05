@@ -157,10 +157,11 @@ const NAME_NOT_FOUND = /नाम से (सूची|वोटर लिस्
         check(out[1].matches === undefined && !/वार्ड 1, 2, 3, 4, 5, 6, 7, 8/.test(out[1].reply) && /वार्ड (9|10|11)/.test(out[1].reply), 'village Haraheri narrows to wards 9-11', out[1].reply);
     }
     {
-        const { out } = await convo('village2', ['parchi chahiye rahul ki', 'hum haraheri wale h', 'pata nahi ward', 'list bhejo', '9 wala nahi, 10 number wala']);
+        const { out } = await convo('village2', ['parchi chahiye rahul ki', 'hum haraheri wale h', 'pata nahi ward', 'list bhejo', '9 wala nahi, 10 number wala', 'ha']);
         check(!NAME_NOT_FOUND.test(out[2].reply) && /सूची/.test(out[2].reply), '"pata nahi ward" with a list open re-shows it (not a name "pata")', out[2].reply);
         check(!NAME_NOT_FOUND.test(out[3].reply), '"list bhejo" re-shows the list', out[3].reply);
         check(/वार्ड 10/.test(out[4].reply) && !/वार्ड 9/.test(out[4].reply), '"9 wala nahi, 10 number wala" narrows to ward 10', out[4].reply);
+        check(!/वार्ड 1, 2, 3/.test(out[5].reply) && /(सूची|लिस्ट)/.test(out[5].reply), '"ha" with a list open asks for the number (no ward re-ask)', out[5].reply);
     }
     {
         const { out } = await convo('mismatch', ['meri parchi chaiye', 'naam ramesh yadav', 'pita hari ram']);
