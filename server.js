@@ -263,6 +263,7 @@ if (!fs.existsSync(sessionsDir)) {
 // Every message WE send is kept (all send paths, via the sock.sendMessage wrapper below) and persisted to
 // msg_store.json (gitignored) so a phone that shows "Waiting for this message" can still get it re-sent
 // after a restart/auto-deploy. Without this, retries for bulk/self-test/card sends failed forever.
+const adFaq = require('./ad_faq.js');
 const MSG_STORE_FILE = path.join(__dirname, 'msg_store.json');
 const MSG_STORE_MAX = 5000;
 const MSG_STORE = new Map();
@@ -630,6 +631,7 @@ async function startSession(sessionObj) {
             }
             if (options && options.ephemeralExpiration) { options = Object.assign({}, options); delete options.ephemeralExpiration; }
         }
+        try { adFaq.noteBotSend(sessionObj.id + '|' + jid); } catch (_) {}
         const sent = await _rawSend(jid, content, options);
         try { if (sent && sent.key && sent.key.id && sent.message) { MSG_STORE.set(sent.key.id, sent.message); MSG_HEALTH.stored++; } } catch (_) {}
         return sent;
@@ -685,6 +687,7 @@ async function startSession(sessionObj) {
             if (!m.messages || m.messages.length === 0) return;
 
             for (const msg of m.messages) {
+                const _wasOurSend = !!(msg.key?.id && MSG_STORE.has(msg.key.id));
                 if (msg.key?.id && msg.message) {
                     MSG_STORE.set(msg.key.id, msg.message);
                     if (MSG_STORE.size > MSG_STORE_MAX) {
@@ -709,6 +712,8 @@ async function startSession(sessionObj) {
                 // If message is from me, log strictly to Diagnostics tab to keep main voter chat clean
                 if (msg.key && msg.key.fromMe) {
                     const selfBody = extractMessageText(msg.message) || '[Self Device Activity]';
+                    // An answer the bot did not send (Meta ad auto-response / operator's phone): remember it for the ad FAQ guard
+                    try { if (!_wasOurSend && extractMessageText(msg.message)) adFaq.noteForeignOutgoing(sessionObj.id + '|' + rawJid); } catch (_) {}
                     if (!selfBody.includes('ग्राम पंचायत') && !selfBody.includes('बाबा अभय सिंह')) {
                         logDiagnostic({
                             session: sessionObj.name,
@@ -836,6 +841,18 @@ async function startSession(sessionObj) {
                 if (!isSelfTestVoter) {
                     autoSaveContact({ phone: senderPhone, pushName: msg.pushName, lineId: sessionObj.id, sock, jid: replyJid, source: 'inbound' });
                     try { dailyGoal.recordEvent && dailyGoal.recordEvent('reply', { phone: senderPhone, line: sessionObj.id, ward: (userMemory.users[senderPhone] || {}).ward }); } catch (e) {}
+                }
+
+                // Ad FAQ tapped: if Meta's ad (or the operator) already answered it, stay quiet this once; the bot takes over next message
+                if (adFaq.isAdFaq(body)) {
+                    const _t0 = (Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000)) * 1000;
+                    let _skip = false;
+                    try { _skip = await adFaq.answeredElsewhere(sessionObj.id + '|' + rawJid, Math.min(_t0, Date.now())); } catch (_) {}
+                    if (_skip) {
+                        try { userMemory.recordMessage(senderPhone, 'user', body, null, sessionObj.name); } catch (_) {}
+                        logMessage({ session: sessionObj.name, phone: senderPhone, incoming: body, reply: '(Ad FAQ already answered by the ad\'s automated response, bot stayed quiet this once)', status: 'AD_FAQ_AUTO_ANSWERED' });
+                        continue;
+                    }
                 }
 
                 // Record user message in memory
