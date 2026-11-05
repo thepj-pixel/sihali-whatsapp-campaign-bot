@@ -81,6 +81,7 @@ const contactsManager = require('./contacts_manager.js');
 const engagementPolicy = require('./engagement_policy.js');
 const operationsTracker = require('./operations_tracker.js');
 const dailyGoal = require('./daily_goal.js');
+const operatorControl = require('./operator_control.js');
 const conversationContext = require('./conversation_context.js');
 const campaignProfile = require('./campaign_profile.js');
 const { LiveSelfTest } = require('./self_test.js');
@@ -997,7 +998,7 @@ async function startSession(sessionObj) {
                         try {
                             const llmOn = process.env.NLU_LLM !== 'off' && aiService.aiStatus().anyLLM;
                             const n = await nluMod.understand(body, user, { callLLM: llmOn ? (sys, prompt, budget) => aiService.callLLMCascade(sys, [], prompt, null, budget) : null });
-                            nluPlan = nluRouter.plan(n, user, { text: body, lineDisplay: (engagementPolicy.getLineContact ? engagementPolicy.getLineContact(sessionObj.id).display : '') });
+                            nluPlan = nluRouter.plan(n, user, { text: body, line: sessionObj.id, test: !!isSelfTestVoter, lineDisplay: (engagementPolicy.getLineContact ? engagementPolicy.getLineContact(sessionObj.id).display : '') });
                             user.lastNlu = { at: new Date().toISOString(), msg: String(body).slice(0, 80), intent: n.intent, target: n.target_person, name: n.person_name_hi || n.person_name_roman || null, source: n.source, llmFailed: !!n.llm_failed };
                             console.log(`[${sessionObj.id}] NLU ${senderPhone}: ${n.intent} (${n.source}${n.llm_failed ? ', llm failed' : ''}) target=${n.target_person || '-'} name=${n.person_name_hi || n.person_name_roman || '-'}`);
                         } catch (e) { console.error(`[${sessionObj.id}] NLU error:`, e.message); nluPlan = null; }
@@ -1158,6 +1159,25 @@ async function startSession(sessionObj) {
                 // Record bot reply in memory
                 userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
 
+                // v6 daily lock: the day's operator media, once per voter per day, after a real exchange (or when relevant)
+                try {
+                    const uDm = userMemory.getUser(senderPhone);
+                    const dm = operatorControl.dayMediaFor(uDm, { intent: replyBrain.classify(body, uDm).intent });
+                    if (dm && replyText && (!mediaTypeSent || /^nlu_/.test(String(mediaTypeSent)))) {
+                        operatorControl.markDayMedia(uDm); userMemory.save();
+                        setTimeout(async () => {
+                            try {
+                                const full = path.join(__dirname, 'media', dm.file);
+                                const content = dm.type === 'video' ? { video: fs.readFileSync(full), caption: dm.caption || undefined } : { image: fs.readFileSync(full), caption: dm.caption || undefined };
+                                await sendSafeMessage(sock, replyJid, content);
+                                userMemory.recordMessage(senderPhone, 'bot', dm.caption || ('📎 [आज का मीडिया: ' + dm.file + ']'), 'dayMedia', sessionObj.name, '/media/' + encodeURIComponent(dm.file));
+                                operationsTracker.record('day_media', 'sent', { lineId: sessionObj.id, mediaType: dm.type });
+                                logMessage({ session: sessionObj.name, phone: senderPhone, incoming: '[आज का मीडिया]', reply: dm.caption || dm.file, status: 'MEDIA_SENT' });
+                            } catch (e) { console.warn('[DayMedia] send failed:', e.message); }
+                        }, 4000);
+                    }
+                } catch (e) { console.warn('[DayMedia hook]', e.message); }
+
                 // Anti-Ban Shield: Auto-send 3-in-1 Campaign Contact Card during early interactions (turns 1 to 3)
                 try {
                     const u = userMemory.getUser(senderPhone);
@@ -1222,6 +1242,36 @@ if (!DASHBOARD_ONLY) {
 } else {
     SESSIONS.forEach(sess => { sess.status = 'DASHBOARD_ONLY'; });
     console.log('[Server] Dashboard-only mode active; WhatsApp sessions and proactive sends are disabled.');
+}
+
+let opFollowBusy = false;
+async function runOperatorFollowups() {
+    if (opFollowBusy) return { busy: true };
+    opFollowBusy = true;
+    try {
+        const users = userMemory.getAllUsers().filter(u => u.phone && u.memory && u.memory.op && u.memory.op.followup && u.memory.op.followup !== 'off' && !(liveSelfTest && liveSelfTest.ownLineOf && liveSelfTest.ownLineOf([u.phone])));
+        const r = await operatorControl.runFollowups({
+            users,
+            send: async (u, { text, media }) => {
+                const line = SESSIONS.find(s => s.id === (u.assignedLine || 'sim_636') && s.status === 'CONNECTED' && s.sock) || SESSIONS.find(s => s.status === 'CONNECTED' && s.sock);
+                if (!line) throw new Error('no connected line');
+                const jid = `${u.phone}@s.whatsapp.net`;
+                await sendSafeMessage(line.sock, jid, { text });
+                userMemory.recordMessage(u.phone, 'bot', text, 'operatorFollowup', line.name);
+                if (media) {
+                    const full = path.join(__dirname, 'media', media.file);
+                    await new Promise(r2 => setTimeout(r2, 3000));
+                    await sendSafeMessage(line.sock, jid, media.type === 'video' ? { video: fs.readFileSync(full), caption: media.caption || undefined } : { image: fs.readFileSync(full), caption: media.caption || undefined });
+                    userMemory.recordMessage(u.phone, 'bot', media.caption || ('📎 [आज का मीडिया: ' + media.file + ']'), 'dayMedia', line.name, '/media/' + encodeURIComponent(media.file));
+                }
+                logMessage({ session: line.name, phone: u.phone, incoming: '[Operator follow-up]', reply: text, status: 'PROACTIVE_SENT' });
+                operationsTracker.record('operator_followup', 'sent', { lineId: line.id });
+            }
+        });
+        userMemory.save();
+        if (r.sent) console.log('[OpFollowup] sent', r.sent, r.skipped);
+        return r;
+    } finally { opFollowBusy = false; }
 }
 
 // Helper to get connected socket
@@ -2457,6 +2507,8 @@ app.post('/api/mulaqat/delete', (req, res) => {
 const opsRoutes = require('./ops_routes.js');
 const ops = opsRoutes.install(app, { SESSIONS, broadcastEngine, userMemory, liveSelfTest, engagementPolicy, followupPlanner, contactsManager, samasyaStore, mulaqatStore, campaignAgenda, replyBrain, logMessage, onBulkSent: (info) => broadcastEngine.onSent(info), dailyIstDate: () => dailyGoal.currentIstDate(), resolveAudience: resolveBroadcastAudience });
 // CRM (WhatsApp Web Live): full chat, voter profile & memory, AI co-pilot, safe quick actions (crm_routes.js)
+const ocRoutes = require('./operator_control_routes.js');
+ocRoutes.install(app, { userMemory, runFollowups: () => runOperatorFollowups() });
 const crmRoutes = require('./crm_routes.js');
 const crmUi = require('./crm_ui.js');
 crmRoutes.install(app, { userMemory, getActiveSocket, sendSafeMessage, sendMultiContactCard, engagementPolicy, contactCard, logMessage, samasyaStore, mulaqatStore, voterEngine, voterCardGen, slipFlow, replyBrain,
@@ -2958,6 +3010,7 @@ app.get('/', (req, res) => {
                 .wa-send-btn { width: 42px; height: 42px; border-radius: 50%; background: #00a884; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; transition: background 0.15s; }
                 .wa-send-btn:hover { background: #028066; }
                 ${crmUi.css()}
+                ${ocRoutes.ui.css()}
 
             </style>
         </head>
@@ -3125,7 +3178,7 @@ app.get('/', (req, res) => {
                     <button id="tab-btn-selftest" class="tab-btn" type="button" data-tab="selftest">🧪 Live Self-Test</button>
                     <button id="tab-btn-samasya" class="tab-btn" type="button" data-tab="samasya">📋 Samasya</button>
                     <button id="tab-btn-mulaqat" class="tab-btn" type="button" data-tab="mulaqat">🤝 Mulaqat</button>
-                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>${opsRoutes.ui.tabButtons()}
+                    <button id="tab-btn-plan" class="tab-btn" type="button" data-tab="plan">🗺️ Voter Plan</button>${opsRoutes.ui.tabButtons()}${ocRoutes.ui.tabButtons()}
                 </div>
 
                 <!-- TAB 1: Live Chat Stream (Voters Only) -->
@@ -4090,7 +4143,7 @@ app.get('/', (req, res) => {
                         <span id="vp-total" style="color:#475569;"></span>
                     </div>
                     <div id="vp-list" style="font-size:12px; margin-top:10px; max-height:640px; overflow:auto;"></div>
-                </div>${opsRoutes.ui.tabPanes()}
+                </div>${opsRoutes.ui.tabPanes()}${ocRoutes.ui.tabPanes()}
             </div>
 
             <!-- Dashboard JavaScript -->
@@ -5975,7 +6028,7 @@ app.get('/', (req, res) => {
                 }
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
             })();
-            </script>${opsRoutes.ui.script()}${crmUi.script()}
+            </script>${opsRoutes.ui.script()}${crmUi.script()}${ocRoutes.ui.script()}
         </body>
         </html>
     `);
@@ -6037,6 +6090,9 @@ if (process.platform === 'linux') {
     }, 35000);
 }
 
+
+    // v6: operator-set per-voter follow-ups (the operator's setting is the trigger; not gated by the proactive toggle)
+    if (!DASHBOARD_ONLY) setInterval(() => { runOperatorFollowups().catch(e => console.warn('[OpFollowup]', e.message)); }, 15 * 60 * 1000);
 
     // Start Proactive Daytime Nudge Interval (Every 15 mins)
     if (!DASHBOARD_ONLY) setInterval(() => {

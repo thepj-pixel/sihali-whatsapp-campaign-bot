@@ -108,6 +108,7 @@ function buildProfile(user, deps) {
         optedOut: !!(user.broadcastOptOut || user.consentStatus === 'REJECTED'),
         line: user.assignedLine || '',
         samasya, mulaqat,
+        ...(() => { const oc = require('./operator_control.js'); const c = oc.getVoterControl(user); return { about: c.about, style: c.style, mode: c.mode, effectiveMode: c.effectiveMode, modeLabel: oc.MODE_LABEL[c.effectiveMode], voteAsk: c.voteAsk, followup: c.followup, lastFollowupAt: c.lastFollowupAt, defaultMode: c.defaultMode }; })(),
         editedBy: op.updatedAt ? 'operator @ ' + op.updatedAt : null
     };
 }
@@ -141,6 +142,9 @@ function saveProfile(user, body = {}) {
     }
     const notes = clean(body.notes);
     if (notes !== undefined) m.operatorNotes = notes;
+    // v6 private brief + mode (never shown to the voter; hidden guidance for NLU / replies / co-pilot)
+    const ocKeys = ['about', 'style', 'mode', 'voteAsk', 'followup'];
+    if (ocKeys.some(k => body[k] !== undefined)) { const ob = {}; ocKeys.forEach(k => { if (body[k] !== undefined) ob[k] = body[k]; }); require('./operator_control.js').setVoterControl(user, ob); }
     op.updatedAt = new Date().toISOString();
     user.operatorProfile = op;
     m.updatedAt = op.updatedAt;
@@ -178,9 +182,10 @@ async function copilotSuggest(user, { attempt = 0, exclude = [], instruction = '
     if (instruction && llm) {
         try {
             const facts = replyBrain.validateLLM ? '' : '';
-            const sys = `You write ONE short WhatsApp reply (Hindi in Devanagari unless the voter writes Hinglish) for Abhay Singh ji's campaign team (female voice, "main ... karti hoon"). Operator instruction: "${instruction}". Voter's last message: "${message}". Rules: no money/budget figures or work counts, never say Abhay Singh ji was sarpanch before, no promised dates, no caste/religion, no threats or bribes, no attacks on anyone. Max 2 lines. Output only the message.`;
+            const ocm = require('./operator_control.js');
+            const sys = `You write ONE short WhatsApp reply (Hindi in Devanagari unless the voter writes Hinglish) for Abhay Singh ji's campaign team (female voice, "main ... karti hoon"). Operator instruction: "${instruction}". Voter's last message: "${message}". Rules: no money/budget figures or work counts, never say Abhay Singh ji was sarpanch before, no promised dates, no caste/religion, no threats or bribes, no attacks on anyone. Max 2 lines. Output only the message.\n${ocm.promptBlock(clone)}`;
             let d = replyBrain.cleanLLM(await llm(sys, [], message));
-            const why = replyBrain.validateLLM(d, { allowedText: message + ' ' + instruction + ' 16 2026', user: clone, l: /[\u0900-\u097F]/.test(d) ? 'hi' : 'en' });
+            const why = replyBrain.validateLLM(d, { allowedText: message + ' ' + instruction + ' 16 2026', user: clone, l: /[\u0900-\u097F]/.test(d) ? 'hi' : 'en' }) || ocm.leakCheck(d, clone, { allowedText: instruction, message });
             if (d && !why && !excl.has(d.trim())) return { text: d.trim(), source: 'llm(instruction)', basedOn: message };
             out.push({ rejected: why || 'repeat' });
         } catch (e) { out.push({ rejected: 'llm_error' }); }

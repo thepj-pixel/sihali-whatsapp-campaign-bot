@@ -114,7 +114,7 @@ const mkUser = (hist = []) => ({ phone: '9199' + Math.floor(Math.random() * 1e8)
     u.history.push({ role: 'user', text: 'mera naam Ramesh hai, ward 4 me naali band hai', createdAt: Date.now() });
     crm.saveProfile(u, { name: 'रमेश कुमार', relName: 'सुरेश', ward: '4', gender: 'M', age: '45', stance: 'leaning', familyVotes: '5', interests: 'नाली, पानी', notes: 'शाम को बात करना पसंद' });
     const card = voterMemory.buildCard(u);
-    ok(/रमेश कुमार/.test(card) && /ward: 4/.test(card) && /operatorNotes: शाम/.test(card) && /fatherOrHusband: सुरेश/.test(card) && /familyVotes: 5/.test(card), 'operator edits feed the memory card');
+    ok(/रमेश कुमार/.test(card) && /ward: 4/.test(card) && !/operatorNotes/.test(card) && /शाम को बात/.test(require('./operator_control.js').promptBlock(u)) && /fatherOrHusband: सुरेश/.test(card) && /familyVotes: 5/.test(card), 'operator edits feed the memory card (v6: notes go to the hidden brief block, not the card)');
     const prof = crm.buildProfile(u, { samasyaStore, mulaqatStore });
     ok(prof.name === 'रमेश कुमार' && prof.stance === 'leaning' && String(prof.ward) === '4' && prof.booth, 'profile auto-fill + booth');
     const before = samasyaStore.list({ includeTest: true }).length;

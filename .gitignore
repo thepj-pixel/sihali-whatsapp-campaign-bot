@@ -32,3 +32,5 @@ scheduled_campaigns.json.corrupt-*
 chat_archive/
 media/uploads/
 crm_profiles.json
+operator_control.json
+operator_control.json.tmp

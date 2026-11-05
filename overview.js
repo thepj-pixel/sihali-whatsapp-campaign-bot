@@ -90,6 +90,8 @@ function build({ users = [], samasya = [], mulaqat = [], isVirodhi = () => false
             line: u.assignedLine || c.line || (h[h.length - 1] && h[h.length - 1].session) || '',
             ward: u.ward || mm.ward || c.ward || '',
             stance: stanceOf(u, { virodhi }),
+            mode: (() => { try { return require('./operator_control.js').effectiveMode(u); } catch (e) { return 'normal'; } })(),
+            brief: !!(u.memory && u.memory.op && (u.memory.op.about || u.memory.op.style)),
             virodhi,
             stage: u.persuasionStage || 'unknown',
             lastAt: lastTime(u) ? new Date(lastTime(u)).toISOString() : null,

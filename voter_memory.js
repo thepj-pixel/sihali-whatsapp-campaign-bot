@@ -206,7 +206,8 @@ function buildExtractionPrompt(text, user) {
         'Keys (omit unknown): name (string), gender ("M"|"F", only if the voter refers to themself, e.g. verb endings raha/rahi, रहा/रही), ageGroup ("young"|"middle"|"elder"), age (number),',
         'village ("sihali_khurd"|"sihali_kalan"|"hadahedi", only if they say they live there), ward (1-11), family ([{relation, name}] relation in wife,husband,son,daughter,mother,father,brother,sister,daughter_in_law,grandfather,grandmother,uncle,aunt),',
         'familyVotes (number of votes in their household they mention), concern ({topic, text, ward}) topic in ' + Object.keys(kb.TOPIC_SYNONYMS).join(',') + ',',
-        'objection (string, their criticism/objection), question (string), commitment ("committed"|"leaning"|"undecided"|"opposed"), dialect ("haryanvi"|"rajasthani").',
+        'objection (string, their criticism/objection), question (string), commitment ("committed"|"leaning"|"undecided"|"opposed"), dialect ("haryanvi"|"rajasthani"),',
+        'gist (ALWAYS: one English line <=160 chars updating "Known so far.gist" with this message — only what the VOTER said: who they are, family, issues, promises, mood).',
         'Known so far: ' + JSON.stringify(cardObject(user)).slice(0, 600),
         'Message: ' + JSON.stringify(String(text || '').slice(0, 400))
     ].join('\n');
@@ -236,6 +237,7 @@ function parseExtraction(raw) {
     if (str(o.question, 160)) p.question = { text: str(o.question, 160), topic: null };
     if (['committed', 'leaning', 'undecided', 'opposed'].includes(o.commitment)) p.commitment = { status: o.commitment, quote: null };
     if (['haryanvi', 'rajasthani'].includes(o.dialect)) p.dialect = o.dialect;
+    if (str(o.gist, 200)) p.gist = str(o.gist, 200);
     return p;
 }
 
@@ -286,6 +288,7 @@ function merge(user, patch, source = 'rules') {
     if (patch.lastTopic && patch.lastTopic !== m.lastTopic) { m.previousTopic = m.lastTopic; m.lastTopic = patch.lastTopic; }
     if (patch.language) m.language = patch.language;
     if (patch.dialect) m.dialect = patch.dialect;
+    if (patch.gist) { m.gist = patch.gist; m.gistAt = at; }
     if (patch.openFollowUp && patch.openFollowUp.topic) {
         m.openFollowUp = { ...patch.openFollowUp, createdAt: at, dueAt: new Date(Date.now() + 18 * 3600e3).toISOString(), status: 'open' };
     }
@@ -405,7 +408,8 @@ function cardObject(user) {
     if (Array.isArray(m.interests) && m.interests.length) o.interests = m.interests.slice(0, 8);
     if (m.relName) o.fatherOrHusband = m.relName;
     if (m.scriptPref) o.replyScript = m.scriptPref === 'hinglish' ? 'hinglish (Roman letters)' : 'hindi (Devanagari)';
-    if (m.operatorNotes) o.operatorNotes = String(m.operatorNotes).slice(0, 240);
+    // operatorNotes are private operator guidance: they go only into the hidden brief block (operator_control.promptBlock), never the card
+    if (m.gist) o.gist = m.gist;
         if (m.slip && m.slip.relName) o.slip = `${m.slip.name} (${m.slip.relation} ${m.slip.relName}, voter-list ward ${m.slip.ward})`;
     return o;
 }

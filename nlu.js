@@ -203,7 +203,8 @@ async function llm(text, user, opts) {
     let hist = ((user && user.history) || []).filter(h => h && h.text);
     if (hist.length && hist[hist.length - 1].role !== 'bot' && String(hist[hist.length - 1].text).trim() === String(text).trim()) hist = hist.slice(0, -1);
     const lastTurns = hist.slice(-12).map(h => `${h.role === 'bot' ? 'BOT' : 'VOTER'}: ${String(h.text).slice(0, 220)}`).join('\n');
-    const prompt = `Voter memory: ${memorySummary(user || {})}\nPending slip state: ${pendingSummary(user)}\nLast turns:\n${lastTurns || '(none)'}\n\nNEW VOTER MESSAGE: ${text}\n\nJSON:`;
+    let opBlock = ''; try { opBlock = require('./operator_control.js').nluBlock(user || {}); } catch (e) {}
+    const prompt = `${opBlock ? opBlock + '\n' : ''}Voter memory: ${memorySummary(user || {})}\nPending slip state: ${pendingSummary(user)}\nLast turns:\n${lastTurns || '(none)'}\n\nNEW VOTER MESSAGE: ${text}\n\nJSON:`;
     const budget = Number(process.env.NLU_BUDGET_MS || 4000);
     try {
         const raw = await Promise.race([call(SYSTEM, prompt, budget), new Promise(r => setTimeout(() => r(null), budget + 200))]);

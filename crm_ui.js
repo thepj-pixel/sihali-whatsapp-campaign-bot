@@ -22,6 +22,10 @@ function css() {
 .crm-pgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 10px; }
 .crm-pgrid label { font-size: 10.5px; font-weight: 700; color: #475569; display: block; }
 .crm-pgrid input, .crm-pgrid select, .crm-profile textarea { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; color: #0f172a; }
+.crm-brief { background:#faf5ff; border:1px solid #e9d5ff; border-radius:8px; padding:8px; margin-top:8px; }
+.crm-brief-h { font-size:11.5px; font-weight:800; color:#6b21a8; margin-bottom:4px; }
+.crm-brief label { font-size:10.5px; font-weight:700; color:#475569; display:block; margin-top:4px; }
+.crm-mode-badge { display:inline-block; margin-left:6px; font-size:11px; padding:1px 7px; border-radius:9px; background:#ede9fe; color:#5b21b6; font-weight:700; }
 .crm-ro { font-size: 11.5px; color: #334155; background: #f1f5f9; border-radius: 6px; padding: 5px 8px; margin-top: 6px; overflow-wrap: anywhere; }
 .crm-copilot { background: #f5f3ff; border-top: 1px solid #ddd6fe; padding: 8px 12px; display: none; flex-direction: column; gap: 6px; }
 .crm-copilot-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -113,7 +117,17 @@ function script() {
 
     // ---------- profile & memory ----------
     var F = [['name', 'नाम'], ['relName', 'पिता/पति'], ['ward', 'वार्ड'], ['booth', 'बूथ (auto)', 1], ['gender', 'लिंग (M/F)'], ['age', 'आयु / उम्र'], ['stance', 'रुख़'], ['familyVotes', 'घर के वोट'], ['interests', 'रुचि / मुद्दे'], ['scriptPref', 'जवाब की लिपि']];
+    var MODEL = { normal: '⚖️ सामान्य', aggressive: '🔥 ज़ोरदार', chill: '😌 आराम से', gentle: '🕊️ नरम' };
+    function sel(k, label, opts, v) { return '<div><label>' + label + '</label><select data-pf="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div>'; }
+    function modeBadge(p) {
+        var hd = document.getElementById('header-details'); if (!hd || !p) return;
+        var b = document.getElementById('crm-mode-badge');
+        if (!b) { b = document.createElement('span'); b.id = 'crm-mode-badge'; b.className = 'crm-mode-badge'; hd.parentNode.insertBefore(b, hd.nextSibling); }
+        b.textContent = (MODEL[p.effectiveMode] || p.effectiveMode || '') + (p.about || p.style ? ' • 🔐 ब्रीफ़' : '') + (p.followup && p.followup !== 'off' ? ' • 🔁 ' + (p.followup === 'daily' ? 'रोज़' : '2 दिन') : '');
+    }
+    window.crmModeBadge = modeBadge;
     function renderProfile(p) {
+        modeBadge(p);
         var el = document.getElementById('crm-profile-panel'); if (!el) return;
         var g = F.map(function (f) {
             if (f[0] === 'scriptPref') {
@@ -131,7 +145,15 @@ function script() {
         el.innerHTML = '<h4><span>🧾 वोटर प्रोफ़ाइल व मेमरी' + (p.optedOut ? ' <span style="color:#dc2626">• STOP</span>' : '') + '</span>' +
             '<span><button class="crm-btn go" type="button" id="crm-profile-save">💾 Save</button> <button class="crm-btn alt" type="button" id="crm-profile-close">✕</button></span></h4>' +
             '<div class="crm-pgrid">' + g + '</div>' +
-            '<label style="font-size:10.5px;font-weight:700;color:#475569;display:block;margin-top:6px;">ऑपरेटर नोट्स (बोट इन्हें याद रखेगा)</label><textarea data-pf="notes" rows="2">' + esc(p.notes) + '</textarea>' +
+            '<div class="crm-brief"><div class="crm-brief-h">🔐 निजी ब्रीफ़ — बोट इसे कभी वोटर को नहीं बताएगा, बस इसी हिसाब से बात करेगा</div>' +
+            '<label>इनके बारे में जानकारी (कौन हैं, रिश्ते, इतिहास, चिंताएँ)</label><textarea data-pf="about" rows="3" placeholder="उदा: रिटायर्ड फ़ौजी, बेटा जयपुर में नौकरी ढूँढ रहा है, पिछली बार सड़क को लेकर नाराज़ थे">' + esc(p.about) + '</textarea>' +
+            '<label>बातचीत का तरीका</label><textarea data-pf="style" rows="2" placeholder="उदा: छोटे भाई की तरह बात करो, बेटे की नौकरी के बारे में पूछो, सड़क का ज़िक्र मत करो">' + esc(p.style) + '</textarea>' +
+            '<div class="crm-pgrid" style="margin-top:6px;">' +
+            sel('mode', 'मोड', [['', '— डिफ़ॉल्ट (' + (MODEL[p.defaultMode] || p.defaultMode || 'सामान्य') + ')'], ['normal', MODEL.normal], ['aggressive', MODEL.aggressive], ['chill', MODEL.chill], ['gentle', MODEL.gentle]], p.mode || '') +
+            sel('voteAsk', 'वोट की बात कितनी बार', [['auto', 'मोड के हिसाब से'], ['every', 'हर जवाब में'], ['every2', 'हर 2-3 जवाब में'], ['rarely', 'कभी-कभार']], p.voteAsk || 'auto') +
+            sel('followup', 'फ़ॉलो-अप', [['off', 'बंद'], ['daily', 'रोज़ (1 बार)'], ['every2days', 'हर 2 दिन']], p.followup || 'off') +
+            '</div></div>' +
+            '<label style="font-size:10.5px;font-weight:700;color:#475569;display:block;margin-top:6px;">ऑपरेटर नोट्स (निजी — बोट कभी नहीं बताएगा)</label><textarea data-pf="notes" rows="2">' + esc(p.notes) + '</textarea>' +
             '<div class="crm-ro"><b>परिवार:</b> ' + esc(p.family || '—') + ' • <b>गाँव:</b> ' + esc(p.village || '—') + ' • <b>लाइन:</b> ' + esc(p.line || '—') + '<br><b>आख़िरी वादा/रुख़:</b> ' + esc(p.commitment || '—') + '<br><b>सार:</b> ' + esc(p.summary || '—') + '</div>' +
             '<div class="crm-ro"><b>समस्या:</b><br>' + sam + '</div><div class="crm-ro"><b>मुलाक़ात:</b><br>' + mul + '</div>' +
             '<div style="font-size:10.5px;color:#64748b;margin-top:4px;">' + (p.editedBy ? 'आख़िरी बदलाव: ' + esc(p.editedBy) : 'बातचीत व मेमरी से अपने-आप भरा गया') + '</div>';

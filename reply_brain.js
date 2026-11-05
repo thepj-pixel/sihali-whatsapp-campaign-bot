@@ -38,6 +38,7 @@ const SCRIPT_ASK_RX = /हिंदी में बात करना पस�
 const SCRIPT_SWITCH_RX = /((hinglish|roman|english|abc)\s*(me|mein|mai|में|letters|akshar|format)?\s*(hi\s*)?(baat|bol|likh|likho|karo|kijiye|chalega|बात|लिख|बोल))|((hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी)\s*(me|mein|mai|में)\s*(hi\s*|ही\s*)?(baat|bol|likh|likho|karo|kijiye|बात|लिख|बोल|करो))/i;
 const SCRIPT_ANS_HINDI = /^(hindi|hindee|हिंदी|हिन्दी|devanagari|देवनागरी|1|1️⃣)[\s\p{L}\p{M}!.,🙏👍]{0,25}$/iu;
 const SCRIPT_ANS_HINGLISH = /^(hinglish|roman|english|abc|2|2️⃣)[\s\p{L}\p{M}!.,🙏👍]{0,25}$/iu;
+const opCtl = require('./operator_control.js');
 function scriptPrefOf(user) {
     const m = user && user.memory;
     if (m && (m.scriptPref === 'hindi' || m.scriptPref === 'hinglish')) return m.scriptPref;
@@ -118,7 +119,20 @@ function nameFor(user, l) {
         .filter(n => !/ग्रामवासी|contact|voter|समर्थक|self-test|test/i.test(n))
         .filter(n => !NOT_A_NAME.test(String(n).trim().split(/\s+/)[0]));
     const ok = cands.find(n => (l === 'hi' ? hasDevanagari(n) : !hasDevanagari(n)));
-    return ok ? String(ok).trim().split(/\s+/)[0] : '';
+    if (ok) return String(ok).trim().split(/\s+/)[0];
+    return l === 'hi' && cands.length ? scriptName(cands[0], 'hi').split(/\s+/)[0] : '';
+}
+
+/** A name in the reply's script: Roman "Krishan Kumar" -> "कृष्ण कुमार" for Hindi replies (never a mixed-script greeting). */
+function scriptName(n, l) {
+    n = String(n || '').trim();
+    if (!n) return '';
+    if (l === 'hi' && !hasDevanagari(n) && /^[a-z\s.]+$/i.test(n)) {
+        try { const dv = require('./nlu.js').toDevanagari(n.split(/\s+/).filter(Boolean)); if (/^[\u0900-\u097F\s]+$/.test(dv)) return dv; } catch (e) {}
+        return '';
+    }
+    if (l === 'en' && hasDevanagari(n)) return '';
+    return n;
 }
 
 // ---------------- intent ----------------
@@ -232,6 +246,7 @@ function classify(text, user = {}) {
     const topic = detectTopic(t);
     const out = (intent, extra = {}) => ({ intent, topic, ...extra });
     if (!t) return out('unclear');
+    if (opCtl.isPrivacyProbe(t)) return out('privacy_probe');
     // script preference: explicit switch any time, or a short answer to our one-time question
     if (SCRIPT_SWITCH_RX.test(t) && t.split(/\s+/).length <= 10) return out('script_pref', { script: /(hinglish|roman|english|abc)/i.test(t) && !/(hindi|हिंदी|हिन्दी|devanagari|देवनागरी)\s*(me|mein|में)/i.test(t) ? 'hinglish' : 'hindi' });
     // a bare "hinglish" / "hindi" / "हिंदी में" is a script choice whenever it comes
@@ -365,13 +380,18 @@ function pickCloser(stage, l, user, concern = null) {
     }
     opts.push(...((CLOSERS[stage] || CLOSERS.unknown)[l] || []));
     if (stage === 'opposed') return null; // an opposed voter gets respect, not a closer after every answer
-    // a vote ask at most every other bot message (never preachy)
-    const askedRecently = /(साथ देंगे ना\?|वोट देंगे ना\?|आशीर्वाद देंगे ना\?|देखेंगे ना\?|saath denge na\?|vote denge na\?|aashirwad denge na\?|dekhenge na\?)/i.test(recentBotText(user, 2));
+    // vote-ask frequency follows the operator's mode / setting (normal: at most every other bot message)
+    const gap = opCtl.voteAskGap(user);
+    if (gap === Infinity) return null;
+    const askedRecently = gap > 0 && VOTE_ASK_RX.test(recentBotText(user, gap));
     if (askedRecently && stage !== 'committed') return null;
+    if (gap === 0 && opts.length && stage !== 'committed' && VOTE_ASK_RX.test(recentBotText(user, 1)) && AGGR_EXTRA[l]) opts.unshift(...AGGR_EXTRA[l]); // persistent mode: vary the ask
+    const steer = opCtl.steerCloser(user, l);
     if (/(darj kar li|note kar liya|दर्ज कर ली|नोट कर लिया|bulawe ke liye|बुलावे के लिए)/i.test(recentBotText(user, 2))) return null;
     const mm = user && user.memory;
     if (mm && mm.grievanceOpenAt && Date.now() - Date.parse(mm.grievanceOpenAt) < 45 * 60e3) return null; // no vote ask right after anger
     if (mm && (mm.wrongNumberAt || (mm.condolenceAt && Date.now() - Date.parse(mm.condolenceAt) < 3 * 86400e3))) return null;
+    if (steer && !recent.includes(steer.slice(0, 25).toLowerCase())) { opCtl.markSteer(user); markLine(user, steer); return steer; }
     const log = usedLines(user);
     const ok = opts.filter(o => !recent.includes(o.slice(0, 25).toLowerCase()));
     const pick = ok.find(o => !log.includes(lineKey(o))) || ok.slice().sort((a, b) => log.indexOf(lineKey(a)) - log.indexOf(lineKey(b)))[0] || null;
@@ -379,6 +399,12 @@ function pickCloser(stage, l, user, concern = null) {
     return pick;
 }
 
+const VOTE_ASK_RX = /(साथ देंगे ना\?|वोट देंगे ना\?|आशीर्वाद देंगे ना\?|देखेंगे ना\?|वादा रहा\?|पक्का रहा\?|saath denge na\?|vote denge na\?|aashirwad denge na\?|dekhenge na\?|vaada raha\?|pakka raha\?)/i;
+const AGGR_EXTRA = {
+    hi: ['तो 16 नवंबर का वादा रहा? सुबह 7:30 से शाम 5:30 तक, एक वोट अभय सिंह जी को।', 'मन में कोई बात अटकी हो तो बताइए, वरना 16 नवंबर को अभय सिंह जी का साथ पक्का रहा?'],
+    en: ['To 16 Nov ka vaada raha? Subah 7:30 se shaam 5:30 tak, ek vote Abhay Singh ji ko.', 'Man me koi baat atki ho to bataiye, warna 16 Nov ko Abhay Singh ji ka saath pakka raha?']
+};
+const HESITATE_RX = /(soch(enge|unga|ungi|te hain|na padega)|dekh(enge|te hain|unga)|abhi (decide|tay) nahi|pata nahi|सोच(ेंगे|ूँगा|ूंगा|ते हैं)|देख(ेंगे|ते हैं)|अभी तय नहीं|पता नहीं)/i;
 // Lines used for this voter across days (keys = first 22 chars), so the same pitch/opener is not reused tomorrow either.
 const lineKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 22);
 function usedLines(user) { const m = user && user.memory; if (!m) return []; if (!Array.isArray(m.lineLog)) m.lineLog = []; return m.lineLog; }
@@ -792,7 +818,7 @@ function compose(cls, ctx) {
             break;
         }
         case 'introduce': {
-            const nm = nameFor(user, l) || cls.name || '';
+            const nm = nameFor(user, l) || scriptName(cls.name, l) || '';
             const ward = (user && user.ward) || mem.ward;
             const b = boothForWard(ward);
             body = vary(user, [S(`राम राम ${nm ? nm + ' ' : ''}${hon}! 🙏 आपसे जुड़कर बहुत अच्छा लगा।`, `Ram Ram ${nm ? nm + ' ' : ''}${hon}! 🙏 Aapse judkar bahut achha laga.`), S(`${nm ? nm + ' ' : ''}${hon}, आपसे बात करके अच्छा लगा 🙏`, `${nm ? nm + ' ' : ''}${hon}, aapse baat karke achha laga 🙏`)]);
@@ -1034,9 +1060,11 @@ function buildLLMPrompt(cls, ctx, draft) {
         `You are a warm, respectful campaign volunteer from Gram Panchayat Sihali Khurd (Sihali Khurd, Sihali Kalan/Badi Sihali, Hadahedi), texting on WhatsApp for Abhay Singh ji (Moti Aangli wale), सरपंच पद प्रत्याशी. You are "अभय सिंह जी की टीम का डिजिटल साथी" and use feminine verbs (करती हूँ / karti hoon). Poll: Monday 16 Nov 2026, 7:30 AM-5:30 PM, Govt. Sr. Sec. School Sihali Khurd.`,
         `Write ONE short WhatsApp reply: 1-3 short sentences, under 300 characters. Language: ${l === 'hi' ? 'Devanagari Hindi (no English words, no Roman letters)' : 'simple Roman Hinglish (NO Devanagari)'}, warm and natural, the way a caring person of the village talks—not a bureaucrat, not a robot${user.dialectPref === 'haryanvi' ? '. The voter ASKED for Haryanvi: write in theth Haryanvi (थारा/थारे/म्हारा, सै, के, इब, कड़ै / thara, thaare, mhara, sai, ke, ib, kade)' : (user.dialectPref === 'rajasthani' ? '. The voter ASKED for Rajasthani/Marwari: write in Marwari style (थारो/म्हारो, सा, कोनी / tharo, mharo, sa, koni)' : (user.memory && user.memory.dialect ? ` (light ${user.memory.dialect} touch, the voter uses it)` : ''))}. Address the voter as "${hon}". Never reply with just "Ji"/"Achha"—always say something that answers or acknowledges what they said.`,
         `Intent: ${cls.intent}${cls.topic ? ' (topic ' + cls.topic + ')' : ''}${cls.kind ? ' (' + cls.kind + ')' : ''}. Stage: ${stage}. Gender: ${person.gender || 'unknown'}.`,
-        goal ? `Today's campaign focus (use only if it fits naturally): ${goal}` : '',
+        goal && !opCtl.lockedToday() ? `Today's campaign focus (use only if it fits naturally): ${goal}` : '',
+        opCtl.promptBlock(user),
         'WHAT THIS VOTER TOLD US BEFORE (use naturally, never recite):', card || '(new voter)',
         summary ? 'OLDER CONVERSATION SUMMARY: ' + summary : '',
+        'NEVER repeat an opener, greeting, fact or question already used in the history; never ask again for something the memory already has (name, ward, family, father).',
         'HOW TO TALK: answer exactly what they said first. Listen; if they talk about life (health, crops, family, weather, festivals) respond like a human first. At most ONE question in the whole reply. Never preachy, no speeches, no lists, never repeat a pitch or work from the history. Ask for the vote only when it fits; if committed, thank and talk family votes / booth / slip instead.',
         `HARD RULES: use ONLY the facts below — no other works, numbers, dates, names or promises. Works were "पिछले कार्यकाल में पंचायत में करवाए गए" / "उनके प्रयास से" — NEVER say Abhay Singh was sarpanch (he was not) and never call him "सरपंच प्रतिनिधि". Say "अभय सिंह जी", never just "बाबा जी". No budgets/rupees, no counts of works, never mention an election symbol (ballot: name at serial no. 1). Never promise a date or that something will surely be fixed. Never attack or mock opponents. No caste/religion, no money/liquor/gifts, no threats. Never claim a voter slip was sent. Bribe/liquor asks: politely refuse with "${C.selfRespect_hi || ''}".`,
         'FACTS (from the parchas):', ...factLinesTxt,
@@ -1050,6 +1078,9 @@ function buildLLMPrompt(cls, ctx, draft) {
 // reviewed templates; the LLM rewrites the conversational ones.
 // Short, exact replies (greeting, thanks, intro with booth, commitment/family votes, who-are-you) also stay on templates:
 // live runs showed the model appending broken sentences to them.
+const AGGR_OK = new Set(['positive', 'thanks', 'short_reply', 'works', 'topic_mention', 'future', 'about_baba', 'undecided', 'daily_life', 'wellbeing_reply', 'family_votes', 'greeting']);
+// voters with an operator brief/style or a non-normal mode: the LLM also writes the small-talk turns so the brief can shape them
+const LLM_INTENTS_BRIEF = new Set(['short_reply', 'thanks', 'positive', 'wellbeing_reply', 'greeting', 'commit', 'family_votes']);
 const LLM_INTENTS = new Set(['grievance', 'health_concern', 'works', 'topic_mention', 'future', 'about_baba', 'taunt', 'undecided', 'positive', 'off_topic', 'joke', 'unclear', 'daily_life']);
 
 const STOPW = new Set('aur ke ki ka ko me mein se par hai hain gaye gayi gaya gayi. liye jaane wali wale abhay singh panchayat pichhle karyakal tahat jayegi jayega karwayi karwaya banwayi banwaya banwaye lagwayi kiya kiye sabhi unke unhone apni apne aapke aapki aapka और के की का को में से पर है हैं गए गई गया लिए वाली वाले अभय सिंह पंचायत पिछले कार्यकाल तहत जाएगी जाएगा करवाई करवाया बनवाई बनवाया बनवाए लगवाई किया किए उनके उन्होंने अपनी अपने आपके आपकी आपका'.split(/\s+/));
@@ -1163,6 +1194,10 @@ function think(message, user, opts = {}, memoryDone = false) {
         const text = pool.find(p => p !== last) || pool[0];
         return { text, cls, stage, previousStage, ctx, c: { text, ask: false, used: [] }, flowResult: { quiet: true }, l, person, hon };
     }
+    if (!fr && cls.intent === 'privacy_probe') {
+        const text = opCtl.probeReply(user, message ? l : l, message);
+        return { text, cls, stage, previousStage, ctx, c: { text, ask: false, used: [] }, flowResult: null, l, person, hon };
+    }
     let c, text, pendingQ = null;
     if (fr) {
         c = { text: fr.text, ask: fr.ask === true, used: fr.used || [], needsAdmin: !!(fr.samasyaId || fr.mulaqatId), concern: fr.concernTopic ? { topic: fr.concernTopic } : null };
@@ -1184,6 +1219,13 @@ function think(message, user, opts = {}, memoryDone = false) {
         } else if (c.ask && !/\?/.test(text) && text.length < 230) {
             const closer = pickCloser(stage, l, user, c.concern || null);
             if (closer) text += ' ' + closer;
+        } else if (opCtl.effectiveMode(user) === 'aggressive' && !/\?/.test(text) && text.length < 230 && AGGR_OK.has(cls.intent) && stage !== 'opposed') {
+            // persistent mode: a respectful vote step after most safe replies; a hesitation gets "what is holding you back?"
+            const hes = HESITATE_RX.test(message) && stage !== 'committed';
+            const closer = hes ? vary(user, l === 'hi' ? ['किस बात पर सोच रहे हैं—बताइए, मैं साफ़ कर दूँ?', 'कोई शंका हो तो खुलकर बताइए, जवाब दूँगी—फिर 16 नवंबर को साथ देंगे ना?'] : ['Kis baat par soch rahe hain—bataiye, main saaf kar doon?', 'Koi shanka ho to khulkar bataiye, jawab dungi—phir 16 Nov ko saath denge na?']) : pickCloser(stage, l, user, c.concern || null);
+            if (closer) text += ' ' + closer;
+        } else if (opCtl.effectiveMode(user) === 'chill' && c.ask && /\?/.test(text) === false) {
+            // chill: no extra push
         }
     }
     if (require('./contact_tags.js').isVirodhiUser(user)) text = require('./contact_tags.js').gentle(text, l); // विरोधी: gentle mode, no vote asks
@@ -1206,16 +1248,28 @@ async function respond(message, user = {}, opts = {}) {
     let { text } = t;
     let source = t.flowResult ? 'flow' : 'template';
     let rejected = null;
-    if (!t.flowResult && opts.llm && LLM_INTENTS.has(cls.intent) && !cls.all && !cls.person && !cls.news && !cls.insult && !cls.gibberish && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
+    const briefed = opCtl.hasBrief(user) || opCtl.effectiveMode(user) !== 'normal' || !!opCtl.lockedToday();
+    if (!t.flowResult && opts.llm && (LLM_INTENTS.has(cls.intent) || (briefed && LLM_INTENTS_BRIEF.has(cls.intent) && !(cls.intent === 'greeting' && !(user.history || []).some(h => h.role === 'bot')))) && !cls.all && !cls.person && !cls.news && !cls.insult && !cls.gibberish && !/(घर बुलाना चाहेंगे|ghar bulana chahenge)/i.test(text)) {
         try {
             const sys = buildLLMPrompt(cls, t.ctx, text);
             let out = cleanLLM(await opts.llm(sys, historyTurns(user, opts, 10), message));
             // the model may not add its own question when the draft asks none (or when we re-ask a pending flow question)
             if (out && (!/\?/.test(text) || t.pendingQ)) { const cut = out.replace(/[^.?!।]*\?\s*(😊|🙏)?\s*$/, '').trim(); if (cut.length >= 20) out = cut; }
-            const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' 2026 16 7:30 5:30 40 1';
-            let why = validateLLM(out, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(out, text, { used: t.c.used || [], l: t.l, person: t.person, user, intent: cls.intent });
-            if (!why && t.pendingQ && /\?/.test(String(out))) why = 'extra_question';
-            if (!why) why = scriptMismatch(out, t.l);
+            const allowed = t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + message + ' ' + text + ' ' + opCtl.lockText(opCtl.lockedToday()) + ' 2026 16 7:30 5:30 40 1';
+            const check = (o) => {
+                let w = validateLLM(o, { allowedText: allowed, user, l: t.l }) || validateAgainstDraft(o, text, { used: t.c.used || [], l: t.l, person: t.person, user, intent: cls.intent });
+                if (!w && t.pendingQ && /\?/.test(String(o))) w = 'extra_question';
+                if (!w) w = scriptMismatch(o, t.l);
+                if (!w) w = opCtl.leakCheck(o, user, { allowedText: text + ' ' + t.ctx.facts + ' ' + kb.allowedTextFor(t.ctx.items) + ' ' + opCtl.lockText(opCtl.lockedToday()), message });
+                return w;
+            };
+            let why = check(out);
+            if (why && /^leak/.test(why)) {
+                // one regeneration with a sharper warning, then the template
+                const out2 = cleanLLM(await opts.llm(sys + `\nYOUR LAST DRAFT REVEALED THE PRIVATE BRIEF ("${String(out).slice(0, 120)}"). Rewrite WITHOUT any fact, name or place from the brief and without saying you know/were told anything.`, historyTurns(user, opts, 10), message));
+                const w2 = out2 ? check(out2) : 'empty';
+                if (!w2) { out = out2; why = null; } else why = why + '|retry:' + w2;
+            }
             if (!why) { text = String(out).trim(); source = 'llm'; }
             else { source = 'template(llm_rejected:' + why + ')'; rejected = { why, out: String(out || '').slice(0, 300) }; }
         } catch (e) { source = 'template(llm_error)'; }
@@ -1241,11 +1295,11 @@ function maybeAskScript(text, user, cls, t) {
     const m = voterMemory.ensure(user);
     if (m.scriptPref || m.scriptAskedAt || scriptPrefOf(user) || cls.intent === 'script_pref') return text;
     const botTurns = (user.history || []).filter(h => h.role === 'bot').length;
-    if (botTurns >= 2) { m.scriptAskedAt = m.scriptAskedAt || 'skipped'; return text; }
-    const sensitive = ['abuse', 'condolence', 'wrong_number', 'corruption', 'grievance', 'opposed', 'emoji'].includes(cls.intent) || (cls.intent === 'emoji' && cls.emoji === 'upset');
+    if (botTurns >= 3) { m.scriptAskedAt = m.scriptAskedAt || 'skipped'; return text; }
+    const sensitive = ['abuse', 'condolence', 'wrong_number', 'corruption', 'grievance', 'opposed', 'emoji', 'privacy_probe'].includes(cls.intent) || (cls.intent === 'emoji' && cls.emoji === 'upset');
     const busy = /\?/.test(text) || (t && t.flowResult) || flows.inFlow(user) || sensitive;
-    if (busy && botTurns === 0) return text; // ask in the 2nd reply instead
-    if (sensitive || (t && t.flowResult) || flows.inFlow(user)) { m.scriptAskedAt = 'skipped'; return text; }
+    // never stack it as a second question: a reply that already asks something defers it (1st-3rd reply), then it is dropped
+    if (busy) { if (botTurns >= 2) m.scriptAskedAt = 'skipped'; return text; }
     m.scriptAskedAt = new Date().toISOString();
     return text + (text.length > 160 ? '\n\n' : ' ') + SCRIPT_ASK_HI;
 }

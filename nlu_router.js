@@ -88,6 +88,18 @@ function plan(n, user, ctx = {}) {
             if (user) {
                 if (!slipDone) user.slipTarget = { who: other ? 'other' : 'self', name: other ? null : (name || null), nameHi: other ? null : (name || null), nameRoman: null, at: new Date().toISOString(), done: false, viaCardIssue: true };
                 user.voterCardIssue = { at: new Date().toISOString(), who: other ? 'other' : 'self' };
+                // v6: log it as a samasya (once per voter per 24h) so the team actually follows up
+                try {
+                    const prevId = user.voterCardIssueSamasya;
+                    const ss = require('./samasya_store.js');
+                    const recent = prevId && ss.get(prevId) && Date.now() - Date.parse(ss.get(prevId).createdAt || 0) < 86400e3;
+                    if (!recent) {
+                        const m = user.memory || {};
+                        const rec = ss.create({ phone: user.phone, name: name || user.name || null, village: m.village || null, ward: m.ward || user.ward || null, category: 'other', topic: null,
+                            description: ('वोटर कार्ड नहीं मिला' + (other ? ' (परिवार/दूसरे व्यक्ति का)' : '') + ': ' + String(ctx.text || '').slice(0, 200)).slice(0, 300), location: null, since: null, line: ctx.line || user.assignedLine || null, test: !!(ctx.test || user.selfTest), source: 'whatsapp', notes: 'voter card not received' });
+                        if (rec && rec.id) { user.voterCardIssueSamasya = rec.id; m.samasyaIds = (m.samasyaIds || []).concat([rec.id]).slice(-20); out.samasyaId = rec.id; }
+                    }
+                } catch (e) { console.warn('[NLU router] voter-card samasya failed:', e.message); }
             }
             out.reply = { intent: 'voter_card_issue', text: t };
             out.noSlip = true;

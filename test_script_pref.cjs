@@ -28,7 +28,11 @@ const mk = () => ({ phone: '9198' + Math.floor(Math.random() * 1e8), history: []
     let u = mk();
     let r = await talk(u, 'ram ram');
     ok(isHindi(r.text), 'Roman greeting gets a Hindi reply: ' + r.text);
-    ok(ASK.test(r.text) || ASK.test((await talk(u, 'library ke baare me batao')).text), 'script question asked in the 1st or 2nd reply');
+    // v6: never stacked on a reply that already asks something -> asked in one of the first 3 replies
+    let asked = ASK.test(r.text);
+    for (const m2 of ['library ke baare me batao', 'achha theek hai']) { if (asked) break; asked = ASK.test((await talk(u, m2)).text); }
+    ok(asked, 'script question asked in the first 3 replies');
+    ok(u.history.filter(h => h.role === 'bot' && ASK.test(h.text)).every(h => (h.text.replace(brain.SCRIPT_ASK_HI, '').match(/\?/g) || []).length === 0), 'script question never stacked on another question');
     const askCount = () => u.history.filter(h => h.role === 'bot' && ASK.test(h.text)).length;
     r = await talk(u, 'hinglish');
     ok(r.intent === 'script_pref' && u.memory.scriptPref === 'hinglish' && isRoman(r.text), 'answer "hinglish" saved + confirmed in Roman: ' + r.text);
