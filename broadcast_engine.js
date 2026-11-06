@@ -235,7 +235,7 @@ class BroadcastEngine {
         try {
             return fs.readdirSync(this.mediaDir).filter(f => {
                 const ext = path.extname(f).toLowerCase();
-                return !f.startsWith('.') && !!mediaTypeOf(ext);
+                return !f.startsWith('.') && !!mediaTypeOf(ext) && !require('./media_policy.js').hiddenFromBank(f);
             }).map(f => {
                 const ext = path.extname(f).toLowerCase();
                 let size = 0, mtime = 0;

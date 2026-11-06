@@ -1812,7 +1812,8 @@ app.post('/api/send-message', async (req, res) => {
         let messageText = '';
         let mediaType = null;
 
-        const posterPath = path.join(__dirname, 'media', 'poster.jpg');
+        // 7 Nov: the 'poster' button sends the प्रमुख कार्य report card; demo reel retired (video option sends text only)
+        const posterPath = path.join(__dirname, 'media', 'report_card_major_works_1x1.jpg');
         const videoPath = path.join(__dirname, 'media', 'campaign_reel.mp4');
 
         const voterDisplayName = name ? `${name} जी` : 'भाई जी';
@@ -1870,7 +1871,7 @@ app.post('/api/send-message', async (req, res) => {
             await sock.sendMessage(jid, { image: buf, caption: messageText });
             mediaType = 'customPoster';
         } else if (chosenMedia === 'video') {
-            if (fs.existsSync(videoPath)) {
+            if (fs.existsSync(videoPath) && !require('./media_policy.js').isRetired(videoPath)) {
                 await sock.sendMessage(jid, { video: fs.readFileSync(videoPath), caption: messageText });
                 mediaType = 'video';
             } else {
@@ -3785,7 +3786,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                         <!-- Live Preview Box -->
                         <div style="text-align: center; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; background: #f8fafc;">
                             <div style="font-weight: 700; font-size: 13px; color: #64748b; margin-bottom: 10px;">Live Preview</div>
-                            <img id="poster-preview-img" src="/media/poster.jpg" style="max-height: 380px; width: auto; max-width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);" />
+                            <img id="poster-preview-img" src="/media/report_card_major_works_1x1.jpg" style="max-height: 380px; width: auto; max-width: 100%; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);" />
                         </div>
                     </div>
                 </div>
@@ -5351,7 +5352,7 @@ ${req.dashUser && req.dashUser.role === 'admin' ? `<a href="/update" onclick="re
                             if (h.mediaUrl) {
                                 mediaHtml = '<div style="margin-top:6px;"><img src="' + h.mediaUrl + '" style="max-width:220px; max-height:220px; border-radius:8px; border:1px solid #cbd5e1; display:block;"></div>';
                             } else if (h.mediaType === 'poster' || h.mediaType === 'demoPoster' || h.mediaType === 'customPoster') {
-                                mediaHtml = '<div style="margin-top:6px;"><img src="/media/poster.jpg" style="max-width:220px; max-height:220px; border-radius:8px; border:1px solid #cbd5e1; display:block;"></div>';
+                                mediaHtml = '<div style="margin-top:6px;"><img src="/media/report_card_major_works_1x1.jpg" style="max-width:220px; max-height:220px; border-radius:8px; border:1px solid #cbd5e1; display:block;"></div>';
                             } else if (h.mediaType === 'video') {
                                 mediaHtml = '<div style="margin-top:6px;"><video src="/media/campaign_reel.mp4" controls style="max-width:220px; border-radius:8px; display:block;"></video></div>';
                             }

@@ -7,8 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const RETIRED_FILES = new Set(['poster_sankalp.png', 'poster_vikas_infra.png', 'poster_statesman.png', 'poster_demo_test.png']);
-const RETIRED_IDS = new Set(['poster_sankalp', 'poster_sankalp_3d', 'poster_vikas_infra', 'poster_infra_vikas', 'poster_statesman', 'poster_demo_test']);
+// 7 Nov 2026 (owner): demo reels and the old demo poster taken down from the Media Bank too.
+const RETIRED_FILES = new Set(['campaign_reel.mp4', 'baba_namaste_ai.mp4', 'poster.jpg', 'poster_sankalp.png', 'poster_vikas_infra.png', 'poster_statesman.png', 'poster_demo_test.png']);
+const RETIRED_IDS = new Set(['reel_sankalp_3d', 'reel_namaste_hero', 'poster_vikas_card', 'poster_sankalp', 'poster_sankalp_3d', 'poster_vikas_infra', 'poster_infra_vikas', 'poster_statesman', 'poster_demo_test']);
 const MEDIA_DIR = path.join(__dirname, 'media');
 
 function isRetired(fileOrId) {
@@ -30,4 +31,8 @@ function approved(kind, dir = MEDIA_DIR) {
         .map(p => ({ id: p.id, title: p.title, file: p.filename, caption: p.caption, path: path.join(dir, p.filename) }));
 }
 
-module.exports = { isRetired, assertSendable, approved, RETIRED_FILES };
+// Source assets the engines use (photo cut-outs, fonts) and retired demo media: kept on disk, not shown in the Media Bank.
+const HIDDEN_FROM_BANK = new Set(['baba_face.jpg', 'baba_33_transparent.png', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf']);
+function hiddenFromBank(f) { const b = path.basename(String(f || '')); return HIDDEN_FROM_BANK.has(b) || isRetired(b); }
+
+module.exports = { hiddenFromBank, isRetired, assertSendable, approved, RETIRED_FILES };

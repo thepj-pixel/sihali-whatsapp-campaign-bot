@@ -142,7 +142,7 @@ function fakeSock(log, opts = {}) {
 
     console.log('— ② scheduled bulk');
     const mediaDir = path.join(TMP, 'media'); fs.mkdirSync(mediaDir);
-    for (const f of ['poster.jpg', 'baba_face.jpg', 'poster_sankalp.png', 'reel.mp4']) fs.writeFileSync(path.join(mediaDir, f), 'x');
+    for (const f of ['rc.jpg', 'baba_face.jpg', 'poster_sankalp.png', 'reel.mp4']) fs.writeFileSync(path.join(mediaDir, f), 'x');
     const T0 = Date.UTC(2026, 10, 6, 3, 25); // 08:55 IST, 6 Nov
     function mk(o = {}) {
         let now = o.start || T0;
@@ -171,7 +171,7 @@ function fakeSock(log, opts = {}) {
     await t('preview: count, skipped by reason (STOP / virodhi), duplicates, invalid, rotation, warnings', () => {
         const h = mk({ isBlocked: p => p === '919100000001' ? 'opted_out' : null, isVirodhi: p => p === '919100000002' });
         const rows = [...audience(), { phone: '9100000005', name: 'dup' }, { phone: '12', name: 'bad' }];
-        const p = h.sc.preview({ contacts: rows, messages: TEXTS, mediaFiles: ['poster.jpg', 'baba_face.jpg'], preset: 'morning', date: '2026-11-06' });
+        const p = h.sc.preview({ contacts: rows, messages: TEXTS, mediaFiles: ['rc.jpg', 'baba_face.jpg'], preset: 'morning', date: '2026-11-06' });
         assert.ok(p.ok, JSON.stringify(p));
         assert.strictEqual(p.recipients, 38);
         assert.deepStrictEqual(p.skippedByReason, { opted_out: 1, virodhi: 1 });
@@ -185,7 +185,7 @@ function fakeSock(log, opts = {}) {
         const h = mk();
         const r = h.sc.build({ contacts: audience(), messages: TEXTS, mediaFiles: ['poster_sankalp.png'], preset: 'morning', date: '2026-11-06' });
         assert.ok(r.errors.some(e => /Retired/.test(e)), JSON.stringify(r.errors));
-        const ok = h.sc.create({ contacts: audience().slice(0, 2), messages: TEXTS, mediaFiles: ['poster.jpg'], startInMinutes: 0, durationMinutes: 5 });
+        const ok = h.sc.create({ contacts: audience().slice(0, 2), messages: TEXTS, mediaFiles: ['rc.jpg'], startInMinutes: 0, durationMinutes: 5 });
         const c = h.sc.get(ok.campaign.id); c.media = [{ file: 'poster_sankalp.png', type: 'image' }];
         h.clock.add(60e3); await runUntil(h, h.clock.get() + 6 * 60e3);
         assert.strictEqual(h.log.length, 0, 'nothing sent');
@@ -194,7 +194,7 @@ function fakeSock(log, opts = {}) {
     });
     await t('live-like run: rotation, ≥ min gap between sends on a line, hourly cap, no one twice, onSent contactCard flag', async () => {
         const h = mk();
-        const r = h.sc.create({ contacts: audience(), messages: TEXTS, mediaFiles: ['poster.jpg', 'baba_face.jpg'], preset: 'morning', date: '2026-11-06', minGapSec: 20, maxGapSec: 90, hourlyCap: 15 });
+        const r = h.sc.create({ contacts: audience(), messages: TEXTS, mediaFiles: ['rc.jpg', 'baba_face.jpg'], preset: 'morning', date: '2026-11-06', minGapSec: 20, maxGapSec: 90, hourlyCap: 15 });
         assert.ok(r.ok, r.error);
         await runUntil(h, windowFromHours('2026-11-06', 9, 11.5).end + 70 * 60e3, 5000);
         const at = h.log.map(x => x.at).sort((a, b) => a - b);
@@ -206,7 +206,7 @@ function fakeSock(log, opts = {}) {
         const phones = h.log.map(x => x.jid); assert.strictEqual(new Set(phones).size, phones.length, 'no double send');
         assert.ok(h.log.length >= 30, 'sent ' + h.log.length);
         const usedT = new Set(h.log.map(x => x.content.caption.split(' ').pop())); assert.ok(usedT.size === 4, [...usedT].join(','));
-        const usedP = new Set(h.log.map(x => path.basename(x.content.image.url))); assert.deepStrictEqual([...usedP].sort(), ['baba_face.jpg', 'poster.jpg']);
+        const usedP = new Set(h.log.map(x => path.basename(x.content.image.url))); assert.deepStrictEqual([...usedP].sort(), ['baba_face.jpg', 'rc.jpg']);
         assert.ok(h.log.every(x => !/\{name\}/.test(x.content.caption) && /Mock \d+ जी/.test(x.content.caption)));
         assert.ok(h.sent.every(s => s.contactCard === true));
         const k = h.sc.counts(c); assert.strictEqual(k.sent + k.skipped + k.failed, 40);
@@ -305,7 +305,7 @@ function fakeSock(log, opts = {}) {
         const h = mk({ ownLineOf: p => ({ '14502790497': 'canada', '916367810227': 'sim_636' })[p] || null, isBlocked: () => 'own_line' });
         const bad = h.sc.build({ test: true, recipients: [{ phone: '919100000000', line: 'sim_636' }], messages: TEXTS, startInMinutes: 0, durationMinutes: 4 });
         assert.ok(bad.errors.some(e => /own line numbers/.test(e)));
-        const ok = h.sc.build({ test: true, repeat: 4, recipients: [{ phone: '14502790497', line: 'sim_636' }], messages: TEXTS, mediaFiles: ['poster.jpg', 'baba_face.jpg'], startInMinutes: 0, durationMinutes: 4 });
+        const ok = h.sc.build({ test: true, repeat: 4, recipients: [{ phone: '14502790497', line: 'sim_636' }], messages: TEXTS, mediaFiles: ['rc.jpg', 'baba_face.jpg'], startInMinutes: 0, durationMinutes: 4 });
         assert.deepStrictEqual(ok.errors, []); assert.strictEqual(ok.campaign.items.length, 4);
         assert.strictEqual(new Set(ok.campaign.items.map(i => i.msgIdx)).size, 4);
     });
@@ -343,7 +343,7 @@ function fakeSock(log, opts = {}) {
     }
     await t('post now: image + caption to status@broadcast with statusJidList (contacts + own number), msg id recorded', async () => {
         const h = sp();
-        const r = await h.p.post({ lineId: 'sim_636', mediaFile: 'poster.jpg', caption: 'राम राम जी 🙏' });
+        const r = await h.p.post({ lineId: 'sim_636', mediaFile: 'rc.jpg', caption: 'राम राम जी 🙏' });
         assert.ok(r.ok, r.error);
         assert.strictEqual(h.log[0].jid, 'status@broadcast');
         assert.deepStrictEqual(h.log[0].o.statusJidList.sort(), ['916367810227@s.whatsapp.net', '919100000000@s.whatsapp.net', '919100000001@s.whatsapp.net']);
@@ -364,13 +364,13 @@ function fakeSock(log, opts = {}) {
         assert.ok(/not found/.test((await h.p.post({ lineId: 'sim_636', mediaFile: 'nope.jpg' })).error));
         assert.ok(/Retired/.test(h.p.addSchedule({ lineId: 'sim_636', time: '09:30', mediaFile: 'poster_sankalp.png' }).error));
         h.sessions[0].status = 'DISCONNECTED';
-        assert.strictEqual((await h.p.post({ lineId: 'sim_636', mediaFile: 'poster.jpg' })).status, 503);
+        assert.strictEqual((await h.p.post({ lineId: 'sim_636', mediaFile: 'rc.jpg' })).status, 503);
         assert.strictEqual(h.log.length, 0);
     });
     await t('schedules: max 4 a day per line, post once at the time, survive a restart, missed > 45 min skipped', async () => {
         const stateFile = path.join(TMP, 'status_sched.json');
         const h = sp({ stateFile });
-        for (const tm of ['09:30', '13:00', '17:30', '20:00']) assert.ok(h.p.addSchedule({ lineId: 'sim_636', time: tm, mediaFile: 'poster.jpg', caption: 'c ' + tm }).ok);
+        for (const tm of ['09:30', '13:00', '17:30', '20:00']) assert.ok(h.p.addSchedule({ lineId: 'sim_636', time: tm, mediaFile: 'rc.jpg', caption: 'c ' + tm }).ok);
         assert.ok(/At most 4/.test(h.p.addSchedule({ lineId: 'sim_636', time: '21:00', text: 'x' }).error));
         assert.ok(h.p.addSchedule({ lineId: 'canada', time: '09:30', text: 'test' }).ok, 'other line has its own 4');
         h.clock.set(Date.UTC(2026, 10, 6, 3, 59)); // 09:29 IST
@@ -399,7 +399,7 @@ function fakeSock(log, opts = {}) {
         contactsManager.contacts = [{ phone: '919100000000', line: 'sim_636', tags: [] }];
         const { poster } = require('./status_routes.js').install(app, { SESSIONS, contactsManager, isOptedOut: () => false });
         poster.stop(); poster.mediaDir = mediaDir;
-        const r = await poster.post({ lineId: 'canada', mediaFile: 'poster.jpg', caption: 'test' });
+        const r = await poster.post({ lineId: 'canada', mediaFile: 'rc.jpg', caption: 'test' });
         assert.ok(r.ok, r.error);
         assert.deepStrictEqual(log[0].o.statusJidList.sort(), ['14502790497@s.whatsapp.net', '916367810227@s.whatsapp.net']);
         contactsManager.contacts = [];
@@ -410,8 +410,8 @@ function fakeSock(log, opts = {}) {
         const express = require('express');
         const oc = require('./operator_control.js');
         const realMedia = path.join(__dirname, 'media');
-        oc.setDay('2026-11-06', { goal: 'पानी', locked: true, media: ['poster.jpg', 'poster_sankalp.png'] });
-        assert.deepStrictEqual(oc.load().days['2026-11-06'].media.map(m => m.file), ['poster.jpg']);
+        oc.setDay('2026-11-06', { goal: 'पानी', locked: true, media: ['rc.jpg', 'poster_sankalp.png'] });
+        assert.deepStrictEqual(oc.load().days['2026-11-06'].media.map(m => m.file), ['rc.jpg']);
         const app = express(); app.use(express.json());
         const ops = require('./ops_routes.js');
         const SESSIONS = [{ id: 'sim_636', name: 'P', status: 'CONNECTED', sock: fakeSock([]) }];
@@ -426,8 +426,8 @@ function fakeSock(log, opts = {}) {
             assert.ok(d.success, JSON.stringify(d));
             assert.strictEqual(d.preview.recipients, 20);
             assert.deepStrictEqual(d.preview.window, ['2026-11-06 09:00 IST', '2026-11-06 11:30 IST']);
-            assert.deepStrictEqual(d.slot.mediaFiles, ['poster.jpg']);
-            assert.ok(d.preview.samples[0].text.length > 10 && d.preview.samples[0].media === 'poster.jpg');
+            assert.deepStrictEqual(d.slot.mediaFiles, ['rc.jpg']);
+            assert.ok(d.preview.samples[0].text.length > 10 && d.preview.samples[0].media === 'rc.jpg');
             const csv = await fetch(`http://127.0.0.1:${port}/api/scheduled/nope/results.csv`); assert.strictEqual(csv.status, 404);
             scheduler.state.campaigns = { t1: { test: true, status: 'cancelled', items: [] }, t2: { test: true, status: 'running', items: [] }, r1: { test: false, status: 'done', items: [] } };
             app.post('/api/test-records/cleanup', (req, res) => res.json({ success: true }));

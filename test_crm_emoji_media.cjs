@@ -90,7 +90,7 @@ const mkUser = (hist = []) => ({ phone: '9199' + Math.floor(Math.random() * 1e8)
 
     // ---------- 3. media policy ----------
     for (const f of ['poster_sankalp.png', 'poster_vikas_infra.png', 'poster_statesman.png', 'poster_demo_test.png', 'poster_statesman']) ok(mediaPolicy.isRetired(f), 'retired: ' + f);
-    ok(!mediaPolicy.isRetired('poster.jpg'), 'poster.jpg approved');
+    ok(mediaPolicy.isRetired('poster.jpg') && !mediaPolicy.isRetired('report_card_major_works_1x1.jpg'), 'demo poster.jpg retired (7 Nov), report card approved');
     ok(mediaPolicy.approved('poster').every(p => !mediaPolicy.isRetired(p.file)) && mediaPolicy.approved('poster').length >= 1, 'approved posters exclude retired');
     {
         const { BroadcastEngine } = require('./broadcast_engine.js');
@@ -147,10 +147,11 @@ const mkUser = (hist = []) => ({ phone: '9199' + Math.floor(Math.random() * 1e8)
     userMemory.getUser(P).history = [];
     for (const a of ['contact_card', 'ramram', 'poster', 'demo_poster', 'video', 'slip']) {
         const r = await post('/api/quick-action', { phone: P, action: a });
+        if (a === 'video') { ok(r.status === 404, `quick action video refused (demo reels retired 7 Nov): ${r.status}`); continue; }
         ok(r.status === 200 && r.success, `quick action ${a}: ${r.status} ${r.error || ''}`);
     }
     ok(sent.some(s => s.c.image) && sent.every(s => !(s.c.caption || '').includes('Testing')), 'poster sent is approved (not demo)');
-    ok(sent.some(s => s.c.video), 'approved reel sent');
+    ok(!sent.some(s => s.c.video), 'no retired demo reel sent');
     const slipMsg = sent[sent.length - 1].c.text || '';
     ok(!sent[sent.length - 1].c.image, 'slip action without confirmation never sends a slip card directly: ' + slipMsg.slice(0, 60));
     const reg = await post('/api/quick-action', { phone: P, action: 'baba_register', note: 'वार्ड 3 में नाली टूटी', test: true });

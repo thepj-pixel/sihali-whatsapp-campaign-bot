@@ -34,7 +34,7 @@ const { loadApiConfig } = require('./api_keys.js');
 let CONFIG = {
     media_urls: {
         campaign_reel_video: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/campaign_reel.mp4',
-        campaign_poster: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster.jpg'
+        campaign_poster: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/report_card_major_works_1x1.jpg'
     }
 };
 CONFIG = { ...CONFIG, ...loadApiConfig() };

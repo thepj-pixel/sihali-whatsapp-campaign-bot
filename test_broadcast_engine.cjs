@@ -12,7 +12,7 @@ function check(name, cond) { if (cond) { passed++; console.log('PASS ' + name); 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-test-'));
 const mediaDir = path.join(tmp, 'media');
 fs.mkdirSync(mediaDir);
-fs.writeFileSync(path.join(mediaDir, 'poster.jpg'), 'x');
+fs.writeFileSync(path.join(mediaDir, 'report_card_major_works_1x1.jpg'), 'x');
 fs.writeFileSync(path.join(mediaDir, 'notes.txt'), 'x');
 
 // Fixed clock: 2026-11-04 12:00 IST (= 06:30 UTC), well outside quiet hours
@@ -118,7 +118,7 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     const sessions = [{ id: 'sim_636', name: 'A', status: 'CONNECTED', sock: sA }, { id: 'canada', name: 'B', status: 'CONNECTED', sock: sB }];
     const e1 = makeEngine(sessions);
     const phones = ['9000000001', '9000000002', '9000000003', '9000000004', '9000000005', '9000000006'].join('\n');
-    r = e1.create({ phones, message: '{नमस्ते|राम राम} {name}', mediaFile: 'poster.jpg' });
+    r = e1.create({ phones, message: '{नमस्ते|राम राम} {name}', mediaFile: 'report_card_major_works_1x1.jpg' });
     check('create ok', r.ok && r.campaign.counts.pending === 6);
     check('second create blocked while running', e1.create({ phones: '9111111111', message: 'x' }).status === 409);
     await drain(e1);
@@ -128,7 +128,7 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     check('5 sent, 1 skipped not_on_whatsapp', k1.sent + k1.skipped === 6 && c1.recipients.filter(x => x.reason === 'not_on_whatsapp').length <= 1 && k1.sent >= 5);
     check('both lines used (round robin)', sA.sent.length > 0 && sB.sent.length > 0);
     check('typing presence sent before messages', sA.presence.some(p => p.startsWith('composing')) && sB.presence.some(p => p.startsWith('composing')));
-    check('media sent as image with caption', sA.sent.concat(sB.sent).every(m => m.content.image && m.content.image.url.endsWith('poster.jpg') && m.content.caption));
+    check('media sent as image with caption', sA.sent.concat(sB.sent).every(m => m.content.image && m.content.image.url.endsWith('report_card_major_works_1x1.jpg') && m.content.caption));
     check('no number sent twice', new Set(sA.sent.concat(sB.sent).map(m => m.jid)).size === sA.sent.length + sB.sent.length);
     check('results CSV has all rows', e1.resultsCsv().trim().split('\n').length === 7);
 

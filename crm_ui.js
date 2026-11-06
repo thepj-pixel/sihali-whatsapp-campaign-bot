@@ -75,7 +75,7 @@ function script() {
         }
         var media = '';
         if (h.mediaUrl) media = '<div style="margin-top:6px;"><img src="' + esc(h.mediaUrl) + '" style="max-width:220px;max-height:220px;border-radius:8px;border:1px solid #cbd5e1;display:block;"></div>';
-        else if (h.mediaType === 'poster' || h.mediaType === 'customPoster') media = '<div style="margin-top:6px;"><img src="/media/poster.jpg" style="max-width:200px;border-radius:8px;border:1px solid #cbd5e1;display:block;"></div>';
+        else if (h.mediaType === 'poster' || h.mediaType === 'customPoster') media = '<div style="margin-top:6px;"><img src="/media/report_card_major_works_1x1.jpg" style="max-width:200px;border-radius:8px;border:1px solid #cbd5e1;display:block;"></div>';
         return '<div class="wa-bubble ' + cls + '"><div style="font-size:10px;font-weight:700;opacity:.8;margin-bottom:3px;">' + esc(who) + '</div>' +
             '<div style="white-space:pre-wrap;">' + esc(h.text) + '</div>' + media +
             '<div class="wa-bubble-meta"><span>' + (h.mediaType ? '📎 ' + esc(h.mediaType) : '') + '</span><span>' + esc(h.time || '') + '</span></div></div>';
