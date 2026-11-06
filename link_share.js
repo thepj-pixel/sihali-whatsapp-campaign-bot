@@ -74,4 +74,4 @@ function addLink(reply, user, o = {}) {
     return `${text.trimEnd()}\n\n${line}\n${url}`;
 }
 
-module.exports = { addLink, strip, kindFor, SITE, VOTER_DIR, WORKS_LINE, VOTER_LINE, GAP_MS };
+module.exports = { BLOCK_RX, BLOCK_INTENTS, addLink, strip, kindFor, SITE, VOTER_DIR, WORKS_LINE, VOTER_LINE, GAP_MS };

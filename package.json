@@ -12,7 +12,7 @@
     "test:ladder": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_5step_ladder.cjs')\"",
     "test:readiness": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_mass_campaign_readiness.cjs')\"",
     "test:burst": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_brutal_300_full_pipeline.cjs')\"",
-    "test:all": "npm run test:production && npm run test:broadcast && npm run test:brain && npm run test:queue && npm run test:tabs && npm run test:conversation && npm run test:ladder && npm run test:readiness && npm run test:burst && npm run test:brainv2 && npm run test:brainv3 && npm run test:ops && npm run test:identity && npm run test:crm && npm run test:script && npm run test:nlu && npm run test:v6 && npm run test:login && npm run test:bulk && npm run test:brainlive && npm run test:instruct && npm run test:vikas && npm run test:slipmixed && npm run test:llm && npm run test:links && npm run test:adfaq && npm run test:ui",
+    "test:all": "npm run test:production && npm run test:broadcast && npm run test:brain && npm run test:queue && npm run test:tabs && npm run test:conversation && npm run test:ladder && npm run test:readiness && npm run test:burst && npm run test:brainv2 && npm run test:brainv3 && npm run test:ops && npm run test:identity && npm run test:crm && npm run test:script && npm run test:nlu && npm run test:v6 && npm run test:login && npm run test:bulk && npm run test:brainlive && npm run test:instruct && npm run test:vikas && npm run test:slipmixed && npm run test:llm && npm run test:links && npm run test:adfaq && npm run test:festival && npm run test:ui",
     "test:broadcast": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node test_broadcast_engine.cjs",
     "test:brain": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node -e \"const m=require('./user_memory.js');m.save=()=>{};require('./test_reply_brain.cjs')\"",
     "test:queue": "DEFAULT_SCRIPT=auto SCRIPT_ASK=off node test_chat_queue.cjs",
@@ -34,7 +34,8 @@
     "test:slipmixed": "SCRIPT_ASK=off node test_slip_mixed.cjs",
     "test:llm": "node test_llm_providers.cjs",
     "test:links": "SCRIPT_ASK=off node test_link_share.cjs",
-    "test:adfaq": "node test_ad_faq.cjs"
+    "test:adfaq": "node test_ad_faq.cjs",
+    "test:festival": "node test_festival.cjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.9",

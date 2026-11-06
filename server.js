@@ -264,6 +264,7 @@ if (!fs.existsSync(sessionsDir)) {
 // msg_store.json (gitignored) so a phone that shows "Waiting for this message" can still get it re-sent
 // after a restart/auto-deploy. Without this, retries for bulk/self-test/card sends failed forever.
 const adFaq = require('./ad_faq.js');
+const festivalWelcome = require('./festival_welcome.js');
 const MSG_STORE_FILE = path.join(__dirname, 'msg_store.json');
 const MSG_STORE_MAX = 5000;
 const MSG_STORE = new Map();
@@ -1271,11 +1272,35 @@ async function startSession(sessionObj) {
                 // Record bot reply in memory
                 userMemory.recordMessage(senderPhone, 'bot', replyText, mediaTypeSent, sessionObj.name);
 
+                // Festival welcome (owner 6 Nov): a new voter's first conversation gets the 'प्रमुख कार्य' report card with the
+                // day's festival wish as caption (Dhanteras 6 Nov, Diwali 7–8 Nov, belated to 11 Nov). Once per voter, ever.
+                let festivalSentNow = false;
+                try {
+                    const uFw = userMemory.getUser(senderPhone);
+                    const fwCount = ((uFw && uFw.history) || []).filter(h => h.role === 'user').length;
+                    let fwIntent = '';
+                    try { fwIntent = (replyBrain.classify(body, uFw) || {}).intent || ''; } catch (_) {}
+                    const fwSensitive = linkShare.BLOCK_RX.test(body) || linkShare.BLOCK_INTENTS.has(fwIntent) || engagementPolicy.isOptOutMessage(body);
+                    const fwFile = path.join(__dirname, 'media', festivalWelcome.FILE_9x16);
+                    if (replyText && festivalWelcome.shouldSend(uFw, { userMsgCount: fwCount, sensitive: fwSensitive }) && fs.existsSync(fwFile) && !require('./media_policy.js').isRetired(fwFile)) {
+                        festivalWelcome.markSent(uFw); userMemory.save(); festivalSentNow = true;
+                        const fwCaption = festivalWelcome.captionFor();
+                        setTimeout(async () => {
+                            try {
+                                await sendSafeMessage(sock, replyJid, { image: fs.readFileSync(fwFile), caption: fwCaption });
+                                userMemory.recordMessage(senderPhone, 'bot', fwCaption, 'festival_welcome', sessionObj.name, '/media/' + festivalWelcome.FILE_9x16);
+                                operationsTracker.record('festival_welcome', 'sent', { lineId: sessionObj.id });
+                                logMessage({ session: sessionObj.name, phone: senderPhone, incoming: '[नया वोटर: त्योहार शुभकामना]', reply: fwCaption, status: 'MEDIA_SENT' });
+                            } catch (e) { console.warn('[FestivalWelcome] send failed:', e.message); }
+                        }, 2600);
+                    }
+                } catch (e) { console.warn('[FestivalWelcome hook]', e.message); }
+
                 // v6 daily lock: the day's operator media, once per voter per day, after a real exchange (or when relevant)
                 try {
                     const uDm = userMemory.getUser(senderPhone);
                     const dm = operatorControl.dayMediaFor(uDm, { intent: replyBrain.classify(body, uDm).intent });
-                    if (dm && replyText && (!mediaTypeSent || /^nlu_/.test(String(mediaTypeSent)))) {
+                    if (dm && replyText && !festivalSentNow && (!mediaTypeSent || /^nlu_/.test(String(mediaTypeSent)))) {
                         operatorControl.markDayMedia(uDm); userMemory.save();
                         setTimeout(async () => {
                             try {
@@ -2586,7 +2611,7 @@ app.get('/api/export/dialer.csv', (req, res) => {
 // ---------- Media Bank: one-click upload (image / video / pdf) ----------
 const { mediaTypeOf } = require('./broadcast_engine.js');
 const MEDIA_DIR = path.join(__dirname, 'media');
-const PROTECTED_MEDIA = new Set(['poster.jpg', 'campaign_reel.mp4', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf', 'baba_face.jpg', 'baba_33_transparent.png']);
+const PROTECTED_MEDIA = new Set(['report_card_major_works_9x16.jpg', 'report_card_major_works_1x1.jpg', 'poster.jpg', 'campaign_reel.mp4', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf', 'baba_face.jpg', 'baba_33_transparent.png']);
 const MEDIA_MAX_BYTES = 45 * 1024 * 1024;
 
 function safeMediaName(original) {

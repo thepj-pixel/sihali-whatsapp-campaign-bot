@@ -21,6 +21,20 @@ const REELS = [
 
 const POSTERS = [
     {
+        id: 'report_card_major_works_9x16',
+        filename: 'report_card_major_works_9x16.jpg',
+        title: 'प्रमुख कार्य रिपोर्ट कार्ड (9x16, Status)',
+        tags: ['vikas', 'kaam', 'report', 'pramukh', 'विकास', 'काम', 'प्रमुख'],
+        caption: 'बाबा अभय सिंह (मोटी आंगली वाले) — ग्राम पंचायत सिहाली खुर्द के प्रमुख काम 🙏'
+    },
+    {
+        id: 'report_card_major_works_1x1',
+        filename: 'report_card_major_works_1x1.jpg',
+        title: 'प्रमुख कार्य रिपोर्ट कार्ड (1x1, ads/bulk)',
+        tags: ['vikas', 'kaam', 'report', 'pramukh', 'विकास', 'काम', 'प्रमुख'],
+        caption: 'बाबा अभय सिंह (मोटी आंगली वाले) — ग्राम पंचायत सिहाली खुर्द के प्रमुख काम 🙏'
+    },
+    {
         id: 'poster_vikas_card',
         filename: 'poster.jpg',
         github_url: 'https://github.com/thepj-pixel/sihali-whatsapp-campaign-bot/raw/main/media/poster.jpg',

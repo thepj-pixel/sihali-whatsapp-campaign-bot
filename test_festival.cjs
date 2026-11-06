@@ -1,0 +1,17 @@
+const f = require('./festival_welcome.js'); let ok=0,bad=0; const t=(c,m)=>c?ok++:(bad++,console.log('FAIL',m));
+const at=(iso)=>new Date(iso);
+t(/धनतेरस/.test(f.captionFor(at('2026-11-06T06:00:00Z'))),'6 Nov dhanteras');
+t(/धनतेरस/.test(f.captionFor(at('2026-11-05T19:00:00Z'))),'6 Nov 00:30 IST dhanteras');
+t(/दीपावली की हार्दिक/.test(f.captionFor(at('2026-11-06T19:00:00Z'))),'7 Nov 00:30 IST diwali');
+t(/दीपावली की हार्दिक/.test(f.captionFor(at('2026-11-08T12:00:00Z'))),'8 Nov diwali');
+t(/भाई दूज/.test(f.captionFor(at('2026-11-10T12:00:00Z'))),'10 Nov belated');
+t(!/शुभकामनाएं/.test(f.captionFor(at('2026-11-12T12:00:00Z'))),'12 Nov plain');
+for (const d of ['2026-11-06','2026-11-07','2026-11-09','2026-11-13']) { const c=f.captionFor(at(d+'T06:00:00Z')); t(!/वोट|मुहर|क्रम|\d{1,2}\s*नं/.test(c),'no vote ask/serial '+d); }
+t(f.shouldSend({history:[]},{userMsgCount:1}),'new voter');
+t(!f.shouldSend({festivalWelcomeAt:'x'},{userMsgCount:1}),'once');
+t(!f.shouldSend({},{userMsgCount:5}),'old voter');
+t(!f.shouldSend({broadcastOptOut:true},{userMsgCount:1}),'stop');
+t(!f.shouldSend({},{userMsgCount:1,sensitive:true}),'sensitive');
+t(!require('./media_policy.js').isRetired(f.FILE_9x16)&&!require('./media_policy.js').isRetired(f.FILE_1x1),'not retired');
+t(require('fs').existsSync(__dirname+'/media/'+f.FILE_9x16),'file exists');
+console.log(`test:festival ${ok}/${ok+bad}`); process.exit(bad?1:0);
