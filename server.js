@@ -914,6 +914,7 @@ async function startSession(sessionObj) {
                     // Owner (5 Nov): this line's vCard arrives instantly after the first reply, once per contact per line.
                     // Card only — no extra "please save" text stacked on the short intro.
                     sendLineContactCardOnce(sock, replyJid, senderPhone, sessionObj, { withPrompt: false }).catch(() => {});
+                    maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, true);
                     continue;
                 }
 
@@ -1274,27 +1275,7 @@ async function startSession(sessionObj) {
 
                 // Festival welcome (owner 6 Nov): a new voter's first conversation gets the 'प्रमुख कार्य' report card with the
                 // day's festival wish as caption (Dhanteras 6 Nov, Diwali 7–8 Nov, belated to 11 Nov). Once per voter, ever.
-                let festivalSentNow = false;
-                try {
-                    const uFw = userMemory.getUser(senderPhone);
-                    const fwCount = ((uFw && uFw.history) || []).filter(h => h.role === 'user').length;
-                    let fwIntent = '';
-                    try { fwIntent = (replyBrain.classify(body, uFw) || {}).intent || ''; } catch (_) {}
-                    const fwSensitive = linkShare.BLOCK_RX.test(body) || linkShare.BLOCK_INTENTS.has(fwIntent) || engagementPolicy.isOptOutMessage(body);
-                    const fwFile = path.join(__dirname, 'media', festivalWelcome.FILE_9x16);
-                    if (replyText && festivalWelcome.shouldSend(uFw, { userMsgCount: fwCount, sensitive: fwSensitive }) && fs.existsSync(fwFile) && !require('./media_policy.js').isRetired(fwFile)) {
-                        festivalWelcome.markSent(uFw); userMemory.save(); festivalSentNow = true;
-                        const fwCaption = festivalWelcome.captionFor();
-                        setTimeout(async () => {
-                            try {
-                                await sendSafeMessage(sock, replyJid, { image: fs.readFileSync(fwFile), caption: fwCaption });
-                                userMemory.recordMessage(senderPhone, 'bot', fwCaption, 'festival_welcome', sessionObj.name, '/media/' + festivalWelcome.FILE_9x16);
-                                operationsTracker.record('festival_welcome', 'sent', { lineId: sessionObj.id });
-                                logMessage({ session: sessionObj.name, phone: senderPhone, incoming: '[नया वोटर: त्योहार शुभकामना]', reply: fwCaption, status: 'MEDIA_SENT' });
-                            } catch (e) { console.warn('[FestivalWelcome] send failed:', e.message); }
-                        }, 2600);
-                    }
-                } catch (e) { console.warn('[FestivalWelcome hook]', e.message); }
+                const festivalSentNow = maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, !!replyText);
 
                 // v6 daily lock: the day's operator media, once per voter per day, after a real exchange (or when relevant)
                 try {
@@ -1488,6 +1469,31 @@ function autoSaveContact({ phone, name, pushName, lineId, sock, jid, source }) {
 
 /** Send this line's contact card + "please save" line exactly once per person. */
 const contactCard = require('./contact_card.js');
+
+// Festival welcome (owner 6 Nov): a new voter's first conversation gets the 'प्रमुख कार्य' report card with the day's
+// festival wish as caption (festival_welcome.js). Once per voter, ever; skipped on STOP/abuse/grief/complaint.
+function maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, replied = true) {
+    try {
+        const uFw = userMemory.getUser(senderPhone);
+        const fwCount = ((uFw && uFw.history) || []).filter(h => h.role === 'user').length;
+        let fwIntent = '';
+        try { fwIntent = (replyBrain.classify(body, uFw) || {}).intent || ''; } catch (_) {}
+        const fwSensitive = linkShare.BLOCK_RX.test(body) || linkShare.BLOCK_INTENTS.has(fwIntent) || engagementPolicy.isOptOutMessage(body);
+        const fwFile = path.join(__dirname, 'media', festivalWelcome.FILE_9x16);
+        if (!replied || !festivalWelcome.shouldSend(uFw, { userMsgCount: fwCount, sensitive: fwSensitive }) || !fs.existsSync(fwFile) || require('./media_policy.js').isRetired(fwFile)) return false;
+        festivalWelcome.markSent(uFw); userMemory.save();
+        const fwCaption = festivalWelcome.captionFor();
+        setTimeout(async () => {
+            try {
+                await sendSafeMessage(sock, replyJid, { image: fs.readFileSync(fwFile), caption: fwCaption });
+                userMemory.recordMessage(senderPhone, 'bot', fwCaption, 'festival_welcome', sessionObj.name, '/media/' + festivalWelcome.FILE_9x16);
+                operationsTracker.record('festival_welcome', 'sent', { lineId: sessionObj.id });
+                logMessage({ session: sessionObj.name, phone: senderPhone, incoming: '[नया वोटर: त्योहार शुभकामना]', reply: fwCaption, status: 'MEDIA_SENT' });
+            } catch (e) { console.warn('[FestivalWelcome] send failed:', e.message); }
+        }, 2600);
+        return true;
+    } catch (e) { console.warn('[FestivalWelcome hook]', e.message); return false; }
+}
 async function sendLineContactCardOnce(sock, jid, phone, sessionObj, { withPrompt = true } = {}) {
     const u = userMemory.getUser(phone);
     if (!u || !contactCard.needsCard(u, sessionObj.id)) return false; // once per contact PER LINE (contact_card.js)
