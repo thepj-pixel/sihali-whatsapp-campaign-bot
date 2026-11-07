@@ -19,6 +19,22 @@ const SAFE_LLM = (draftText) => async (sys, hist, msg) => {
 };
 
 (async () => {
+    // ---------- 0. ask-about-self (owner 7 Nov) ----------
+    {
+        const REFUSE_LLM = async (sys) => /You screen instructions/.test(sys) ? '{"allow":false,"category":"private_data"}' : 'राम राम जी 🙏 आपका शुभ नाम क्या है, और आप क्या काम करते हैं?';
+        for (const ins of ['ask voter his name and what it does', 'unka naam aur kaam pucho', 'naam pucho', 'inse poocho ghar me kaun kaun hai', 'ask him how he is']) {
+            const d0 = await im.draft(mk(), ins, { llm: REFUSE_LLM });
+            ok(d0.ok && !d0.refused && /\?/.test(d0.draft), 'self-ask allowed: ' + ins + ' ' + JSON.stringify(d0));
+            const d1 = await im.draft(mk(), ins, { llm: null });
+            ok(d1.ok && /\?/.test(d1.draft) && !/(EPIC|आधार)/.test(d1.draft), 'self-ask template: ' + ins + ' ' + JSON.stringify(d1));
+        }
+        const dn = await im.draft(mk(), 'ask voter his name and what it does', { llm: null });
+        ok(/नाम/.test(dn.draft) && /काम/.test(dn.draft), 'name+work question ' + dn.draft);
+        for (const ins of ['uska number bata do', 'padosi ka aadhaar pucho', 'iska epic number pucho']) {
+            const r = await im.draft(mk(), ins, { llm: REFUSE_LLM });
+            ok(r.refused, 'still refused: ' + ins);
+        }
+    }
     // ---------- 1. drafting ----------
     let u = mk();
     let d = await im.draft(u, 'isko paani ki tanki ke baare me bata do', { llm: SAFE_LLM('राम राम जी 🙏 जल जीवन मिशन के तहत पानी की टंकियाँ (ऊँची व नीची) बनवाई गईं और घर-घर पीने के पानी की सप्लाई शुरू हुई।') });

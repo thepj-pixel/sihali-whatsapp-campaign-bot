@@ -188,7 +188,7 @@ const tabPanes = () => `
                         <div>
                             <b>1. Audience</b><br>
                             <textarea id="sc-phones" rows="5" style="width:100%;" placeholder="phone, name, ward (one per line)"></textarea>
-                            <b>Contacts with tag</b> <select id="sc-tag"><option value="">— none —</option></select> max people <input id="sc-max" type="number" min="0" style="width:56px;" placeholder="all"><br>
+                            <b>Contacts with tag</b> <select id="sc-tag"><option value="">— none —</option></select> max people <input id="sc-maxppl" type="number" min="0" style="width:56px;" placeholder="all"><br>
                             <label><input type="checkbox" id="sc-contacts"> + all saved contacts</label> ward <input id="sc-ward" style="width:46px;"> village <input id="sc-village" style="width:90px;">
                             <br><label><input type="checkbox" id="sc-virodhi"> include opponents (virodhi)</label>
                             <br><label><input type="checkbox" id="sc-card" checked> send the line's contact card after the first message (once per person — needed so they can see our Status)</label>
@@ -280,7 +280,7 @@ const script = () => `
                     var lines = Array.prototype.slice.call(document.querySelectorAll('.sc-line:checked')).map(function (c) { return c.value; });
                     var mf = Array.prototype.slice.call(document.querySelectorAll('.sc-mf:checked')).map(function (c) { return c.value; });
                     var date = el('sc-date').value || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-                    var b = { name: el('sc-name').value, phones: el('sc-phones').value, useContacts: el('sc-contacts').checked, contactTag: el('sc-tag').value, maxRecipients: el('sc-max').value, contactCard: el('sc-card').checked, contactWard: el('sc-ward').value, contactVillage: el('sc-village').value, includeVirodhi: el('sc-virodhi').checked, messages: el('sc-msgs').value, mediaFiles: mf, lines: lines, minGapSec: el('sc-min').value, maxGapSec: el('sc-max').value, quietHours: el('sc-quiet').checked, date: date };
+                    var b = { name: el('sc-name').value, phones: el('sc-phones').value, useContacts: el('sc-contacts').checked, contactTag: el('sc-tag').value, maxRecipients: el('sc-maxppl').value, contactCard: el('sc-card').checked, contactWard: el('sc-ward').value, contactVillage: el('sc-village').value, includeVirodhi: el('sc-virodhi').checked, messages: el('sc-msgs').value, mediaFiles: mf, lines: lines, minGapSec: el('sc-min').value, maxGapSec: el('sc-max').value, quietHours: el('sc-quiet').checked, date: date };
                     if (el('sc-preset').value) b.preset = el('sc-preset').value; else { b.windowStart = date + 'T' + el('sc-start').value; b.windowEnd = date + 'T' + el('sc-end').value; }
                     return b;
                 }

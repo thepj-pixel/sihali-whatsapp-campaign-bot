@@ -75,7 +75,22 @@ function rulesCheck(instruction) {
     for (const [cat, rx] of RULES) if (rx.test(t)) return cat;
     return null;
 }
-const LLM_SAFETY_SYS = 'You screen instructions that a campaign operator gives to a WhatsApp bot about ONE voter, for a village panchayat election in India. Refuse (allow=false) if the instruction asks the bot to harass, pester, spam or keep messaging, threaten, insult, bribe or offer money/liquor/gifts, use caste or religion, attack or badmouth opponents, lie, promise dates/jobs/guarantees, or reveal anyone\'s private data (phone, EPIC, Aadhaar, address). Polite informing, greeting, asking how they are, reminding about the vote date, or telling a development work fact is fine. Reply ONLY JSON: {"allow":true|false,"category":"harass|spam|threaten|insult|bribe|caste_religion|attack_opponent|lie_promise|private_data|ok"}';
+const LLM_SAFETY_SYS = 'You screen instructions that a campaign operator gives to a WhatsApp bot about ONE voter, for a village panchayat election in India. Refuse (allow=false) if the instruction asks the bot to harass, pester, spam or keep messaging, threaten, insult, bribe or offer money/liquor/gifts, use caste or religion, attack or badmouth opponents, lie, promise dates/jobs/guarantees, or reveal anyone\'s private data (phone, EPIC, Aadhaar, address). Asking the voter about THEMSELVES (their own name, work, family, ward, how they are, what they need) is fine and is NOT private data. Polite informing, greeting, asking how they are, reminding about the vote date, or telling a development work fact is fine. Reply ONLY JSON: {"allow":true|false,"category":"harass|spam|threaten|insult|bribe|caste_religion|attack_opponent|lie_promise|private_data|ok"}';
+// 7 Nov (owner): asking the voter about THEMSELVES (name, work, family, ward, haal-chaal, needs) is conversation, not private data.
+const ASK_SELF_RX = /((pooch|puch|poochh|puchh|pucho|poocho|ask|पूछ)[\s\S]{0,60}|^[\s\S]{0,60}(pooch|puch|pucho|poocho|ask|पूछ))/i;
+const SELF_TOPIC_RX = /(\bname\b|naam|नाम|\bwork\b|kaam\s*(kya|kaun|karte|karta|karti|dhand)|kya\s*kaam|what\s*(he|she|they|it)?\s*do(es)?|occupation|job|dhandha|dhanda|naukri\s*kya|काम\s*क्या|क्या\s*काम|kya\s*karte|family|parivaar|parivar|ghar\s*(me|mein)\s*kaun|परिवार|ward|वार्ड|gaon|village|गाँव|haal|hal\s*chal|haalchaal|हालचाल|kaise\s*ho|kaise\s*hai|how\s*(he|she|they)\s*(is|are)|how\s*are|kya\s*chahiye|samasya|problem|dikkat|zaroorat|ज़रूरत|समस्या)/i;
+function asksAboutSelf(t) { t = String(t || ''); return ASK_SELF_RX.test(t) && SELF_TOPIC_RX.test(t) && !/(uska|uski|uske|dusre|doosre|kisi\s*aur|padosi|उसका|उसकी|दूसरे|किसी\s*और)/i.test(t); }
+function selfQuestion(instruction, user) {
+    const t = String(instruction || '');
+    const parts = [];
+    if (/(\bname\b|naam|नाम)/i.test(t)) parts.push('आपका शुभ नाम क्या है');
+    if (/(\bwork\b|kaam|what\s*(he|she|they|it)?\s*do(es)?|occupation|job|dhand|naukri|kya\s*karte|काम)/i.test(t)) parts.push('आप क्या काम करते हैं');
+    if (/(family|parivaar|parivar|ghar\s*(me|mein)\s*kaun|परिवार)/i.test(t)) parts.push('घर-परिवार में कौन-कौन है');
+    if (/(ward|वार्ड)/i.test(t)) parts.push('आप किस वार्ड से हैं');
+    if (!parts.length) parts.push('घर में सब राज़ी-ख़ुशी है');
+    return `${honOf(user)} 🙏 ${parts.slice(0, 2).join(', और ')}?`;
+}
+
 async function safetyCheck(instruction, { llm = null } = {}) {
     const t = String(instruction || '').trim();
     if (!t) return { ok: false, refused: true, category: 'empty', reason: 'Write an instruction first.', options: [] };
@@ -88,7 +103,7 @@ async function safetyCheck(instruction, { llm = null } = {}) {
             const m = String(out || '').replace(/<think>[\s\S]*?<\/think>/gi, '').match(/\{[\s\S]*?\}/);
             if (m) {
                 const j = JSON.parse(m[0]);
-                if (j && j.allow === false) return { ...refusal(String(j.category || 'unsafe')), by: 'llm' };
+                if (j && j.allow === false && !(asksAboutSelf(t) && /^(private_data|unsafe|ok)$/.test(String(j.category || 'unsafe')))) return { ...refusal(String(j.category || 'unsafe')), by: 'llm' };
             }
         } catch (e) { /* LLM screen is a second layer; rules already passed */ }
     }
@@ -207,8 +222,9 @@ async function draft(user, instruction, { llm = null, pendingStyle = false } = {
     const safe = await safetyCheck(instruction, { llm });
     if (!safe.ok) return { ok: false, refused: true, reason: safe.reason, category: safe.category, options: safe.options || [] };
     if (user && (user.broadcastOptOut || user.consentStatus === 'REJECTED')) return { ok: false, refused: true, category: 'stop', reason: 'Can\'t do that: this voter said STOP / declined. The bot will not message them.', options: [] };
-    const items = factsFor(instruction);
-    const needs = NEEDS_FACT.test(instruction);
+    const selfAsk = asksAboutSelf(instruction);
+    const items = selfAsk ? [] : factsFor(instruction);
+    const needs = !selfAsk && NEEDS_FACT.test(instruction);
     if (!items.length && needs) {
         return { ok: true, draft: '', facts: [], missingFact: true, note: 'The parchas have no fact for this — nothing was invented. Write your own message below or change the instruction.' };
     }
@@ -226,6 +242,12 @@ async function draft(user, instruction, { llm = null, pendingStyle = false } = {
                 lastWhy = why;
             } catch (e) { lastWhy = 'llm_error'; break; }
         }
+    }
+    // backstop for "ask them their name / work / family": a plain question, no facts needed
+    if (selfAsk) {
+        const q = selfQuestion(instruction, user);
+        const qq = pendingStyle ? q.replace(/^[^🙏]*🙏\s*/, '') : q;
+        return { ok: true, draft: qq, facts: [], source: 'template', note: lastWhy ? 'AI draft was rejected (' + lastWhy + '); using a simple question.' : undefined };
     }
     // backstop: the parcha line itself (grounded, rule-checked)
     if (items.length) {
@@ -290,4 +312,4 @@ function status(user) {
     return { pending: p ? { text: p.text, line: p.line, at: p.at, by: p.by } : null, lastPendingUsed: op.lastPendingUsed || null, muted: isMuted(user), mutedAt: user && user.botMuted ? user.botMuted.at : null, optedOut: !!(user && (user.broadcastOptOut || user.consentStatus === 'REJECTED')), effectiveMode: oc.effectiveMode(user) };
 }
 
-module.exports = { safetyCheck, rulesCheck, factsFor, draft, checkText, setPending, clearPending, pendingOf, weavePending, setMute, isMuted, status, refusal, INSTR_LEAK_RX, SKIP_INTENTS };
+module.exports = { asksAboutSelf, selfQuestion, safetyCheck, rulesCheck, factsFor, draft, checkText, setPending, clearPending, pendingOf, weavePending, setMute, isMuted, status, refusal, INSTR_LEAK_RX, SKIP_INTENTS };
