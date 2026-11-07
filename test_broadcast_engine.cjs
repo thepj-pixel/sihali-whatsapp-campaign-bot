@@ -75,7 +75,7 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     check('{name} is not treated as spintax', renderMessage('{name} {हाँ|हां}', { name: 'Ram' }, rng).startsWith('Ram '));
 
     // ---- caps validation ----
-    check('default caps valid', normalizeCaps({}).errors.length === 0 && normalizeCaps({}).caps.hourlyCap === 60 && normalizeCaps({}).caps.dailyCap === 250);
+    check('default caps valid', normalizeCaps({}).errors.length === 0 && normalizeCaps({}).caps.hourlyCap === 15 && normalizeCaps({}).caps.dailyCap === 40);
     check('too-fast delay rejected', normalizeCaps({ minDelaySec: 2 }).errors.length > 0);
     check('max<min rejected', normalizeCaps({ minDelaySec: 40, maxDelaySec: 30 }).errors.length > 0);
     check('quiet hours 21-8 IST', inQuietHours(Date.UTC(2026, 10, 4, 17, 0), normalizeCaps({}).caps) && !inQuietHours(Date.UTC(2026, 10, 4, 6, 30), normalizeCaps({}).caps));
@@ -140,7 +140,7 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     NOW += 5000; // only 5s later
     await Promise.all(await e2.tick());
     check('random delay enforced (no 2nd send after 5s)', sC.sent.length === 1);
-    NOW += 61000;
+    NOW += 301000;
     await Promise.all(await e2.tick());
     check('2nd send after delay window', sC.sent.length === 2);
 
@@ -178,7 +178,7 @@ async function drain(engine, maxTicks = 500, stepMs = 61000) {
     NOW += 30000; await Promise.all(await e5.tick());
     check('stays paused until reconnect is stable', sF.sent.length === 1);
     NOW += 130000; await Promise.all(await e5.tick());
-    NOW += 61000; await Promise.all(await e5.tick());
+    NOW += 301000; await Promise.all(await e5.tick());
     check('resumes after stable reconnect', sF.sent.length >= 2);
 
     // ---- opt-out mid-campaign ----

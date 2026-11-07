@@ -24,14 +24,17 @@ const DOC_EXT = ['.pdf'];
 const mediaTypeOf = ext => IMAGE_EXT.includes(ext) ? 'image' : VIDEO_EXT.includes(ext) ? 'video' : DOC_EXT.includes(ext) ? 'document' : null;
 
 const DEFAULT_CAPS = {
-    hourlyCap: 60,
-    dailyCap: 250,
-    minDelaySec: 20,
-    maxDelaySec: 60,
+    hourlyCap: 15,
+    dailyCap: 40,
+    minDelaySec: 120,
+    maxDelaySec: 300,
     quietStartHour: 21, // IST, inclusive
     quietEndHour: 8     // IST, exclusive. Set start === end to disable quiet hours
 };
-const LIMITS = { hourlyCap: [1, 200], dailyCap: [1, 1000], minDelaySec: [10, 600], maxDelaySec: [10, 1800] };
+// HARD SAFETY CEILING (7 Nov 2026, after a 24 h restriction): never faster than this.
+const LIMITS = process.env.BULK_TEST_LIMITS === '1'
+    ? { hourlyCap: [1, 200], dailyCap: [1, 1000], minDelaySec: [10, 600], maxDelaySec: [10, 1800] } // unit tests only (fake clock)
+    : { hourlyCap: [1, 20], dailyCap: [1, 40], minDelaySec: [90, 600], maxDelaySec: [150, 1800] };
 const MAX_CONSECUTIVE_ERRORS = 3;
 const RECONNECT_STABLE_MS = 2 * 60 * 1000;
 const MAX_CHECK_ATTEMPTS = 3;

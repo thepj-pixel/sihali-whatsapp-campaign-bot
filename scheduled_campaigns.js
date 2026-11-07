@@ -26,6 +26,9 @@ const DEFAULTS = { minGapSec: 20, maxGapSec: 90, hourlyCap: 50, dailyCap: 250, g
 const AUTO_PAUSE = { errorStreak: 3, disconnectMs: 2 * 60e3, recentHours: 20 };
 const BAN_RX = /rate-?overlimit|too many|\b429\b|\b403\b|forbidden|not-authori[sz]ed|\b401\b|banned|\bban\b|blocked|restricted|suspended|logged ?out|account.*(locked|disabled)|spam/i;
 const MAX_RECIPIENTS = 500;
+// HARD SAFETY CEILING (7 Nov 2026): fast cold sends got the line restricted for 24 h.
+// Real (non-test) campaigns can never go faster than this, whatever the form says.
+const SAFE = { maxHourly: 20, maxDaily: 40, minGapSec: 90 };
 const PRESETS = { morning: [9, 11.5], evening: [17.5, 20], dopahar: [13, 16] };
 
 /** "2026-11-05T08:00" (IST wall clock) -> epoch ms. Also accepts full ISO with zone. */
@@ -200,11 +203,12 @@ class ScheduledCampaigns {
             if (end - start > 16 * 3600e3) errors.push('Window can be at most 16 hours');
             if (start < now) start = now + 30e3; // window already open: begin in ~30s
         }
-        const minGapSec = Math.max(10, Math.min(600, Number(input.minGapSec) || DEFAULTS.minGapSec));
-        const maxGapSec = Math.max(minGapSec, Math.min(1800, Number(input.maxGapSec) || DEFAULTS.maxGapSec));
+        const safe = !input.test;
+        const minGapSec = Math.max(safe ? SAFE.minGapSec : 10, Math.min(600, Number(input.minGapSec) || DEFAULTS.minGapSec));
+        const maxGapSec = Math.max(minGapSec + (safe ? 60 : 0), Math.min(1800, Number(input.maxGapSec) || DEFAULTS.maxGapSec));
         const caps = {
-            hourlyCap: Math.max(1, Math.min(200, Number(input.hourlyCap) || DEFAULTS.hourlyCap)),
-            dailyCap: Math.max(1, Math.min(1000, Number(input.dailyCap) || DEFAULTS.dailyCap))
+            hourlyCap: Math.max(1, Math.min(safe ? SAFE.maxHourly : 200, Number(input.hourlyCap) || DEFAULTS.hourlyCap)),
+            dailyCap: Math.max(1, Math.min(safe ? SAFE.maxDaily : 1000, Number(input.dailyCap) || DEFAULTS.dailyCap))
         };
 
         // lines
