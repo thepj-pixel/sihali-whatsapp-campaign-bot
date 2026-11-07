@@ -1479,14 +1479,14 @@ function maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, rep
         let fwIntent = '';
         try { fwIntent = (replyBrain.classify(body, uFw) || {}).intent || ''; } catch (_) {}
         const fwSensitive = linkShare.BLOCK_RX.test(body) || linkShare.BLOCK_INTENTS.has(fwIntent) || engagementPolicy.isOptOutMessage(body);
-        const fwFile = path.join(__dirname, 'media', festivalWelcome.FILE_9x16);
+        const fwName = festivalWelcome.fileFor(); const fwFile = path.join(__dirname, 'media', fwName);
         if (!replied || !festivalWelcome.shouldSend(uFw, { userMsgCount: fwCount, sensitive: fwSensitive }) || !fs.existsSync(fwFile) || require('./media_policy.js').isRetired(fwFile)) return false;
         festivalWelcome.markSent(uFw); userMemory.save();
         const fwCaption = festivalWelcome.captionFor();
         setTimeout(async () => {
             try {
                 await sendSafeMessage(sock, replyJid, { image: fs.readFileSync(fwFile), caption: fwCaption });
-                userMemory.recordMessage(senderPhone, 'bot', fwCaption, 'festival_welcome', sessionObj.name, '/media/' + festivalWelcome.FILE_9x16);
+                userMemory.recordMessage(senderPhone, 'bot', fwCaption, 'festival_welcome', sessionObj.name, '/media/' + fwName);
                 operationsTracker.record('festival_welcome', 'sent', { lineId: sessionObj.id });
                 logMessage({ session: sessionObj.name, phone: senderPhone, incoming: '[नया वोटर: त्योहार शुभकामना]', reply: fwCaption, status: 'MEDIA_SENT' });
             } catch (e) { console.warn('[FestivalWelcome] send failed:', e.message); }
@@ -2618,7 +2618,7 @@ app.get('/api/export/dialer.csv', (req, res) => {
 // ---------- Media Bank: one-click upload (image / video / pdf) ----------
 const { mediaTypeOf } = require('./broadcast_engine.js');
 const MEDIA_DIR = path.join(__dirname, 'media');
-const PROTECTED_MEDIA = new Set(['report_card_major_works_9x16.jpg', 'report_card_major_works_1x1.jpg', 'poster.jpg', 'campaign_reel.mp4', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf', 'baba_face.jpg', 'baba_33_transparent.png']);
+const PROTECTED_MEDIA = new Set(['diwali_card_ivory.jpg', 'report_card_major_works_9x16.jpg', 'report_card_major_works_1x1.jpg', 'poster.jpg', 'campaign_reel.mp4', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf', 'baba_face.jpg', 'baba_33_transparent.png']);
 const MEDIA_MAX_BYTES = 45 * 1024 * 1024;
 
 function safeMediaName(original) {

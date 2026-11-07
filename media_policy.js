@@ -32,7 +32,7 @@ function approved(kind, dir = MEDIA_DIR) {
 }
 
 // Source assets the engines use (photo cut-outs, fonts) and retired demo media: kept on disk, not shown in the Media Bank.
-const HIDDEN_FROM_BANK = new Set(['baba_face.jpg', 'baba_33_transparent.png', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf']);
+const HIDDEN_FROM_BANK = new Set(['F_diwali_ivory_1.jpg' /* same card, tracked as diwali_card_ivory.jpg */, 'baba_face.jpg', 'baba_33_transparent.png', 'NotoSansDevanagari-Bold.ttf', 'NotoSansDevanagari-Regular.ttf']);
 function hiddenFromBank(f) { const b = path.basename(String(f || '')); return HIDDEN_FROM_BANK.has(b) || isRetired(b); }
 
 module.exports = { hiddenFromBank, isRetired, assertSendable, approved, RETIRED_FILES };

@@ -5,6 +5,9 @@
  */
 const FILE_9x16 = 'report_card_major_works_9x16.jpg';
 const FILE_1x1 = 'report_card_major_works_1x1.jpg';
+// 7 Nov (owner): no election media during the festival — until 11 Nov the welcome image is the Diwali card.
+const FILE_DIWALI = 'diwali_card_ivory.jpg';
+function fileFor(now = new Date()) { return istDate(now) <= '2026-11-11' ? FILE_DIWALI : FILE_9x16; }
 
 function istDate(now = new Date()) {
     const d = new Date(now.getTime() + 330 * 60000);
@@ -28,4 +31,4 @@ function shouldSend(user, { userMsgCount = 0, sensitive = false } = {}) {
 }
 function markSent(user, at = new Date().toISOString()) { if (user) user.festivalWelcomeAt = at; }
 
-module.exports = { FILE_9x16, FILE_1x1, captionFor, shouldSend, markSent, istDate };
+module.exports = { FILE_DIWALI, fileFor, FILE_9x16, FILE_1x1, captionFor, shouldSend, markSent, istDate };

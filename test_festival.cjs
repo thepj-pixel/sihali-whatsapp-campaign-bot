@@ -14,4 +14,8 @@ t(!f.shouldSend({broadcastOptOut:true},{userMsgCount:1}),'stop');
 t(!f.shouldSend({},{userMsgCount:1,sensitive:true}),'sensitive');
 t(!require('./media_policy.js').isRetired(f.FILE_9x16)&&!require('./media_policy.js').isRetired(f.FILE_1x1),'not retired');
 t(require('fs').existsSync(__dirname+'/media/'+f.FILE_9x16),'file exists');
+t(f.fileFor(new Date('2026-11-07T02:00:00Z'))===f.FILE_DIWALI,'7 Nov: Diwali card, no election media');
+t(f.fileFor(new Date('2026-11-11T16:00:00Z'))===f.FILE_DIWALI,'11 Nov: Diwali card');
+t(f.fileFor(new Date('2026-11-12T04:00:00Z'))===f.FILE_9x16,'12 Nov: report card');
+t(require('fs').existsSync(__dirname+'/media/'+f.FILE_DIWALI)&&!require('./media_policy.js').isRetired(f.FILE_DIWALI),'diwali card exists, approved');
 console.log(`test:festival ${ok}/${ok+bad}`); process.exit(bad?1:0);
