@@ -225,6 +225,10 @@ async function draft(user, instruction, { llm = null, pendingStyle = false } = {
     const selfAsk = asksAboutSelf(instruction);
     const items = selfAsk ? [] : factsFor(instruction);
     const needs = !selfAsk && NEEDS_FACT.test(instruction);
+    if (selfAsk) { // deterministic: the LLM read "kaam" as Abhay Singh ji's works (7 Nov live check)
+        const q = selfQuestion(instruction, user);
+        return { ok: true, draft: pendingStyle ? q.replace(/^[^🙏]*🙏\s*/, '') : q, facts: [], source: 'template' };
+    }
     if (!items.length && needs) {
         return { ok: true, draft: '', facts: [], missingFact: true, note: 'The parchas have no fact for this — nothing was invented. Write your own message below or change the instruction.' };
     }
