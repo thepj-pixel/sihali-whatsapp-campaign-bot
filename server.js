@@ -2939,6 +2939,29 @@ setInterval(() => {
 }, 5 * 60 * 1000).unref();
 
 // Manual contact entry / paste (one per line: phone, name, ward, village)
+// Save a list of numbers into a line's own WhatsApp address book (app-state contactAction), slowly (one every 3 s).
+// POST /api/contacts/wa-sync {line?:'sim_636', contacts:[{phone,name}]}  → queued count. Sends NO messages.
+app.post('/api/contacts/wa-sync', (req, res) => {
+    try {
+        const b = req.body || {};
+        const lineId = String(b.line || 'sim_636');
+        const sess = SESSIONS.find(s => s.id === lineId && s.status === 'CONNECTED' && s.sock);
+        if (!sess) return res.status(400).json({ success: false, error: 'Line not connected: ' + lineId });
+        if (typeof sess.sock.addOrEditContact !== 'function') return res.status(400).json({ success: false, error: 'This WhatsApp library version can not save contacts' });
+        const list = Array.isArray(b.contacts) ? b.contacts.slice(0, 1500) : [];
+        let queued = 0, bad = 0;
+        for (const c of list) {
+            const phone = contactUtils.normalizeIndianPhone(c && c.phone);
+            const name = String((c && c.name) || '').trim().slice(0, 60);
+            if (!phone || !name) { bad++; continue; }
+            queueWhatsAppContactSync(sess.sock, `${phone}@s.whatsapp.net`, name);
+            queued++;
+        }
+        res.json({ success: true, line: lineId, queued, bad, queueLength: waContactSyncQueue.length, etaMin: Math.ceil(waContactSyncQueue.length * 3 / 60) });
+    } catch (e) { res.status(400).json({ success: false, error: e.message }); }
+});
+app.get('/api/contacts/wa-sync/status', (req, res) => res.json({ success: true, queueLength: waContactSyncQueue.length, busy: waContactSyncBusy, enabled: WA_SYNC_CONTACTS }));
+
 app.post('/api/contacts/bulk-add', (req, res) => {
     try {
         const rows = [...contactUtils.parsePastedContacts(req.body.text || req.body.rows || ''), ...(req.body.csvText ? contactUtils.parseContactCsv(req.body.csvText) : [])];
