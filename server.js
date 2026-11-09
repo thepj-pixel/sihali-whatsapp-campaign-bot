@@ -2850,6 +2850,7 @@ app.post('/api/mulaqat/delete', (req, res) => {
     res.json({ success: ok });
 });
 // ==================== OPS v4: Overview / विरोधी list / Scheduled bulk (logic in ops_routes.js) ====================
+try { require('./contact_studio.js')(app, { contactsManager, aiService }); } catch (e) { console.error('[studio]', e.message); }
 const opsRoutes = require('./ops_routes.js');
 const ops = opsRoutes.install(app, { SESSIONS, broadcastEngine, userMemory, liveSelfTest, engagementPolicy, followupPlanner, contactsManager, samasyaStore, mulaqatStore, campaignAgenda, replyBrain, logMessage, onBulkSent: (info) => broadcastEngine.onSent(info), dailyIstDate: () => dailyGoal.currentIstDate(), resolveAudience: resolveBroadcastAudience });
 // CRM (WhatsApp Web Live): full chat, voter profile & memory, AI co-pilot, safe quick actions (crm_routes.js)
