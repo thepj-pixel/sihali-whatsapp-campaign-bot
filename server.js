@@ -1413,23 +1413,33 @@ const WA_SYNC_CONTACTS = process.env.WA_SYNC_CONTACTS !== 'false';
 const waContactSyncQueue = [];
 let waContactSyncBusy = false;
 
-/** Best-effort: also add the person to the WhatsApp line's own address book (Baileys >= 6.7 app-state contactAction). */
-function queueWhatsAppContactSync(sock, jid, fullName) {
-    if (!WA_SYNC_CONTACTS || !sock || typeof sock.addOrEditContact !== 'function' || !jid || !fullName) return;
-    waContactSyncQueue.push({ sock, jid, fullName });
+/** Best-effort: also add the person to the WhatsApp line's own address book (Baileys >= 6.7 app-state contactAction).
+ *  Safety (9 Nov): uses the line's CURRENT socket, stops the whole queue the moment the line is not connected
+ *  or after 3 failures in a row (never hammers a dropped line), 5 s between saves. */
+let waContactSyncStopped = '';
+function queueWhatsAppContactSync(sock, jid, fullName, lineId) {
+    if (!WA_SYNC_CONTACTS || !jid || !fullName) return;
+    if (!lineId) { const s0 = SESSIONS.find(x => x.sock === sock); lineId = s0 ? s0.id : 'sim_636'; }
+    waContactSyncQueue.push({ lineId, jid, fullName });
     if (waContactSyncBusy) return;
-    waContactSyncBusy = true;
+    waContactSyncBusy = true; waContactSyncStopped = '';
     (async () => {
+        let fails = 0;
         while (waContactSyncQueue.length) {
-            const job = waContactSyncQueue.shift();
+            const job = waContactSyncQueue[0];
+            const sess = SESSIONS.find(x => x.id === job.lineId && x.status === 'CONNECTED' && x.sock);
+            if (!sess || typeof sess.sock.addOrEditContact !== 'function') { waContactSyncStopped = 'line not connected: ' + job.lineId; break; }
+            waContactSyncQueue.shift();
             try {
-                await job.sock.addOrEditContact(job.jid, { fullName: job.fullName, firstName: job.fullName.split(' ')[0], saveOnPrimaryAddressbook: true });
-                operationsTracker.record('wa_contact_sync', 'ok', {});
+                await sess.sock.addOrEditContact(job.jid, { fullName: job.fullName, firstName: job.fullName.split(' ')[0], saveOnPrimaryAddressbook: true });
+                operationsTracker.record('wa_contact_sync', 'ok', {}); fails = 0;
             } catch (e) {
                 operationsTracker.record('wa_contact_sync', 'failed', { reason: e.message });
+                if (++fails >= 3) { waContactSyncStopped = '3 failures in a row: ' + e.message; break; }
             }
-            await new Promise(r => setTimeout(r, 3000)); // gentle: one app-state patch every 3s
+            await new Promise(r => setTimeout(r, 5000));
         }
+        if (waContactSyncStopped) { console.warn('[WaContactSync] stopped:', waContactSyncStopped, 'left:', waContactSyncQueue.length); waContactSyncQueue.length = 0; }
         waContactSyncBusy = false;
     })();
 }
@@ -2940,7 +2950,7 @@ setInterval(() => {
 
 // Manual contact entry / paste (one per line: phone, name, ward, village)
 // Save a list of numbers into a line's own WhatsApp address book (app-state contactAction), slowly (one every 3 s).
-// POST /api/contacts/wa-sync {line?:'sim_636', contacts:[{phone,name}]}  → queued count. Sends NO messages.
+// POST /api/contacts/wa-sync {line?:'sim_636', contacts:[{phone,name}]}  → queued count. Sends NO messages. One every 5 s.
 app.post('/api/contacts/wa-sync', (req, res) => {
     try {
         const b = req.body || {};
@@ -2954,13 +2964,14 @@ app.post('/api/contacts/wa-sync', (req, res) => {
             const phone = contactUtils.normalizeIndianPhone(c && c.phone);
             const name = String((c && c.name) || '').trim().slice(0, 60);
             if (!phone || !name) { bad++; continue; }
-            queueWhatsAppContactSync(sess.sock, `${phone}@s.whatsapp.net`, name);
+            queueWhatsAppContactSync(sess.sock, `${phone}@s.whatsapp.net`, name, lineId);
             queued++;
         }
-        res.json({ success: true, line: lineId, queued, bad, queueLength: waContactSyncQueue.length, etaMin: Math.ceil(waContactSyncQueue.length * 3 / 60) });
+        res.json({ success: true, line: lineId, queued, bad, queueLength: waContactSyncQueue.length, etaMin: Math.ceil(waContactSyncQueue.length * 5 / 60) });
     } catch (e) { res.status(400).json({ success: false, error: e.message }); }
 });
-app.get('/api/contacts/wa-sync/status', (req, res) => res.json({ success: true, queueLength: waContactSyncQueue.length, busy: waContactSyncBusy, enabled: WA_SYNC_CONTACTS }));
+app.get('/api/contacts/wa-sync/status', (req, res) => res.json({ success: true, queueLength: waContactSyncQueue.length, busy: waContactSyncBusy, stopped: waContactSyncStopped, enabled: WA_SYNC_CONTACTS }));
+app.post('/api/contacts/wa-sync/stop', (req, res) => { const left = waContactSyncQueue.length; waContactSyncQueue.length = 0; waContactSyncStopped = 'stopped by operator'; res.json({ success: true, cleared: left }); });
 
 app.post('/api/contacts/bulk-add', (req, res) => {
     try {
