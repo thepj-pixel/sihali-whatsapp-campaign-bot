@@ -453,8 +453,12 @@ async function sendMultiContactCard(sock, jid, senderPhone = null) {
     });
 }
 
+const abhayVoice = require('./abhay_voice.js');
 async function sendSafeMessage(sock, jid, content, options = {}) {
     try {
+        // voter replies speak as अभय सिंह himself (Prince, 9 Nov); options.rawVoice skips it
+        if (!options.rawVoice) { try { content = abhayVoice.applyToContent(content); } catch (e) {} }
+        if (options && 'rawVoice' in options) { options = { ...options }; delete options.rawVoice; }
         // our website link -> big preview card (cached 6 h, warmed on connect; waits ≤1.5 s, else plain text)
         if (content && typeof content.text === 'string' && !('linkPreview' in content) && linkPreview.OUR_URL_RX.test(content.text)) {
             let lp = null;
@@ -811,6 +815,12 @@ async function startSession(sessionObj) {
                     // Send auto-handshake welcome message so voter gets an instant reply and Signal session re-synchronizes!
                     try {
                         const existingUser = userMemory.getUser(senderPhone);
+                        // An empty packet right after our own message is the recipient's phone syncing keys, not a new voter.
+                        // Never send a handshake to anyone we already have a chat history with (fixes double message after bulk, 9 Nov).
+                        if (existingUser && Array.isArray(existingUser.history) && existingUser.history.length > 0) {
+                            console.log(`[${sessionObj.id}] Empty packet from known contact ${senderPhone}: no handshake`);
+                            continue;
+                        }
                         if (existingUser && existingUser.lastHandshakeTime && (Date.now() - existingUser.lastHandshakeTime < 60000)) {
                             console.log(`[${sessionObj.id}] Handshake already sent recently to ${senderPhone}, skipping duplicate`);
                             continue;
@@ -819,7 +829,7 @@ async function startSession(sessionObj) {
                             existingUser.lastHandshakeTime = Date.now();
                             userMemory.save();
                         }
-                        const handshakeText = "राम राम भाई जी! 🙏\nबाबा अभय सिंह जनसंपर्क (ग्राम पंचायत सिहाली खुर्द) में आपका स्वागत है।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेजें! 🚩";
+                        const handshakeText = "राम राम जी! 🙏\nमैं अभय सिंह (मोटी आंगली वाला) बोल रहा हूँ, ग्राम पंचायत सिहाली खुर्द।\nवोटर लिस्ट में नाम व पर्ची देखने के लिए अपना नाम लिखकर भेज दीजिए जी।";
                         await sendSafeMessage(sock, replyJid, { text: handshakeText });
                         console.log(`[${sessionObj.id}] ✅ Sent handshake reply to ${replyJid}`);
                         userMemory.recordMessage(senderPhone, 'bot', handshakeText, null, sessionObj.name);
