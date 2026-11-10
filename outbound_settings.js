@@ -39,6 +39,7 @@ function set(changes = {}) {
     const next = { ...cur };
     if (typeof changes.proactiveOutbound === 'boolean') next.proactiveOutbound = changes.proactiveOutbound;
     if (typeof changes.quietHours === 'boolean') next.quietHours = changes.quietHours;
+    if (typeof changes.welcomeExtras === 'boolean') next.welcomeExtras = changes.welcomeExtras;
     next.updatedAt = new Date().toISOString();
     try { fs.writeFileSync(FILE, JSON.stringify(next, null, 2) + '\n', 'utf8'); } catch (e) {}
     cache = next;

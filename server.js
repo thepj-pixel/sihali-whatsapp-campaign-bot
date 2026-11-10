@@ -1493,6 +1493,7 @@ const contactCard = require('./contact_card.js');
 // Festival welcome (owner 6 Nov): a new voter's first conversation gets the 'प्रमुख कार्य' report card with the day's
 // festival wish as caption (festival_welcome.js). Once per voter, ever; skipped on STOP/abuse/grief/complaint.
 function maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, replied = true) {
+    if (require('./outbound_settings.js').get().welcomeExtras !== true) return false; // owner 11 Nov: replies only, no auto poster
     try {
         const uFw = userMemory.getUser(senderPhone);
         const fwCount = ((uFw && uFw.history) || []).filter(h => h.role === 'user').length;
@@ -1515,6 +1516,7 @@ function maybeFestivalWelcome(sock, replyJid, senderPhone, sessionObj, body, rep
     } catch (e) { console.warn('[FestivalWelcome hook]', e.message); return false; }
 }
 async function sendLineContactCardOnce(sock, jid, phone, sessionObj, { withPrompt = true } = {}) {
+    if (require('./outbound_settings.js').get().welcomeExtras !== true) return false; // owner 11 Nov: no auto card
     const u = userMemory.getUser(phone);
     if (!u || !contactCard.needsCard(u, sessionObj.id)) return false; // once per contact PER LINE (contact_card.js)
     contactCard.markSent(u, sessionObj.id);
@@ -2573,6 +2575,7 @@ app.post('/api/settings/outbound', (req, res) => {
     const b = req.body || {};
     const ch = {};
     if (b.proactiveOutbound !== undefined) ch.proactiveOutbound = b.proactiveOutbound === true || b.proactiveOutbound === 'true' || b.proactiveOutbound === 'on';
+    if (b.welcomeExtras !== undefined) ch.welcomeExtras = b.welcomeExtras === true || b.welcomeExtras === 'true' || b.welcomeExtras === 'on';
     if (b.quietHours !== undefined) ch.quietHours = !(b.quietHours === false || b.quietHours === 'false' || b.quietHours === 'off');
     res.json({ success: true, settings: require('./outbound_settings.js').set(ch) });
 });
