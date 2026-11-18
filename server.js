@@ -569,6 +569,7 @@ async function sendAdminBootReport(sessionObj) {
 
 // Start a WhatsApp Session
 async function startSession(sessionObj) {
+    if (require('fs').existsSync(require('path').join(__dirname, 'BOT_OFF'))) { console.log('[BOT_OFF] election over, line not started:', sessionObj.id); return; } // owner 18 Nov
     if (sessionObj.reconnectTimer) {
         clearTimeout(sessionObj.reconnectTimer);
         sessionObj.reconnectTimer = null;
